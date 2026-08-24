@@ -1,0 +1,31 @@
+{
+  "success": true,
+  "message": "操作成功",
+  "data": {
+    "id": "trip-unknown",
+    "name": "未知状态行程",
+    "description": "",
+    "start_date": null,
+    "end_date": null,
+    "status": 9,
+    "route_ids": ["route-9"],
+    "primary_route_id": "route-9",
+    "participants": [],
+    "participant_count": 0,
+    "organizer_id": "owner",
+    "equipment_list_id": null,
+    "meal_plan_id": null,
+    "water_plan_id": null,
+    "itinerary": [],
+    "cover_url": null,
+    "image_urls": [],
+    "budget": null,
+    "actual_cost": null,
+    "notes": null,
+    "privacy_setting": "public",
+    "created_at": 1724457600,
+    "updated_at": 1724458600
+  },
+  "timestamp": "2024-08-25T00:00:01Z",
+  "code": 200
+}

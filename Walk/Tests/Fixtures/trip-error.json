@@ -1,0 +1,7 @@
+{
+  "success": false,
+  "message": "行程不存在",
+  "data": null,
+  "timestamp": "2024-08-25T00:00:01Z",
+  "code": 404
+}

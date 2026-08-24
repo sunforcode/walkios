@@ -1,0 +1,29 @@
+/*
+  Localizable.strings
+  Walk
+
+  Created by Walk Team.
+  Copyright © 2025 Walk. All rights reserved.
+*/
+
+// MARK: - Tab
+"tab.trips" = "行程";
+"tab.routes" = "路线";
+"tab.guides" = "攻略";
+"tab.equipment" = "装备";
+"tab.profile" = "我的";
+
+// MARK: - Trip
+"trip.title" = "行程";
+"trip.empty.title" = "暂无行程";
+"trip.empty.message" = "开始规划你的下一次户外探险吧";
+"trip.create" = "创建行程";
+"trip.dateTbd" = "日期待定";
+
+// MARK: - Common
+"common.loading" = "加载中...";
+"common.retry" = "重试";
+"common.cancel" = "取消";
+"common.done" = "完成";
+"common.save" = "保存";
+"common.delete" = "删除";

@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "message": "查询成功",
+  "data": {
+    "content": [
+      { "date": 1724544000 }
+    ],
+    "number": 0,
+    "size": 20,
+    "totalElements": 1,
+    "totalPages": 1,
+    "first": true,
+    "last": true
+  },
+  "timestamp": "2024-08-25T00:00:01Z",
+  "code": 200
+}
