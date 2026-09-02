@@ -1,90 +1,58 @@
 import Foundation
 
 protocol RouteDetailServicing: AnyObject {
-    func getRouteDetailResponse(id: String) async throws -> RouteDetailResponse
-    func setFavorite(routeID: String, isFavorite: Bool) async throws
+    func getRouteDetail(id: String) async throws -> PublicRouteDetail
 }
 
-/// 路线服务。路线详情和收藏始终走 AppEnvironment 配置的类型化 APIClient。
-final class RouteService: RouteDetailServicing {
-    private let legacyClient = LegacyAPIClient.shared
+protocol RouteDiscoveryServicing: AnyObject {
+    func getFeaturedRoutes() async throws -> PublicRouteDiscoveryResult
+    func getRoutes() async throws -> PublicRouteCollectionResult
+    func searchRoutes(query: String?) async throws -> PublicRouteSearchResult
+}
+
+/// Public-route service backed only by the configured typed API client.
+final class RouteService: RouteDetailServicing, RouteDiscoveryServicing {
     private let apiClient: any APIClient
-    private let userID: String
 
-    init(apiClient: any APIClient, userID: String) {
+    init(apiClient: any APIClient) {
         self.apiClient = apiClient
-        self.userID = userID
     }
 
-    func getRoutes(category: RouteCategory? = nil, page: Int = 0, size: Int = 20) async throws -> [Route] {
-        #if DEBUG
-        try await Task.sleep(nanoseconds: 500_000_000)
-        if let category { return MockData.routes.filter { $0.category == category } }
-        return Array(MockData.routes.prefix(size))
-        #else
-        var parameters: [String: Any] = ["page": page, "size": size]
-        if let category { parameters["category"] = category.rawValue }
-        return try await legacyClient.request(APIEndpoints.routes, method: .get, parameters: parameters)
-        #endif
+    func getFeaturedRoutes() async throws -> PublicRouteDiscoveryResult {
+        try await apiClient.execute(PublicRouteAPI.Featured())
     }
 
-    func getPopularRoutes() async throws -> [Route] {
-        #if DEBUG
-        try await Task.sleep(nanoseconds: 300_000_000)
-        return Array(MockData.routes.prefix(2))
-        #else
-        return try await legacyClient.request(APIEndpoints.popularRoutes, method: .get)
-        #endif
+    func getRoutes() async throws -> PublicRouteCollectionResult {
+        try await apiClient.execute(PublicRouteAPI.All())
     }
 
-    func getRecommendedRoutes() async throws -> [Route] {
-        #if DEBUG
-        try await Task.sleep(nanoseconds: 300_000_000)
-        return MockData.routes
-        #else
-        return try await legacyClient.request(APIEndpoints.recommendedRoutes, method: .get)
-        #endif
+    func searchRoutes(query: String?) async throws -> PublicRouteSearchResult {
+        try await apiClient.execute(PublicRouteAPI.Search(query: query))
     }
 
-    func getRouteDetailResponse(id: String) async throws -> RouteDetailResponse {
-        try await apiClient.execute(RouteAPI.Detail(id: id, userID: userID))
+    func getRouteDetail(id: String) async throws -> PublicRouteDetail {
+        try await apiClient.execute(PublicRouteAPI.Detail(id: id))
     }
 
-    /// Lightweight compatibility adapter for non-detail consumers that still render `Route`.
-    /// The route-detail screen never uses this path.
-    func getRouteDetail(id: String) async throws -> Route {
-        let detail = try await getRouteDetailResponse(id: id)
+    /// Lightweight compatibility adapter for existing trip and home summaries.
+    /// All facts still come from the public-route detail endpoint.
+    func getLegacyRouteSummary(id: String) async throws -> Route {
+        let detail = try await getRouteDetail(id: id)
+        let summary = detail.currentVersion.summary
+        let cover = detail.currentVersion.images?.first(where: { $0.role == .cover })?.mediaReference
+
         return Route(
-            id: detail.id,
-            name: detail.name,
-            description: detail.description,
+            id: detail.routeId,
+            name: summary.name,
+            description: summary.introduction,
             category: nil,
             difficulty: nil,
-            distance: detail.distance,
-            duration: detail.duration,
-            elevation: detail.elevationGain.map(Int.init),
-            routeType: detail.routeType?.displayText,
-            coverImageUrl: detail.coverUrl,
-            createdAt: Date(timeIntervalSince1970: TimeInterval(detail.createdAt))
+            distance: summary.distance.map { $0.meters / 1_000 },
+            duration: summary.estimatedDuration.map { Int(ceil($0.seconds / 86_400)) },
+            elevation: summary.ascent.map { Int($0.meters) },
+            routeType: summary.routeType == .oneDay ? "一日路线" : "多日路线",
+            coverImageUrl: cover,
+            createdAt: nil
         )
-    }
-
-    func setFavorite(routeID: String, isFavorite: Bool) async throws {
-        _ = try await apiClient.execute(RouteAPI.Favorite(id: routeID, userID: userID, isFavorite: isFavorite))
-    }
-
-    func searchRoutes(keyword: String) async throws -> [Route] {
-        #if DEBUG
-        try await Task.sleep(nanoseconds: 300_000_000)
-        return MockData.routes.filter {
-            $0.name?.contains(keyword) == true || $0.description?.contains(keyword) == true
-        }
-        #else
-        return try await legacyClient.request(
-            APIEndpoints.searchRoutes,
-            method: .get,
-            parameters: ["keyword": keyword]
-        )
-        #endif
     }
 }

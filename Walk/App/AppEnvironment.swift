@@ -5,8 +5,11 @@ final class AppEnvironment: ObservableObject {
     let configuration: AppConfiguration
     let apiClient: any APIClient
     let routeService: RouteService
-    let tripRepository: any TripRepository
+    let equipmentService: EquipmentService
+    let personalTripService: PersonalTripService
+    let tripEquipmentService: TripEquipmentService
     let authManager: AuthManager
+    let accountService: AccountService
     let apiStorage: any APIStorage
     let apiStorageGeneration: APIStorageGeneration
 
@@ -15,6 +18,7 @@ final class AppEnvironment: ObservableObject {
         mockFixtures: [String: Data]? = nil,
         resourceBundle: Bundle = .main
     ) throws {
+        try configuration.validate()
         self.configuration = configuration
         self.authManager = .shared
 
@@ -35,19 +39,25 @@ final class AppEnvironment: ObservableObject {
                 baseURL: configuration.baseURL,
                 storage: storage,
                 storageContext: context,
-                storageGeneration: storageGeneration
+                storageGeneration: storageGeneration,
+                accessToken: { [authManager] in authManager.currentToken },
+                invalidateSession: { [authManager, storage, storageGeneration] in
+                    authManager.invalidateSession()
+                    await storageGeneration.invalidate()
+                    try? await storage.removeAll()
+                }
             )
         case .local:
             apiClient = LocalAPIClient(storage: storage, storageContext: context)
         case .mock:
             apiClient = MockAPIClient(
-                fixtures: mockFixtures ?? DefaultMockFixtures.all(
-                    userID: configuration.userID,
-                    bundle: resourceBundle
-                )
+                fixtures: mockFixtures ?? DefaultMockFixtures.all(bundle: resourceBundle)
             )
         }
-        routeService = RouteService(apiClient: apiClient, userID: configuration.userID)
-        tripRepository = DefaultTripRepository(client: apiClient)
+        routeService = RouteService(apiClient: apiClient)
+        equipmentService = EquipmentService(apiClient: apiClient)
+        personalTripService = PersonalTripService(apiClient: apiClient)
+        tripEquipmentService = TripEquipmentService(apiClient: apiClient)
+        accountService = AccountService(apiClient: apiClient, authManager: authManager)
     }
 }

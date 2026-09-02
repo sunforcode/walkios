@@ -20,7 +20,7 @@ struct StatCardView: View {
                 HStack(spacing: Spacing.sm) {
                     if let icon {
                         Image(systemName: icon)
-                            .foregroundStyle(AppColors.accent)
+                            .foregroundStyle(AppColors.interactionPrimary)
                             .font(.nav)
                     }
                     Text(title)

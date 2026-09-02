@@ -14,6 +14,10 @@ struct LocalAPIClient: APIClient {
         guard let data = try await storage.load(for: key) else {
             throw APIClientError.localDataNotFound
         }
-        return try APIJSONDecoder.decode(Request.Response.self, from: data)
+        return try APIJSONDecoder.decode(
+            Request.Response.self,
+            from: data,
+            envelope: request.responseEnvelope
+        )
     }
 }

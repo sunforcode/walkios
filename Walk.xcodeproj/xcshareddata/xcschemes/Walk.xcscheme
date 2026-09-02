@@ -77,6 +77,11 @@
             value = "mock"
             isEnabled = "YES">
          </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "WALK_ENVIRONMENT"
+            value = "test"
+            isEnabled = "YES">
+         </EnvironmentVariable>
       </EnvironmentVariables>
    </TestAction>
    <LaunchAction
@@ -110,6 +115,11 @@
          <EnvironmentVariable
             key = "WALK_DATA_SOURCE_MODE"
             value = "mock"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "WALK_ENVIRONMENT"
+            value = "development"
             isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>

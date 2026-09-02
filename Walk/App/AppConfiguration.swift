@@ -4,24 +4,23 @@ enum AppConfigurationError: Error, Equatable {
     case invalidDataSourceMode(String)
     case missingBaseURL
     case invalidBaseURL(String)
+    case productionRequiresRemote
+    case placeholderBaseURL(String)
 }
 
 struct AppConfiguration: Equatable {
     let dataSourceMode: DataSourceMode
     let baseURL: URL
     let environmentName: String
-    let userID: String
 
     init(
         dataSourceMode: DataSourceMode,
         baseURL: URL,
-        environmentName: String,
-        userID: String
+        environmentName: String
     ) {
         self.dataSourceMode = dataSourceMode
         self.baseURL = baseURL
         self.environmentName = environmentName
-        self.userID = userID
     }
 
     init(
@@ -37,7 +36,7 @@ struct AppConfiguration: Equatable {
         let rawMode = value(after: "-DataSourceMode")
             ?? environment["WALK_DATA_SOURCE_MODE"]
             ?? bundleInfo["WalkDataSourceMode"] as? String
-            ?? "mock"
+            ?? "remote"
         guard let mode = DataSourceMode(rawValue: rawMode.lowercased()) else {
             throw AppConfigurationError.invalidDataSourceMode(rawMode)
         }
@@ -55,11 +54,30 @@ struct AppConfiguration: Equatable {
         self.init(
             dataSourceMode: mode,
             baseURL: url,
-            environmentName: environment["WALK_ENVIRONMENT"]
+            environmentName: value(after: "-WalkEnvironment")
+                ?? environment["WALK_ENVIRONMENT"]
                 ?? bundleInfo["WalkEnvironment"] as? String
-                ?? "production",
-            userID: environment["WALK_USER_ID"] ?? "anonymous"
+                ?? "production"
         )
+        try validate()
+    }
+
+    func validate() throws {
+        guard environmentName.caseInsensitiveCompare("production") == .orderedSame else { return }
+        guard dataSourceMode == .remote else {
+            throw AppConfigurationError.productionRequiresRemote
+        }
+        guard !Self.isPlaceholder(baseURL) else {
+            throw AppConfigurationError.placeholderBaseURL(baseURL.absoluteString)
+        }
+    }
+
+    private static func isPlaceholder(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased(), !host.isEmpty else { return true }
+        return host == "localhost"
+            || host == "127.0.0.1"
+            || host == "::1"
+            || host.hasSuffix(".invalid")
     }
 
     static func process() throws -> AppConfiguration {

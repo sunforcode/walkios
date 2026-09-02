@@ -6,7 +6,7 @@ struct LoadingView: View {
         UtilityPageContainer {
             VStack(spacing: Spacing.md) {
                 ProgressView()
-                    .tint(AppColors.accent)
+                    .tint(AppColors.interactionPrimary)
                     .scaleEffect(1.25)
                 Text("加载中...")
                     .font(.bodyLarge)

@@ -2,6 +2,11 @@ import Foundation
 import Security
 import CryptoKit
 
+extension Notification.Name {
+    static let walkAuthenticationDidChange = Notification.Name("walk.authentication.didChange")
+    static let walkAuthenticationRequired = Notification.Name("walk.authentication.required")
+}
+
 protocol AuthSession: AnyObject {
     var isLoggedIn: Bool { get }
     var cacheIdentity: String { get }
@@ -94,8 +99,26 @@ final class AuthManager: AuthSession {
         SecItemDelete(query as CFDictionary)
     }
 
-    /// 清除登录状态
+    /// 清除登录状态并通知根级认证门禁。
     func logout() {
+        let wasLoggedIn = isLoggedIn
         deleteTokenFromKeychain()
+        if wasLoggedIn {
+            NotificationCenter.default.post(name: .walkAuthenticationDidChange, object: self)
+        }
+    }
+
+    func saveSession(accessToken: String) {
+        currentToken = accessToken
+        NotificationCenter.default.post(name: .walkAuthenticationDidChange, object: self)
+    }
+
+    func invalidateSession() {
+        let wasLoggedIn = isLoggedIn
+        deleteTokenFromKeychain()
+        if wasLoggedIn {
+            NotificationCenter.default.post(name: .walkAuthenticationDidChange, object: self)
+        }
+        NotificationCenter.default.post(name: .walkAuthenticationRequired, object: self)
     }
 }

@@ -2,48 +2,57 @@ import SwiftUI
 
 /// 攻略列表页
 struct GuideListView: View {
-    @StateObject private var viewModel = GuideListViewModel()
+    @ObservedObject var viewModel: GuideListViewModel
 
     var body: some View {
-        Group {
-            if viewModel.isLoading {
-                LoadingView()
-            } else if let error = viewModel.errorMessage {
-                ErrorView(message: error) {
-                    Task { await viewModel.retry() }
+        UtilityPageContainer {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: Spacing.xl) {
+                    PageHeroHeader(
+                        title: "精选攻略",
+                        subtitle: "发现灵感，准备下一段旅程"
+                    )
+
+                    guideContent
                 }
-            } else if viewModel.guides.isEmpty {
-                EmptyStateView(
-                    title: "暂无攻略",
-                    message: "敬请期待精选攻略",
-                    icon: "book"
-                )
-            } else {
-                guideListContent
+                .padding(.horizontal, Spacing.pageHorizontal)
+                .padding(.top, Spacing.xl)
+                .padding(.bottom, Spacing.xxl)
+            }
+            .refreshable {
+                await viewModel.refresh()
             }
         }
-        .navigationTitle("攻略")
+        .toolbar(.hidden, for: .navigationBar)
         .task {
-            await viewModel.loadGuides()
+            await viewModel.loadIfNeeded()
         }
     }
 
-    private var guideListContent: some View {
-        ScrollView {
-            LazyVStack(spacing: Spacing.legacyMd) {
-                ForEach(viewModel.guides) { guide in
-                    NavigationLink(destination: GuideDetailView(guideId: guide.id)) {
-                        GuideCardView(guide: guide)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                }
+    @ViewBuilder
+    private var guideContent: some View {
+        if viewModel.isLoading {
+            LoadingView()
+                .frame(minHeight: 320)
+        } else if let error = viewModel.errorMessage, viewModel.guides.isEmpty {
+            ErrorView(message: error) {
+                Task { await viewModel.retry() }
             }
-            .padding(.horizontal, Spacing.legacyMd)
-            .padding(.vertical, Spacing.sm)
-        }
-        .background(Color.groupedBackground)
-        .refreshable {
-            await viewModel.loadGuides()
+            .frame(minHeight: 320)
+        } else if viewModel.guides.isEmpty {
+            EmptyStateView(
+                title: "暂无攻略",
+                message: "敬请期待精选攻略",
+                icon: "book"
+            )
+            .frame(minHeight: 320)
+        } else {
+            ForEach(viewModel.guides) { guide in
+                NavigationLink(destination: GuideDetailView(guideId: guide.id)) {
+                    GuideCardView(guide: guide)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 }
@@ -54,13 +63,12 @@ struct GuideCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            // 封面图占位
             Rectangle()
-                .fill(Color.cardBackground)
+                .fill(AppColors.surfacePrimary)
                 .frame(height: 160)
                 .overlay(
                     Image(systemName: "photo")
-                        .foregroundColor(.textTertiary)
+                        .foregroundColor(AppColors.textWeak)
                         .font(.title)
                 )
                 .cornerRadius(8)
@@ -68,13 +76,13 @@ struct GuideCardView: View {
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Text(guide.title ?? "未命名攻略")
                     .font(.headline)
-                    .foregroundColor(.textPrimary)
+                    .foregroundColor(AppColors.textPrimary)
                     .lineLimit(2)
 
                 if let summary = guide.summary {
                     Text(summary)
                         .font(.caption)
-                        .foregroundColor(.textSecondary)
+                        .foregroundColor(AppColors.textSecondary)
                         .lineLimit(2)
                 }
 
@@ -82,7 +90,7 @@ struct GuideCardView: View {
                     if let authorName = guide.authorName {
                         Text(authorName)
                             .font(.caption)
-                            .foregroundColor(.textTertiary)
+                            .foregroundColor(AppColors.textWeak)
                     }
 
                     Spacer()
@@ -90,31 +98,31 @@ struct GuideCardView: View {
                     HStack(spacing: Spacing.legacyLg) {
                         Label(guide.readCountDescription, systemImage: "eye")
                             .font(.caption)
-                            .foregroundColor(.textTertiary)
+                            .foregroundColor(AppColors.textWeak)
 
                         Label(guide.likeCountDescription, systemImage: "heart")
                             .font(.caption)
-                            .foregroundColor(.textTertiary)
+                            .foregroundColor(AppColors.textWeak)
                     }
                 }
             }
             .padding(.horizontal, Spacing.sm)
         }
         .padding(.bottom, Spacing.sm)
-        .background(Color.cardBackground)
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .background(AppColors.surfacePrimary)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+        .shadow(color: AppColors.shadowCard, radius: 4, x: 0, y: 2)
     }
 }
 
 #if DEBUG
 #Preview("Guide List") {
-    GuideListView()
+    GuideListView(viewModel: GuideListViewModel())
 }
 
 #Preview("Guide Card") {
     GuideCardView(guide: MockData.guides.first!)
         .padding()
-        .background(Color.groupedBackground)
+        .background(AppColors.pageBase)
 }
 #endif

@@ -1,110 +1,97 @@
 import Foundation
 
 struct HomeWeatherSummary: Equatable {
-    let precipitationProbability: Int?
-    let windSpeed: Double?
-    let minimumTemperature: Double?
-    let maximumTemperature: Double?
+    let text: String?
 }
 
 enum HomeState: Equatable {
+    case guest
     case loading
     case empty
     case error(String)
-    case ready(route: Route, weather: HomeWeatherSummary?)
-}
-
-protocol CurrentRouteSelectionStore: AnyObject {
-    func selectedRouteID() -> String?
-    func selectRoute(id: String)
-}
-
-final class UserDefaultsCurrentRouteSelectionStore: CurrentRouteSelectionStore {
-    private let defaults: UserDefaults
-    private let key = "walk.current-route-id"
-
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-    }
-
-    func selectedRouteID() -> String? {
-        defaults.string(forKey: key)
-    }
-
-    func selectRoute(id: String) {
-        defaults.set(id, forKey: key)
-    }
+    case ready
 }
 
 @MainActor
 final class HomeViewModel: ObservableObject {
     @Published private(set) var state: HomeState = .loading
+    @Published private(set) var focusedTrip: PersonalTripSummary?
+    @Published private(set) var weatherSummary: HomeWeatherSummary?
+    @Published private(set) var refreshError: String?
 
-    private let loadSelectedRouteID: () -> String?
-    private let saveSelectedRouteID: (String) -> Void
-    private let loadRoute: (String) async throws -> Route
-    private let loadWeather: (Route, Date) async -> HomeWeatherSummary?
+    private let isLoggedIn: () -> Bool
+    private let loadFocus: () async throws -> PersonalTripFocus
+    private let loadWeather: (String) async throws -> PersonalTripWeather
+    private let onNoFocus: () -> Void
 
     init(
-        selectionStore: any CurrentRouteSelectionStore,
-        routeService: RouteService
+        service: any PersonalTripServicing,
+        authSession: any AuthSession = AuthManager.shared,
+        onNoFocus: @escaping () -> Void = {}
     ) {
-        self.loadSelectedRouteID = { selectionStore.selectedRouteID() }
-        self.saveSelectedRouteID = { selectionStore.selectRoute(id: $0) }
-        self.loadRoute = { try await routeService.getRouteDetail(id: $0) }
-        // Weather API has not migrated to the unified client yet; keep the HUD honest until injected.
-        self.loadWeather = { _, _ in nil }
+        self.isLoggedIn = { authSession.isLoggedIn }
+        self.loadFocus = { try await service.focus() }
+        self.loadWeather = { try await service.weather(tripID: $0) }
+        self.onNoFocus = onNoFocus
     }
 
     init(
-        loadSelectedRouteID: @escaping () -> String?,
-        saveSelectedRouteID: @escaping (String) -> Void = { _ in },
-        loadRoute: @escaping (String) async throws -> Route,
-        loadWeather: @escaping (Route, Date) async -> HomeWeatherSummary? = { _, _ in nil }
+        isLoggedIn: @escaping () -> Bool = { true },
+        loadFocus: @escaping () async throws -> PersonalTripFocus,
+        loadWeather: @escaping (String) async throws -> PersonalTripWeather = {
+            throw APIClientError.mockNotFound("GET /trips/\($0)/weather")
+        },
+        onNoFocus: @escaping () -> Void = {}
     ) {
-        self.loadSelectedRouteID = loadSelectedRouteID
-        self.saveSelectedRouteID = saveSelectedRouteID
-        self.loadRoute = loadRoute
+        self.isLoggedIn = isLoggedIn
+        self.loadFocus = loadFocus
         self.loadWeather = loadWeather
+        self.onNoFocus = onNoFocus
     }
 
     func load() async {
-        state = .loading
-
-        guard let routeID = loadSelectedRouteID(), !routeID.isEmpty else {
-            state = .empty
+        guard isLoggedIn() else {
+            focusedTrip = nil
+            weatherSummary = nil
+            refreshError = nil
+            state = .guest
             return
         }
 
+        let hadFocus = focusedTrip != nil
+        if !hadFocus { state = .loading }
+        refreshError = nil
+
         do {
-            let route = try await loadRoute(routeID)
-            await show(route)
+            guard let trip = try await loadFocus().trip else {
+                focusedTrip = nil
+                weatherSummary = nil
+                state = .empty
+                onNoFocus()
+                return
+            }
+
+            focusedTrip = trip
+            weatherSummary = await weatherSummary(for: trip)
+            state = .ready
         } catch {
-            state = .error("当前路线加载失败")
+            if hadFocus {
+                state = .ready
+                refreshError = "当前行程刷新失败"
+            } else {
+                state = .error("当前行程加载失败")
+            }
         }
     }
 
-    func retry() async {
-        await load()
-    }
+    func retry() async { await load() }
 
-    func selectRoute(_ route: Route) async {
-        saveSelectedRouteID(route.id)
-        await show(route)
-    }
-
-    private func show(_ route: Route) async {
-        let hikingDate = Self.upcomingHikingDate()
-        state = .ready(route: route, weather: await loadWeather(route, hikingDate))
-    }
-
-    nonisolated static func upcomingHikingDate(
-        from date: Date = .now,
-        calendar: Calendar = .current
-    ) -> Date {
-        let start = calendar.startOfDay(for: date)
-        let weekday = calendar.component(.weekday, from: start)
-        let daysUntilSaturday = (7 - weekday + 7) % 7
-        return calendar.date(byAdding: .day, value: daysUntilSaturday, to: start) ?? start
+    private func weatherSummary(for trip: PersonalTripSummary) async -> HomeWeatherSummary? {
+        guard let weather = try? await loadWeather(trip.tripID),
+              weather.tripID == trip.tripID,
+              weather.revision == trip.revision else {
+            return nil
+        }
+        return HomeWeatherSummary(text: weather.weatherOverview?.value)
     }
 }

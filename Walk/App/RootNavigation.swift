@@ -1,104 +1,193 @@
 import SwiftUI
 
-enum RootDestination: Hashable {
+enum AppTab: String, CaseIterable, Identifiable, Hashable {
+    case home
     case routes
-    case trips
-    case guides
-    case equipment
     case profile
-    case routeDetail(String)
-    case navigation
-}
-
-enum DrawerItem: String, CaseIterable, Identifiable {
-    case routes
-    case trips
-    case guides
-    case equipment
-    case weather
-    case calendar
-    case statistics
-    case navigation
-    case nearby
 
     var id: Self { self }
 
     var title: String {
         switch self {
+        case .home: "首页"
         case .routes: "路线"
-        case .trips: "我的行程"
-        case .guides: "攻略"
-        case .equipment: "装备"
-        case .weather: "天气"
-        case .calendar: "日历"
-        case .statistics: "统计"
-        case .navigation: "导航"
-        case .nearby: "附近"
+        case .profile: "我的"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .routes: "point.topleft.down.curvedto.point.bottomright.up"
-        case .trips: "map"
-        case .guides: "book.closed"
-        case .equipment: "backpack"
-        case .weather: "cloud.sun"
-        case .calendar: "calendar"
-        case .statistics: "chart.bar"
-        case .navigation: "location.north.line"
-        case .nearby: "mappin.and.ellipse"
+        case .home: "house"
+        case .routes: "map"
+        case .profile: "person"
         }
     }
+}
 
-    var destination: RootDestination? {
+enum PendingAuthIntent: Equatable {
+    case homeStart
+    case profile
+    case createTrip(routeID: String)
+    case reauthenticate
+}
+
+enum AppDestination: Hashable {
+    case login
+    case routeList
+    case routeSearch
+    case routeDetail(String)
+    case profileDetails
+    case accountSecurity
+    case notificationSettings
+    case privacySettings
+    case helpAndFeedback
+    case about
+    case tripList
+    case createTrip(routeID: String)
+    case tripDetail(String)
+    case tripEquipment(String)
+    case personalEquipment
+    case equipmentEdit(equipmentID: String?)
+    case tripDay(tripID: String, initialDayID: String)
+    case tripWeather(String)
+
+    var pageID: String {
         switch self {
-        case .routes: .routes
-        case .trips: .trips
-        case .guides: .guides
-        case .equipment: .equipment
-        case .weather, .calendar, .statistics, .navigation, .nearby: nil
+        case .login: "PAGE-LOGIN"
+        case .routeList: "PAGE-ROUTE-LIST"
+        case .routeSearch: "PAGE-SEARCH"
+        case .routeDetail: "PAGE-ROUTE-DETAIL"
+        case .profileDetails, .accountSecurity, .notificationSettings, .privacySettings,
+             .helpAndFeedback, .about: "PAGE-ME"
+        case .tripList: "PAGE-TRIPS"
+        case .createTrip: "PAGE-TRIP-CREATE"
+        case .tripDetail: "PAGE-TRIP-DETAIL"
+        case .tripEquipment: "PAGE-TRIP-EQUIPMENT"
+        case .personalEquipment: "PAGE-MY-EQUIPMENT"
+        case .equipmentEdit: "PAGE-EQUIPMENT-EDIT"
+        case .tripDay: "PAGE-TRIP-DAY"
+        case .tripWeather: "PAGE-TRIP-WEATHER"
+        }
+    }
+}
+
+enum EntryPageContract {
+    static let profileFields = ["昵称", "脱敏手机号", "头像"]
+    static let notificationOptions = ["通知总开关", "行程提醒", "天气提醒"]
+    static let privacyOptions = ["资料可见性", "位置共享", "匿名分析"]
+    static let feedbackFields = ["反馈分类", "反馈内容"]
+    static let tripFields = ["出发城市", "开始日期", "装备清单（可选）"]
+    static let equipmentFields = ["名称", "拥有数量", "单件克重（可选）"]
+}
+
+struct AppShellState: Equatable {
+    var selectedTab: AppTab = .home
+
+    private var homePath: [AppDestination] = []
+    private var routesPath: [AppDestination] = []
+    private var profilePath: [AppDestination] = []
+    private var reloadRevisions: [String: String] = [:]
+
+    mutating func showRouteDiscovery() {
+        routesPath = []
+        selectedTab = .routes
+    }
+
+    mutating func showRouteList() {
+        routesPath = [.routeList]
+        selectedTab = .routes
+    }
+
+    mutating func selectTab(_ tab: AppTab) {
+        selectedTab = tab
+    }
+
+    func path(for tab: AppTab) -> [AppDestination] {
+        switch tab {
+        case .home: homePath
+        case .routes: routesPath
+        case .profile: profilePath
         }
     }
 
-    var isAvailable: Bool { destination != nil }
+    mutating func setPath(_ path: [AppDestination], for tab: AppTab) {
+        switch tab {
+        case .home: homePath = path
+        case .routes: routesPath = path
+        case .profile: profilePath = path
+        }
+    }
+
+    mutating func presentLogin(in tab: AppTab) {
+        var path = path(for: tab)
+        if path.last != .login { path.append(.login) }
+        setPath(path, for: tab)
+    }
+
+    mutating func dismissLogin(in tab: AppTab) {
+        var path = path(for: tab)
+        if path.last == .login { path.removeLast() }
+        setPath(path, for: tab)
+    }
+
+    mutating func replaceTop(with destination: AppDestination, in tab: AppTab) {
+        var path = path(for: tab)
+        if !path.isEmpty { path.removeLast() }
+        path.append(destination)
+        setPath(path, for: tab)
+    }
+
+    mutating func recordTripRevision(_ revision: String, tripID: String) {
+        reloadRevisions[tripID] = revision
+    }
+
+    func reloadRevision(for tripID: String) -> String? {
+        reloadRevisions[tripID]
+    }
 }
 
 enum RootNavigation {
-    static let drawerWidth: CGFloat = 280
-    static let drawerOverlayOpacity: Double = 0.50
-    static let profileDestination: RootDestination = .profile
-}
+    static let minimumHitSize: CGFloat = 44
+    static let toolButtonHitSize = minimumHitSize
 
-enum DrawerStyle {
-    static let backgroundColor = AppColors.bgDrawer
-    static let brandSubtitleColor = AppColors.textWeak
-    static let brandTitle = "WALK"
-    static let brandSubtitle = "徒步旅行助手"
-    static let brandSpacing: CGFloat = 6
-    static let brandTitleFontSize: CGFloat = 42
-    // Flutter FontWeight.w800 has no exact SwiftUI counterpart; .heavy is the closest system weight.
-    static let brandTitleFontWeight: Font.Weight = .heavy
-    static let columnCount = 3
-    static let gridGap: CGFloat = 8
-    static let cellAspectRatio: CGFloat = 1
-    static let cellBorderWidth: CGFloat = 0.5
-}
+    static func makeTabBarAppearance() -> UITabBarAppearance {
+        let appearance = UITabBarAppearance()
+        appearance.configureWithTransparentBackground()
+        appearance.backgroundEffect = nil
+        appearance.backgroundColor = .clear
+        appearance.shadowColor = .clear
+        return appearance
+    }
 
-enum HomeRoutePickerTransition: Equatable {
-    case opacity
-}
+    static func applyTabBarAppearance() {
+        let appearance = makeTabBarAppearance()
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
+    }
 
-enum HomePresentation {
-    static let routePickerTransition: HomeRoutePickerTransition = .opacity
-    static let fadeDuration: Double = 0.24
+    static func makeNavigationBarAppearance() -> UINavigationBarAppearance {
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundEffect = nil
+        appearance.backgroundColor = UIColor(AppColors.pageBase)
+        appearance.titleTextAttributes = [.foregroundColor: UIColor(AppColors.textPrimary)]
+        appearance.largeTitleTextAttributes = [.foregroundColor: UIColor(AppColors.textPrimary)]
+        return appearance
+    }
+
+    static func applyNavigationBarAppearance() {
+        let appearance = makeNavigationBarAppearance()
+        UINavigationBar.appearance().standardAppearance = appearance
+        UINavigationBar.appearance().compactAppearance = appearance
+        UINavigationBar.appearance().scrollEdgeAppearance = appearance
+    }
 }
 
 enum HomeStyle {
     static let gradientStops: [Gradient.Stop] = [
-        .init(color: AppColors.bgBase, location: 0),
-        .init(color: AppColors.bgMap, location: 0.4),
-        .init(color: AppColors.bgGradientEnd, location: 1)
+        .init(color: AppColors.pageBase, location: 0),
+        .init(color: AppColors.pageMiddle, location: 0.4),
+        .init(color: AppColors.pageOuter, location: 1)
     ]
     static let gradientStartPoint = UnitPoint(x: 0.25, y: 0)
     static let gradientEndPoint = UnitPoint(x: 0.75, y: 1)

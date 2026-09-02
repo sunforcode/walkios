@@ -1,5 +1,55 @@
 import Foundation
 
+enum PublicRouteAPI {
+    struct Featured: APIRequest {
+        typealias Response = PublicRouteDiscoveryResult
+
+        let method: APIHTTPMethod = .get
+        let path = "/public-routes/featured"
+        let responseEnvelope: APIResponseEnvelope = .data
+        let storagePolicy: APIStoragePolicy = .store
+        let authenticationPolicy: APIAuthenticationPolicy = .none
+    }
+
+    struct All: APIRequest {
+        typealias Response = PublicRouteCollectionResult
+
+        let method: APIHTTPMethod = .get
+        let path = "/public-routes"
+        let responseEnvelope: APIResponseEnvelope = .data
+        let storagePolicy: APIStoragePolicy = .store
+        let authenticationPolicy: APIAuthenticationPolicy = .none
+    }
+
+    struct Search: APIRequest {
+        typealias Response = PublicRouteSearchResult
+
+        let method: APIHTTPMethod = .get
+        let path = "/public-routes/search"
+        let query: [URLQueryItem]
+        let responseEnvelope: APIResponseEnvelope = .data
+        let authenticationPolicy: APIAuthenticationPolicy = .none
+
+        init(query: String?) {
+            self.query = query.map { [URLQueryItem(name: "query", value: $0)] } ?? []
+        }
+    }
+
+    struct Detail: APIRequest {
+        typealias Response = PublicRouteDetail
+
+        let method: APIHTTPMethod = .get
+        let path: String
+        let responseEnvelope: APIResponseEnvelope = .data
+        let storagePolicy: APIStoragePolicy = .store
+        let authenticationPolicy: APIAuthenticationPolicy = .none
+
+        init(id: String) {
+            path = "/public-routes/\(id)"
+        }
+    }
+}
+
 enum RouteAPI {
     struct Detail: APIRequest {
         typealias Response = RouteDetailResponse

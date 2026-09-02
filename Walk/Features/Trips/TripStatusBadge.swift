@@ -4,14 +4,34 @@ import SwiftUI
 struct TripStatusBadge: View {
     let status: TripStatus
 
+    private var foregroundColor: Color {
+        switch status {
+        case .planning: AppColors.statusPlanning
+        case .inProgress: AppColors.statusProgress
+        case .completed: AppColors.statusCompleted
+        case .cancelled: AppColors.statusCancelled
+        case .unknown: AppColors.textWeak
+        }
+    }
+
+    private var backgroundColor: Color {
+        switch status {
+        case .planning: AppColors.statusPlanningBackground
+        case .inProgress: AppColors.statusProgressBackground
+        case .completed: AppColors.statusCompletedBackground
+        case .cancelled: AppColors.statusCancelledBackground
+        case .unknown: AppColors.interactionBackground
+        }
+    }
+
     var body: some View {
         Text(status.displayName)
             .font(.caption)
             .fontWeight(.medium)
-            .foregroundColor(status.color)
+            .foregroundStyle(foregroundColor)
             .padding(.horizontal, Spacing.sm)
             .padding(.vertical, Spacing.xs)
-            .background(status.backgroundColor)
+            .background(backgroundColor)
             .cornerRadius(6)
     }
 }

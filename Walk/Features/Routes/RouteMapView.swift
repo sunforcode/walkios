@@ -14,9 +14,78 @@ struct RouteCoordinatesFingerprint: Equatable {
     }
 }
 
+struct RouteMapAnnotationFingerprint: Equatable {
+    private let values: [String]
+
+    init(
+        poiAnnotations: [RoutePOIAnnotation],
+        trackPoints: [RouteTrackPointMetadata],
+        waypoints: [RouteWaypointAnnotation]
+    ) {
+        values = poiAnnotations.map {
+            "poi|\($0.id)|\($0.title)|\($0.category)|\($0.subCategory)|\($0.detail)|\($0.elevation)|\($0.imageURL?.absoluteString ?? "")|\($0.latitude)|\($0.longitude)"
+        } + trackPoints.map {
+            "track|\($0.id)|\($0.title)|\($0.type)|\($0.detail)|\($0.imageURL?.absoluteString ?? "")|\($0.latitude)|\($0.longitude)"
+        } + waypoints.map {
+            "waypoint|\($0.id)|\($0.title)|\($0.detail)|\($0.elevation)|\($0.type)|\($0.imageURL?.absoluteString ?? "")|\($0.latitude)|\($0.longitude)"
+        }
+    }
+}
+
 struct RouteMapUpdateDecision: Equatable {
     let shouldUpdateRoute: Bool
     let shouldFitCamera: Bool
+}
+
+struct RouteMapInsetsFingerprint: Equatable {
+    let top: CGFloat
+    let left: CGFloat
+    let bottom: CGFloat
+    let right: CGFloat
+
+    init(_ insets: UIEdgeInsets) {
+        top = insets.top
+        left = insets.left
+        bottom = insets.bottom
+        right = insets.right
+    }
+}
+
+struct RouteMapOverlayPlan {
+    struct Overlay {
+        let segmentID: String?
+        let colorHex: String?
+        let coordinates: [CLLocationCoordinate2D]
+    }
+
+    let overlays: [Overlay]
+    let usesWholeRoute: Bool
+
+    init(coordinates: [CLLocationCoordinate2D], segments: [RouteMapSegment]) {
+        if segments.isEmpty {
+            overlays = coordinates.count >= 2
+                ? [.init(segmentID: nil, colorHex: nil, coordinates: coordinates)]
+                : []
+            usesWholeRoute = true
+        } else {
+            overlays = segments.map {
+                .init(segmentID: $0.id, colorHex: $0.colorHex, coordinates: $0.coordinates)
+            }
+            usesWholeRoute = false
+        }
+    }
+}
+
+struct RouteMapOverlayStyle: Equatable {
+    let lineWidth: CGFloat
+    let alpha: CGFloat
+
+    static func resolve(segmentID: String?, selectedSegmentID: String?) -> Self {
+        guard let selectedSegmentID else { return .init(lineWidth: 4, alpha: 0.8) }
+        return segmentID == selectedSegmentID
+            ? .init(lineWidth: 7, alpha: 1)
+            : .init(lineWidth: 4, alpha: 0.3)
+    }
 }
 
 enum RouteMapUpdatePolicy {
@@ -41,18 +110,33 @@ enum RouteMapCamera {
         return .init(mapRect: polyline.boundingMapRect, edgeInsets: edgeInsets)
     }
 
-    static func detailEdgeInsets(viewportHeight: CGFloat, safeAreaTop: CGFloat, safeAreaBottom: CGFloat) -> UIEdgeInsets {
+    static func detailEdgeInsets(
+        viewportHeight: CGFloat,
+        safeAreaTop: CGFloat,
+        safeAreaBottom: CGFloat,
+        drawerHeightRatio: CGFloat = detailDrawerHeightRatio
+    ) -> UIEdgeInsets {
         .init(
             top: safeAreaTop + standardEdgeInsets.top,
             left: standardEdgeInsets.left,
-            bottom: viewportHeight * detailDrawerHeightRatio + safeAreaBottom + standardEdgeInsets.bottom,
+            bottom: viewportHeight * drawerHeightRatio + safeAreaBottom + standardEdgeInsets.bottom,
             right: standardEdgeInsets.right
         )
+    }
+
+    static func shouldFocusSegment(previousSelection: String?, selection: String?) -> Bool {
+        selection != nil && selection != previousSelection
+    }
+
+    static func shouldFocusMarker(hasCoordinates: Bool, userHasInteracted: Bool) -> Bool {
+        !hasCoordinates && !userHasInteracted
     }
 }
 
 struct RouteMapView: UIViewRepresentable {
     let coordinates: [CLLocationCoordinate2D]
+    let segments: [RouteMapSegment]
+    let selectedSegmentID: String?
     let poiAnnotations: [RoutePOIAnnotation]
     let trackPointAnnotations: [RouteTrackPointMetadata]
     let waypointAnnotations: [RouteWaypointAnnotation]
@@ -62,11 +146,13 @@ struct RouteMapView: UIViewRepresentable {
     let rotateEnabled: Bool
     let cameraPitch: CGFloat
     let edgeInsets: UIEdgeInsets
-    let onSelectTrackPoint: ((RouteTrackPointMetadata) -> Void)?
-    let onSelectWaypoint: ((RouteWaypointAnnotation) -> Void)?
+    let onSelectSegment: ((String) -> Void)?
+    let onSelectMarker: ((RouteMapSelection) -> Void)?
 
     init(
         coordinates: [CLLocationCoordinate2D] = [],
+        segments: [RouteMapSegment] = [],
+        selectedSegmentID: String? = nil,
         poiAnnotations: [RoutePOIAnnotation] = [],
         trackPointAnnotations: [RouteTrackPointMetadata] = [],
         waypointAnnotations: [RouteWaypointAnnotation] = [],
@@ -76,10 +162,12 @@ struct RouteMapView: UIViewRepresentable {
         rotateEnabled: Bool = true,
         cameraPitch: CGFloat = 0,
         edgeInsets: UIEdgeInsets = RouteMapCamera.standardEdgeInsets,
-        onSelectTrackPoint: ((RouteTrackPointMetadata) -> Void)? = nil,
-        onSelectWaypoint: ((RouteWaypointAnnotation) -> Void)? = nil
+        onSelectSegment: ((String) -> Void)? = nil,
+        onSelectMarker: ((RouteMapSelection) -> Void)? = nil
     ) {
         self.coordinates = coordinates
+        self.segments = segments
+        self.selectedSegmentID = selectedSegmentID
         self.poiAnnotations = poiAnnotations
         self.trackPointAnnotations = trackPointAnnotations
         self.waypointAnnotations = waypointAnnotations
@@ -89,39 +177,61 @@ struct RouteMapView: UIViewRepresentable {
         self.rotateEnabled = rotateEnabled
         self.cameraPitch = cameraPitch
         self.edgeInsets = edgeInsets
-        self.onSelectTrackPoint = onSelectTrackPoint
-        self.onSelectWaypoint = onSelectWaypoint
+        self.onSelectSegment = onSelectSegment
+        self.onSelectMarker = onSelectMarker
     }
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
         mapView.delegate = context.coordinator
+        mapView.addGestureRecognizer(UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleMapTap(_:))))
         configure(mapView)
         return mapView
     }
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
         configure(mapView)
-        context.coordinator.onSelectTrackPoint = onSelectTrackPoint
-        context.coordinator.onSelectWaypoint = onSelectWaypoint
+        context.coordinator.onSelectSegment = onSelectSegment
+        context.coordinator.onSelectMarker = onSelectMarker
         let decision = RouteMapUpdatePolicy.decision(
             previousFingerprint: context.coordinator.coordinatesFingerprint,
             coordinates: coordinates,
             userHasInteracted: context.coordinator.userHasInteracted
         )
-        let annotationFingerprint = poiAnnotations.map { "poi-\($0.id)" }
-            + trackPointAnnotations.map { "track-\($0.id)" }
-            + waypointAnnotations.map { "waypoint-\($0.id)" }
+        let annotationFingerprint = RouteMapAnnotationFingerprint(
+            poiAnnotations: poiAnnotations,
+            trackPoints: trackPointAnnotations,
+            waypoints: waypointAnnotations
+        )
+        let overlayFingerprint = segments.map { segment in
+            let points = segment.coordinates.map { "\($0.latitude),\($0.longitude)" }.joined(separator: ";")
+            return "\(segment.id)-\(segment.colorHex ?? "")-\(points)"
+        }
         let annotationsChanged = annotationFingerprint != context.coordinator.annotationFingerprint
-        guard decision.shouldUpdateRoute || annotationsChanged else { return }
+        let overlaysChanged = overlayFingerprint != context.coordinator.overlayFingerprint
+        let selectionChanged = selectedSegmentID != context.coordinator.selectedSegmentID
+        let insetsFingerprint = RouteMapInsetsFingerprint(edgeInsets)
+        let insetsChanged = insetsFingerprint != context.coordinator.insetsFingerprint
+        guard decision.shouldUpdateRoute || annotationsChanged || overlaysChanged || selectionChanged || insetsChanged else { return }
 
+        let previousSelection = context.coordinator.selectedSegmentID
         context.coordinator.coordinatesFingerprint = RouteCoordinatesFingerprint(coordinates: coordinates)
         context.coordinator.annotationFingerprint = annotationFingerprint
+        context.coordinator.overlayFingerprint = overlayFingerprint
+        context.coordinator.selectedSegmentID = selectedSegmentID
+        context.coordinator.insetsFingerprint = insetsFingerprint
         mapView.removeOverlays(mapView.overlays)
         mapView.removeAnnotations(mapView.annotations.filter { !($0 is MKUserLocation) })
 
+        let overlayPlan = RouteMapOverlayPlan(coordinates: coordinates, segments: segments)
+        overlayPlan.overlays.forEach {
+            mapView.addOverlay(RouteSegmentPolyline(
+                coordinates: $0.coordinates,
+                segmentID: $0.segmentID,
+                colorHex: $0.colorHex
+            ))
+        }
         if coordinates.count >= 2 {
-            mapView.addOverlay(MKPolyline(coordinates: coordinates, count: coordinates.count))
             if let start = coordinates.first {
                 mapView.addAnnotation(RoutePointAnnotation(coordinate: start, title: "起点", subtitle: nil, type: .start))
             }
@@ -136,7 +246,7 @@ struct RouteMapView: UIViewRepresentable {
                 title: $0.title,
                 subtitle: "类别：\($0.category) · 子类别：\($0.subCategory)\n描述：\($0.detail) · 海拔：\($0.elevation)",
                 type: .poi,
-                trackPoint: nil
+                selection: .poi($0)
             ))
         }
         trackPointAnnotations.forEach {
@@ -145,7 +255,7 @@ struct RouteMapView: UIViewRepresentable {
                 title: $0.title,
                 subtitle: $0.type,
                 type: .trackPoint,
-                trackPoint: $0
+                selection: .trackPoint($0)
             ))
         }
         waypointAnnotations.forEach {
@@ -154,21 +264,27 @@ struct RouteMapView: UIViewRepresentable {
                 title: $0.title,
                 subtitle: $0.type,
                 type: .waypoint,
-                waypoint: $0
+                selection: .waypoint($0)
             ))
         }
 
-        if decision.shouldFitCamera,
-           let fit = RouteMapCamera.fit(coordinates: coordinates, edgeInsets: edgeInsets) {
-            mapView.setVisibleMapRect(fit.mapRect, edgePadding: fit.edgeInsets, animated: false)
-        } else if coordinates.isEmpty,
-                  let first = (poiAnnotations.first?.coordinate ?? trackPointAnnotations.first?.coordinate ?? waypointAnnotations.first?.coordinate) {
+        if RouteMapCamera.shouldFocusSegment(previousSelection: previousSelection, selection: selectedSegmentID),
+           let selected = segments.first(where: { $0.id == selectedSegmentID }),
+           let fit = RouteMapCamera.fit(coordinates: selected.coordinates, edgeInsets: edgeInsets) {
+            mapView.setVisibleMapRect(fit.mapRect, edgePadding: fit.edgeInsets, animated: true)
+        } else if (decision.shouldFitCamera || insetsChanged) && !context.coordinator.userHasInteracted,
+                  let fit = RouteMapCamera.fit(coordinates: coordinates, edgeInsets: edgeInsets) {
+            mapView.setVisibleMapRect(fit.mapRect, edgePadding: fit.edgeInsets, animated: insetsChanged)
+        } else if RouteMapCamera.shouldFocusMarker(
+            hasCoordinates: !coordinates.isEmpty,
+            userHasInteracted: context.coordinator.userHasInteracted
+        ), let first = (poiAnnotations.first?.coordinate ?? trackPointAnnotations.first?.coordinate ?? waypointAnnotations.first?.coordinate) {
             mapView.setRegion(.init(center: first, latitudinalMeters: 5_000, longitudinalMeters: 5_000), animated: false)
         }
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onSelectTrackPoint: onSelectTrackPoint, onSelectWaypoint: onSelectWaypoint)
+        Coordinator(onSelectSegment: onSelectSegment, onSelectMarker: onSelectMarker)
     }
 
     private func configure(_ mapView: MKMapView) {
@@ -182,17 +298,20 @@ struct RouteMapView: UIViewRepresentable {
 
     final class Coordinator: NSObject, MKMapViewDelegate {
         var coordinatesFingerprint: RouteCoordinatesFingerprint?
-        var annotationFingerprint: [String] = []
+        var annotationFingerprint: RouteMapAnnotationFingerprint?
+        var overlayFingerprint: [String] = []
+        var selectedSegmentID: String?
+        var insetsFingerprint: RouteMapInsetsFingerprint?
         var userHasInteracted = false
-        var onSelectTrackPoint: ((RouteTrackPointMetadata) -> Void)?
-        var onSelectWaypoint: ((RouteWaypointAnnotation) -> Void)?
+        var onSelectSegment: ((String) -> Void)?
+        var onSelectMarker: ((RouteMapSelection) -> Void)?
 
         init(
-            onSelectTrackPoint: ((RouteTrackPointMetadata) -> Void)?,
-            onSelectWaypoint: ((RouteWaypointAnnotation) -> Void)?
+            onSelectSegment: ((String) -> Void)?,
+            onSelectMarker: ((RouteMapSelection) -> Void)?
         ) {
-            self.onSelectTrackPoint = onSelectTrackPoint
-            self.onSelectWaypoint = onSelectWaypoint
+            self.onSelectSegment = onSelectSegment
+            self.onSelectMarker = onSelectMarker
         }
 
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
@@ -205,11 +324,12 @@ struct RouteMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            guard let polyline = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
+            guard let polyline = overlay as? RouteSegmentPolyline else { return MKOverlayRenderer(overlay: overlay) }
             let renderer = MKPolylineRenderer(polyline: polyline)
-            renderer.strokeColor = .systemBlue
-            renderer.lineWidth = 4
-            renderer.alpha = 0.8
+            let style = RouteMapOverlayStyle.resolve(segmentID: polyline.segmentID, selectedSegmentID: selectedSegmentID)
+            renderer.strokeColor = UIColor(routeHex: polyline.colorHex) ?? UIColor(AppColors.mapRoute)
+            renderer.lineWidth = style.lineWidth
+            renderer.alpha = style.alpha
             return renderer
         }
 
@@ -219,22 +339,40 @@ struct RouteMapView: UIViewRepresentable {
             let view = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView)
                 ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
             view.annotation = annotation
-            view.canShowCallout = true
+            view.canShowCallout = false
             view.glyphText = point.type.glyph
             switch point.type {
-            case .start: view.markerTintColor = .systemGreen
-            case .end: view.markerTintColor = .systemRed
-            case .waypoint: view.markerTintColor = .systemPurple
-            case .poi: view.markerTintColor = .systemOrange
-            case .trackPoint: view.markerTintColor = .systemBlue
+            case .start: view.markerTintColor = UIColor(AppColors.mapStart)
+            case .end: view.markerTintColor = UIColor(AppColors.mapEnd)
+            case .waypoint: view.markerTintColor = UIColor(AppColors.mapWaypoint)
+            case .poi: view.markerTintColor = UIColor(AppColors.mapPOI)
+            case .trackPoint: view.markerTintColor = UIColor(AppColors.mapRoute)
             }
             return view
         }
 
         func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
-            guard let point = view.annotation as? RoutePointAnnotation else { return }
-            if let trackPoint = point.trackPoint { onSelectTrackPoint?(trackPoint) }
-            if let waypoint = point.waypoint { onSelectWaypoint?(waypoint) }
+            guard let point = view.annotation as? RoutePointAnnotation,
+                  let selection = point.selection else { return }
+            onSelectMarker?(selection)
+        }
+
+        @objc func handleMapTap(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended,
+                  let mapView = recognizer.view as? MKMapView else { return }
+            let tapPoint = recognizer.location(in: mapView)
+            for overlay in mapView.overlays.reversed() {
+                guard let polyline = overlay as? RouteSegmentPolyline,
+                      let segmentID = polyline.segmentID,
+                      let renderer = mapView.renderer(for: polyline) as? MKPolylineRenderer else { continue }
+                let mapPoint = MKMapPoint(mapView.convert(tapPoint, toCoordinateFrom: mapView))
+                let rendererPoint = renderer.point(for: mapPoint)
+                let hitPath = renderer.path?.copy(strokingWithWidth: max(renderer.lineWidth, 22), lineCap: .round, lineJoin: .round, miterLimit: 0)
+                if hitPath?.contains(rendererPoint) == true {
+                    onSelectSegment?(segmentID)
+                    return
+                }
+            }
         }
     }
 }
@@ -258,23 +396,45 @@ final class RoutePointAnnotation: NSObject, MKAnnotation {
     let title: String?
     let subtitle: String?
     let type: RoutePointType
-    let trackPoint: RouteTrackPointMetadata?
-    let waypoint: RouteWaypointAnnotation?
+    let selection: RouteMapSelection?
 
     init(
         coordinate: CLLocationCoordinate2D,
         title: String?,
         subtitle: String?,
         type: RoutePointType,
-        trackPoint: RouteTrackPointMetadata? = nil,
-        waypoint: RouteWaypointAnnotation? = nil
+        selection: RouteMapSelection? = nil
     ) {
         self.coordinate = coordinate
         self.title = title
         self.subtitle = subtitle
         self.type = type
-        self.trackPoint = trackPoint
-        self.waypoint = waypoint
+        self.selection = selection
         super.init()
+    }
+}
+
+final class RouteSegmentPolyline: MKPolyline {
+    private(set) var segmentID: String?
+    private(set) var colorHex: String?
+
+    convenience init(coordinates: [CLLocationCoordinate2D], segmentID: String?, colorHex: String?) {
+        self.init(coordinates: coordinates, count: coordinates.count)
+        self.segmentID = segmentID
+        self.colorHex = colorHex
+    }
+}
+
+private extension UIColor {
+    convenience init?(routeHex: String?) {
+        guard let routeHex else { return nil }
+        let value = routeHex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        guard value.count == 6, let rgb = UInt64(value, radix: 16) else { return nil }
+        self.init(
+            red: CGFloat((rgb >> 16) & 0xFF) / 255,
+            green: CGFloat((rgb >> 8) & 0xFF) / 255,
+            blue: CGFloat(rgb & 0xFF) / 255,
+            alpha: 1
+        )
     }
 }

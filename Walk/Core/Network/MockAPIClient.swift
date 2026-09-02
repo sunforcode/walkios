@@ -20,6 +20,10 @@ struct MockAPIClient: APIClient {
         } else {
             throw APIClientError.mockNotFound(request.identifier)
         }
-        return try APIJSONDecoder.decode(Request.Response.self, from: data)
+        return try APIJSONDecoder.decode(
+            Request.Response.self,
+            from: data,
+            envelope: request.responseEnvelope
+        )
     }
 }

@@ -6,7 +6,7 @@ struct ShadowToken {
     let x: CGFloat
     let y: CGFloat
 
-    var color: Color { .black.opacity(opacity) }
+    var color: Color { AppColors.shadowOverlay.opacity(opacity / 0.40) }
 }
 
 enum AppShadow {

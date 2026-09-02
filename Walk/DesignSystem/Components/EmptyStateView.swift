@@ -24,7 +24,7 @@ struct EmptyStateView: View {
 
     var body: some View {
         ZStack {
-            AppColors.bgBase.ignoresSafeArea()
+            AppColors.pageBase.ignoresSafeArea()
 
             VStack(spacing: Spacing.md) {
                 if let icon {
@@ -48,10 +48,10 @@ struct EmptyStateView: View {
                     Button(action: action) {
                         Text(actionTitle)
                             .font(.button)
-                            .foregroundStyle(AppColors.bgBase)
+                            .foregroundStyle(AppColors.pageBase)
                             .padding(.horizontal, Spacing.xl)
                             .padding(.vertical, Spacing.md)
-                            .background(AppColors.interactiveAccent)
+                            .background(AppColors.interactionPrimary)
                             .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
                     }
                     .buttonStyle(.plain)

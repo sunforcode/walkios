@@ -5,6 +5,8 @@ struct WalkApp: App {
     @StateObject private var appEnvironment: AppEnvironment
 
     init() {
+        RootNavigation.applyTabBarAppearance()
+        RootNavigation.applyNavigationBarAppearance()
         do {
             let configuration = try AppConfiguration.process()
             let environment = try AppEnvironment(configuration: configuration)

@@ -9,14 +9,14 @@ enum APIEndpoints {
             ?? "https://api.example.invalid/walkbg/api/v1"
     }
 
-    // MARK: - Trips
-    static let trips = "/trips"
-    static func tripDetail(_ id: String) -> String { "/trips/\(id)" }
-    static let createTrip = "/trips"
-    static func updateTrip(_ id: String) -> String { "/trips/\(id)" }
-    static func deleteTrip(_ id: String) -> String { "/trips/\(id)" }
-    static func tripStatus(_ id: String) -> String { "/trips/\(id)/status" }
-    static let plannedTrips = "/trips/planned"
+    // MARK: - Legacy Trips
+    static let trips = "/legacy/trips"
+    static func tripDetail(_ id: String) -> String { "/legacy/trips/\(id)" }
+    static let createTrip = "/legacy/trips"
+    static func updateTrip(_ id: String) -> String { "/legacy/trips/\(id)" }
+    static func deleteTrip(_ id: String) -> String { "/legacy/trips/\(id)" }
+    static func tripStatus(_ id: String) -> String { "/legacy/trips/\(id)/status" }
+    static let plannedTrips = "/legacy/trips/planned"
 
     // MARK: - Routes
     static let routes = "/routes"

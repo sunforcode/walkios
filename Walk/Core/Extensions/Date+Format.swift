@@ -1,5 +1,24 @@
 import Foundation
 
+enum BusinessCalendar {
+    static let timeZone = TimeZone(identifier: "Asia/Shanghai")!
+
+    static var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "zh_CN")
+        calendar.timeZone = timeZone
+        return calendar
+    }
+
+    static func startOfToday(now: Date = .now) -> Date {
+        calendar.startOfDay(for: now)
+    }
+}
+
+extension Calendar {
+    static var business: Calendar { BusinessCalendar.calendar }
+}
+
 extension DateFormatter {
     /// ISO8601 日期格式化器（带毫秒）
     static let iso8601WithMilliseconds: DateFormatter = {

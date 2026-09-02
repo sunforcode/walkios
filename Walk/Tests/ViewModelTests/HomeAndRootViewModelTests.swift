@@ -3,149 +3,245 @@ import XCTest
 
 @MainActor
 final class HomeAndRootViewModelTests: XCTestCase {
-    func testHomeStateStartsLoading() {
-        let sut = makeHomeViewModel(selectedRouteID: nil)
+    func testGuideInitialLoadRunsOnlyOnce() async {
+        var loadCount = 0
+        let sut = GuideListViewModel(loadGuides: {
+            loadCount += 1
+            return MockData.guides
+        })
+
+        await sut.loadIfNeeded()
+        await sut.loadIfNeeded()
+
+        XCTAssertEqual(loadCount, 1)
+        XCTAssertEqual(sut.guides.count, MockData.guides.count)
+        XCTAssertTrue(sut.hasLoaded)
+    }
+
+    func testGuideRefreshKeepsExistingContentVisible() async {
+        let existingGuides = MockData.guides
+        var loadCount = 0
+        var refreshContinuation: CheckedContinuation<[Guide], Never>?
+        var requestStartedContinuation: AsyncStream<Void>.Continuation!
+        let requestStarted = AsyncStream<Void> { requestStartedContinuation = $0 }
+        let sut = GuideListViewModel(loadGuides: {
+            loadCount += 1
+            if loadCount == 1 { return existingGuides }
+            return await withCheckedContinuation {
+                refreshContinuation = $0
+                requestStartedContinuation.yield()
+                requestStartedContinuation.finish()
+            }
+        })
+        await sut.loadIfNeeded()
+
+        let refreshTask = Task { await sut.refresh() }
+        for await _ in requestStarted { break }
+
+        XCTAssertEqual(sut.guides.count, existingGuides.count)
+        XCTAssertFalse(sut.isLoading)
+        XCTAssertTrue(sut.isRefreshing)
+
+        refreshContinuation?.resume(returning: existingGuides)
+        await refreshTask.value
+        XCTAssertFalse(sut.isRefreshing)
+    }
+
+    func testHomeStartsLoadingAndUsesServerFocusWithoutListOrRouteResolution() async {
+        var focusCallCount = 0
+        let focusedTrip = PersonalTripTestFixtures.summary(id: "focus", status: .inProgress)
+        let sut = HomeViewModel(loadFocus: {
+            focusCallCount += 1
+            return PersonalTripFocus(trip: focusedTrip)
+        })
+
         XCTAssertEqual(sut.state, .loading)
-    }
-
-    func testMissingSelectedRouteBecomesEmptyWithoutLoadingRoute() async {
-        let recorder = RouteIDRecorder()
-        let sut = makeHomeViewModel(selectedRouteID: nil, loadedRouteIDs: recorder)
 
         await sut.load()
 
-        XCTAssertEqual(sut.state, .empty)
-        XCTAssertTrue(recorder.values.isEmpty)
+        XCTAssertEqual(focusCallCount, 1)
+        XCTAssertEqual(sut.focusedTrip?.tripID, "focus")
+        XCTAssertEqual(sut.state, .ready)
     }
 
-    func testSelectedRouteIDLoadsRouteAndShowsRouteHome() async {
-        let recorder = RouteIDRecorder()
-        let sut = makeHomeViewModel(selectedRouteID: "route-1", loadedRouteIDs: recorder)
-
-        await sut.load()
-
-        XCTAssertEqual(recorder.values, ["route-1"])
-        XCTAssertEqual(sut.state, .ready(route: Self.route, weather: nil))
-    }
-
-    func testWeatherSummaryIsLoadedForSelectedRoute() async {
-        let weather = HomeWeatherSummary(
-            precipitationProbability: 20,
-            windSpeed: 12,
-            minimumTemperature: 8,
-            maximumTemperature: 16
+    func testHomeLoadsWeatherForFocusedTripAndPublishesMatchingRevision() async {
+        var weatherTripIDs: [String] = []
+        let focusedTrip = PersonalTripTestFixtures.summary(id: "focus", status: .inProgress)
+        let weather = PersonalTripWeather(
+            tripID: "focus",
+            revision: focusedTrip.revision,
+            routeName: focusedTrip.routeName,
+            startDate: focusedTrip.startDate,
+            endDate: focusedTrip.endDate,
+            days: [],
+            weatherOverview: QualifiedString(value: "多云，午后有雨", confidence: nil)
         )
         let sut = HomeViewModel(
-            loadSelectedRouteID: { "route-1" },
-            loadRoute: { _ in Self.route },
-            loadWeather: { route, _ in
-                XCTAssertEqual(route.id, Self.route.id)
+            loadFocus: { PersonalTripFocus(trip: focusedTrip) },
+            loadWeather: { tripID in
+                weatherTripIDs.append(tripID)
                 return weather
             }
         )
 
         await sut.load()
 
-        XCTAssertEqual(sut.state, .ready(route: Self.route, weather: weather))
+        XCTAssertEqual(weatherTripIDs, ["focus"])
+        XCTAssertEqual(sut.weatherSummary?.text, "多云，午后有雨")
+        XCTAssertEqual(sut.state, .ready)
     }
 
-    func testSelectRoutePersistsAndImmediatelyUpdatesHome() async {
-        var savedRouteID: String?
-        let sut = HomeViewModel(
-            loadSelectedRouteID: { nil },
-            saveSelectedRouteID: { savedRouteID = $0 },
-            loadRoute: { _ in Self.route }
+    func testHomeDoesNotMixWeatherFromAnotherRevision() async {
+        let focusedTrip = PersonalTripTestFixtures.summary(id: "focus", status: .planned)
+        let staleWeather = PersonalTripWeather(
+            tripID: "focus",
+            revision: "stale-revision",
+            routeName: focusedTrip.routeName,
+            startDate: focusedTrip.startDate,
+            endDate: focusedTrip.endDate,
+            days: [],
+            weatherOverview: QualifiedString(value: "晴", confidence: nil)
         )
-        await sut.load()
-
-        await sut.selectRoute(Self.route)
-
-        XCTAssertEqual(savedRouteID, Self.route.id)
-        XCTAssertEqual(sut.state, .ready(route: Self.route, weather: nil))
-    }
-
-    func testRouteFailureMapsToErrorInsteadOfInventingRouteContent() async {
         let sut = HomeViewModel(
-            loadSelectedRouteID: { "route-1" },
-            loadRoute: { _ in throw TestError.unavailable }
+            loadFocus: { PersonalTripFocus(trip: focusedTrip) },
+            loadWeather: { _ in staleWeather }
         )
 
         await sut.load()
 
-        guard case let .error(message) = sut.state else {
-            return XCTFail("Expected route error state")
-        }
-        XCTAssertTrue(message.contains("当前路线加载失败"))
+        XCTAssertNil(sut.weatherSummary)
+        XCTAssertEqual(sut.state, .ready)
     }
 
-    func testHomeLayoutMatchesFlutterReference() {
-        XCTAssertEqual(HomeLayout.heroHorizontalPadding, 20)
-        XCTAssertEqual(HomeLayout.emptyHorizontalPadding, 28)
-        XCTAssertEqual(HomeLayout.emptyBrandSize, 42)
-        XCTAssertEqual(HomeLayout.emptyPromptSize, 20)
-        XCTAssertEqual(HomeLayout.emptyCTAHorizontalPadding, 48)
-        XCTAssertEqual(HomeLayout.weatherHorizontalPadding, 20)
-        XCTAssertEqual(HomeLayout.weatherVerticalPadding, 16)
-        XCTAssertEqual(HomeLayout.weatherBottomOffset, 100)
-        XCTAssertEqual(HomeLayout.changeRouteBottomOffset, 200)
-        XCTAssertEqual(HomeLayout.compactHeightThreshold, 600)
+    func testHomeUsesServerNilFocusAsEmptyAndRequestsRouteDiscovery() async {
+        var routeDiscoveryCount = 0
+        let sut = HomeViewModel(
+            loadFocus: { PersonalTripFocus(trip: nil) },
+            onNoFocus: { routeDiscoveryCount += 1 }
+        )
+
+        await sut.load()
+
+        XCTAssertNil(sut.focusedTrip)
+        XCTAssertEqual(sut.state, .empty)
+        XCTAssertEqual(routeDiscoveryCount, 1)
     }
 
-    func testUpcomingHikingDateIsNextSaturdayIncludingToday() {
-        let calendar = Calendar(identifier: .gregorian)
-        let monday = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24))!
-        let saturday = HomeViewModel.upcomingHikingDate(from: monday, calendar: calendar)
+    func testRefreshFailureKeepsExistingFocusVisible() async {
+        let focusedTrip = PersonalTripTestFixtures.summary(id: "focus", status: .planned)
+        var shouldFail = false
+        let sut = HomeViewModel(loadFocus: {
+            if shouldFail { throw APIClientError.invalidResponse }
+            return PersonalTripFocus(trip: focusedTrip)
+        })
+        await sut.load()
+        shouldFail = true
 
-        XCTAssertEqual(calendar.component(.weekday, from: saturday), 7)
-        XCTAssertEqual(calendar.dateComponents([.day], from: monday, to: saturday).day, 5)
+        await sut.load()
+
+        XCTAssertEqual(sut.focusedTrip?.tripID, "focus")
+        XCTAssertEqual(sut.state, .ready)
+        XCTAssertEqual(sut.refreshError, "当前行程刷新失败")
     }
 
-    func testLoggedOutDrawerDisplayDoesNotLoadUser() async {
-        var didLoadUser = false
-        let sut = RootViewModel(
+    func testGuestHomeDoesNotRequestPersonalFocus() async {
+        var focusCallCount = 0
+        let sut = HomeViewModel(
             isLoggedIn: { false },
-            loadUser: {
-                didLoadUser = true
-                return Self.user
+            loadFocus: {
+                focusCallCount += 1
+                return PersonalTripFocus(trip: nil)
             }
         )
 
-        await sut.loadDrawerUser()
+        await sut.load()
 
-        XCTAssertEqual(sut.drawerUserDisplay, .loggedOut)
-        XCTAssertEqual(sut.drawerUserDisplay.title, "未登录")
-        XCTAssertEqual(sut.drawerUserDisplay.subtitle, "登录后查看个人主页")
-        XCTAssertEqual(RootNavigation.profileDestination, .profile)
-        XCTAssertFalse(didLoadUser)
+        XCTAssertEqual(sut.state, .guest)
+        XCTAssertEqual(focusCallCount, 0)
     }
 
-    private func makeHomeViewModel(
-        selectedRouteID: String?,
-        loadedRouteIDs: RouteIDRecorder = RouteIDRecorder()
-    ) -> HomeViewModel {
-        HomeViewModel(
-            loadSelectedRouteID: { selectedRouteID },
-            loadRoute: { routeID in
-                loadedRouteIDs.values.append(routeID)
-                return Self.route
+    func testLoginSendCodeStoresVerificationIdentity() async {
+        let expires = Date(timeIntervalSince1970: 1_800_000_000)
+        let sut = LoginViewModel(
+            sendCode: { phone in
+                XCTAssertEqual(phone, "+8613800138000")
+                return VerificationCodeResponse(
+                    verificationId: "verification-1",
+                    expiresAt: expires,
+                    resendAvailableAt: expires
+                )
+            },
+            createSession: { _, _ in XCTFail("session must not be created yet") },
+            loadAccount: { throw APIClientError.invalidResponse }
+        )
+        sut.phone = "+8613800138000"
+
+        await sut.sendVerificationCode()
+
+        XCTAssertEqual(sut.verificationID, "verification-1")
+        XCTAssertEqual(sut.phase, .verificationCode)
+    }
+
+    func testLoginCreatesSessionThenLoadsAccount() async {
+        var calls: [String] = []
+        let account = AccountResponse(
+            account: AccountProjection(identity: "account-1"),
+            profile: ProfileProjection(identity: "profile-1", maskedPhone: "+86 138****8000", nickname: nil, avatar: nil)
+        )
+        let sut = LoginViewModel(
+            sendCode: { _ in throw APIClientError.invalidResponse },
+            createSession: { verificationID, code in
+                calls.append("session:\(verificationID):\(code)")
+            },
+            loadAccount: {
+                calls.append("account")
+                return account
             }
         )
+        sut.verificationID = "verification-1"
+        sut.phase = .verificationCode
+        sut.code = "012345"
+
+        await sut.login()
+
+        XCTAssertEqual(calls, ["session:verification-1:012345", "account"])
+        XCTAssertEqual(sut.account, account)
+        XCTAssertTrue(sut.didAuthenticate)
     }
 
-    private final class RouteIDRecorder {
-        var values: [String] = []
+    func testHomeLayoutKeepsContentInLowerSafeArea() {
+        XCTAssertEqual(HomeLayout.heroHorizontalPadding, Spacing.pageHorizontal)
+        XCTAssertEqual(HomeLayout.emptyHorizontalPadding, 28)
+        XCTAssertEqual(HomeLayout.contentBottomPadding, 24)
     }
 
-    private enum TestError: Error { case unavailable }
+    func testGuestHomeExposesOnlyApprovedStartAction() throws {
+        let source = try productionSource(at: "Features/Home/HomeView.swift")
+        let guestStart = try XCTUnwrap(source.range(of: "private struct GuestHomeView"))
+        let focusStart = try XCTUnwrap(source.range(of: "private struct TripHomeView"))
+        let guestSource = String(source[guestStart.lowerBound..<focusStart.lowerBound])
 
-    private static let route = Route(
-        id: "route-1", name: "测试路线", description: nil, category: nil,
-        difficulty: nil, distance: 10, duration: 1, elevation: 200,
-        routeType: nil, coverImageUrl: nil, createdAt: nil
-    )
+        XCTAssertTrue(guestSource.contains("开启一次新的徒步行程"))
+        XCTAssertFalse(guestSource.contains("登录并开始"))
+        XCTAssertFalse(guestSource.contains("探索路线"))
+    }
 
-    private static let user = User(
-        id: "user-1", username: "walker", email: nil,
-        avatarUrl: nil, createdAt: nil
-    )
+    func testHomeFailureOnlyOffersRetry() throws {
+        let source = try productionSource(at: "Features/Home/HomeView.swift")
+        let errorStart = try XCTUnwrap(source.range(of: "private struct ErrorHomeView"))
+        let buttonStart = try XCTUnwrap(source.range(of: "private struct HomeGlassButton"))
+        let errorSource = String(source[errorStart.lowerBound..<buttonStart.lowerBound])
+
+        XCTAssertTrue(errorSource.contains("重试"))
+        XCTAssertFalse(errorSource.contains("探索路线"))
+    }
+
+    private func productionSource(at relativePath: String) throws -> String {
+        let testFileURL = URL(fileURLWithPath: #filePath)
+        let walkRoot = testFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        return try String(contentsOf: walkRoot.appendingPathComponent(relativePath), encoding: .utf8)
+    }
 }

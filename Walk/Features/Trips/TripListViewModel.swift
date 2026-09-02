@@ -2,14 +2,23 @@ import SwiftUI
 
 @MainActor
 final class TripListViewModel: ObservableObject {
-    @Published var trips: [Trip] = []
+    @Published private(set) var currentTrips: [PersonalTripSummary] = []
+    @Published private(set) var historicalTrips: [PersonalTripSummary] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    private let repository: any TripRepository
+    private let fetchTrips: () async throws -> PersonalTripCollection
 
-    init(repository: any TripRepository) {
-        self.repository = repository
+    init(service: any PersonalTripServicing) {
+        self.fetchTrips = { try await service.list() }
+    }
+
+    init(loadTrips: @escaping () async throws -> PersonalTripCollection) {
+        self.fetchTrips = loadTrips
+    }
+
+    var isEmpty: Bool {
+        currentTrips.isEmpty && historicalTrips.isEmpty
     }
 
     func loadTrips() async {
@@ -18,20 +27,20 @@ final class TripListViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            trips = try await repository.fetchTrips().items
+            let collection = try await fetchTrips()
+            currentTrips = collection.currentTrips
+            historicalTrips = collection.historicalTrips
         } catch let error as LocalizedError {
+            currentTrips = []
+            historicalTrips = []
             errorMessage = error.errorDescription ?? error.localizedDescription
         } catch {
+            currentTrips = []
+            historicalTrips = []
             errorMessage = "加载失败：\(error.localizedDescription)"
         }
     }
 
-    func retry() async {
-        errorMessage = nil
-        await loadTrips()
-    }
-
-    func refresh() async {
-        await loadTrips()
-    }
+    func retry() async { await loadTrips() }
+    func refresh() async { await loadTrips() }
 }

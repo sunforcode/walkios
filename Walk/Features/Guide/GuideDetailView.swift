@@ -6,15 +6,17 @@ struct GuideDetailView: View {
     @StateObject private var viewModel = GuideDetailViewModel()
 
     var body: some View {
-        Group {
-            if viewModel.isLoading {
-                LoadingView()
-            } else if let error = viewModel.errorMessage {
-                ErrorView(message: error) {
-                    Task { await viewModel.loadGuide(id: guideId) }
+        UtilityPageContainer {
+            Group {
+                if viewModel.isLoading {
+                    LoadingView()
+                } else if let error = viewModel.errorMessage {
+                    ErrorView(message: error) {
+                        Task { await viewModel.loadGuide(id: guideId) }
+                    }
+                } else if let guide = viewModel.guide {
+                    guideDetailContent(guide: guide)
                 }
-            } else if let guide = viewModel.guide {
-                guideDetailContent(guide: guide)
             }
         }
         .navigationTitle(viewModel.guide?.title ?? "攻略详情")
@@ -30,56 +32,57 @@ struct GuideDetailView: View {
                 // 标题
                 Text(guide.title ?? "未命名攻略")
                     .font(.largeTitle)
-                    .foregroundColor(.textPrimary)
+                    .foregroundColor(AppColors.textPrimary)
 
                 // 作者信息
                 HStack(spacing: Spacing.sm) {
                     Circle()
-                        .fill(Color.cardBackground)
+                        .fill(AppColors.surfacePrimary)
                         .frame(width: 32, height: 32)
                         .overlay(
                             Image(systemName: "person")
-                                .foregroundColor(.textSecondary)
+                                .foregroundColor(AppColors.textSecondary)
                                 .font(.caption)
                         )
 
                     Text(guide.authorName ?? "匿名")
                         .font(.subheadline)
-                        .foregroundColor(.textSecondary)
+                        .foregroundColor(AppColors.textSecondary)
 
                     Spacer()
 
                     Text(guide.createdAt?.fullDateString ?? "")
                         .font(.caption)
-                        .foregroundColor(.textTertiary)
+                        .foregroundColor(AppColors.textWeak)
                 }
 
                 Divider()
+                    .overlay(AppColors.surfaceDivider)
 
                 // 内容
                 if let content = guide.content {
                     Text(content)
                         .font(.body)
-                        .foregroundColor(.textPrimary)
+                        .foregroundColor(AppColors.textPrimary)
                         .lineSpacing(6)
                 } else if let summary = guide.summary {
                     Text(summary)
                         .font(.body)
-                        .foregroundColor(.textPrimary)
+                        .foregroundColor(AppColors.textPrimary)
                 }
 
                 Spacer()
             }
             .padding(Spacing.legacyMd)
         }
-        .background(Color.background)
+        .background(AppColors.pageBase)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: {
                     Task { await viewModel.like() }
                 }) {
                     Image(systemName: viewModel.isLiked ? "heart.fill" : "heart")
-                        .foregroundColor(viewModel.isLiked ? .red : .textSecondary)
+                        .foregroundColor(viewModel.isLiked ? AppColors.statusCancelled : AppColors.textSecondary)
                 }
             }
         }

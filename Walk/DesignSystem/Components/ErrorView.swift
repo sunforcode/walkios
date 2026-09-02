@@ -12,12 +12,12 @@ struct ErrorView: View {
 
     var body: some View {
         ZStack {
-            AppColors.bgBase.ignoresSafeArea()
+            AppColors.pageBase.ignoresSafeArea()
 
             VStack(spacing: Spacing.md) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 48))
-                    .foregroundStyle(AppColors.error)
+                    .foregroundStyle(AppColors.statusCancelled)
 
                 Text(message)
                     .font(.body)
@@ -28,10 +28,10 @@ struct ErrorView: View {
                     Button(action: retryAction) {
                         Text("重试")
                             .font(.button)
-                            .foregroundStyle(AppColors.bgBase)
+                            .foregroundStyle(AppColors.pageBase)
                             .padding(.horizontal, Spacing.xl)
                             .padding(.vertical, Spacing.md)
-                            .background(AppColors.interactiveAccent)
+                            .background(AppColors.interactionPrimary)
                             .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
                     }
                     .buttonStyle(.plain)

@@ -3,7 +3,7 @@ import SwiftUI
 enum DrawerUserDisplay: Equatable {
     case loggedOut
     case loading
-    case user(User)
+    case account(AccountResponse)
 }
 
 @MainActor
@@ -11,22 +11,22 @@ final class RootViewModel: ObservableObject {
     @Published private(set) var drawerUserDisplay: DrawerUserDisplay = .loading
 
     private let isLoggedIn: () -> Bool
-    private let loadUser: () async throws -> User
+    private let loadAccount: () async throws -> AccountResponse
 
     init(
         authManager: AuthManager = .shared,
-        userService: UserService = UserService()
+        accountService: any AccountServicing
     ) {
         self.isLoggedIn = { authManager.isLoggedIn }
-        self.loadUser = { try await userService.getCurrentUser() }
+        self.loadAccount = { try await accountService.currentAccount() }
     }
 
     init(
         isLoggedIn: @escaping () -> Bool,
-        loadUser: @escaping () async throws -> User
+        loadAccount: @escaping () async throws -> AccountResponse
     ) {
         self.isLoggedIn = isLoggedIn
-        self.loadUser = loadUser
+        self.loadAccount = loadAccount
     }
 
     func loadDrawerUser() async {
@@ -37,7 +37,7 @@ final class RootViewModel: ObservableObject {
 
         drawerUserDisplay = .loading
         do {
-            drawerUserDisplay = .user(try await loadUser())
+            drawerUserDisplay = .account(try await loadAccount())
         } catch {
             drawerUserDisplay = .loggedOut
         }

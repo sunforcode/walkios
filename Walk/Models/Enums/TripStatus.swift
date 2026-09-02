@@ -64,7 +64,7 @@ enum TripStatus: Codable, Equatable {
         case .inProgress: return AppColors.statusProgressBackground
         case .completed: return AppColors.statusCompletedBackground
         case .cancelled: return AppColors.statusCancelledBackground
-        case .unknown: return AppColors.border
+        case .unknown: return AppColors.borderPrimary
         }
     }
 }

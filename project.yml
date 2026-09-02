@@ -49,9 +49,16 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: YES
-        WALK_API_BASE_URL: https://api.example.invalid/walkbg/api/v1
-        WALK_DATA_SOURCE_MODE: mock
-        WALK_ENVIRONMENT: production
+      configs:
+        Debug:
+          WALK_API_BASE_URL: https://api.example.invalid/walkbg/api/v1
+          WALK_DATA_SOURCE_MODE: mock
+          WALK_ENVIRONMENT: development
+        Release:
+          # Production deployment is deliberately unavailable until a real URL replaces this placeholder.
+          WALK_API_BASE_URL: https://api.example.invalid/walkbg/api/v1
+          WALK_DATA_SOURCE_MODE: remote
+          WALK_ENVIRONMENT: production
 
   WalkTests:
     type: bundle.unit-test
@@ -80,11 +87,13 @@ schemes:
       environmentVariables:
         WALK_API_BASE_URL: "https://api.example.invalid/walkbg/api/v1"
         WALK_DATA_SOURCE_MODE: mock
+        WALK_ENVIRONMENT: development
     test:
       config: Debug
       environmentVariables:
         WALK_API_BASE_URL: "https://api.example.invalid/walkbg/api/v1"
         WALK_DATA_SOURCE_MODE: mock
+        WALK_ENVIRONMENT: test
       targets:
         - WalkTests
     profile:

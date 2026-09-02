@@ -1,15 +1,28 @@
 import SwiftUI
 
-/// 行程列表页
 struct TripListView: View {
     @StateObject private var viewModel: TripListViewModel
-    private let repository: any TripRepository
-    private let routeService: RouteService
+    private let onNavigate: (AppDestination) -> Void
+    private let onFindRoute: () -> Void
 
-    init(repository: any TripRepository, routeService: RouteService) {
-        self.repository = repository
-        self.routeService = routeService
-        _viewModel = StateObject(wrappedValue: TripListViewModel(repository: repository))
+    init(
+        service: any PersonalTripServicing,
+        onNavigate: @escaping (AppDestination) -> Void = { _ in },
+        onFindRoute: @escaping () -> Void = {}
+    ) {
+        self.onNavigate = onNavigate
+        self.onFindRoute = onFindRoute
+        _viewModel = StateObject(wrappedValue: TripListViewModel(service: service))
+    }
+
+    init(
+        viewModel: TripListViewModel,
+        onNavigate: @escaping (AppDestination) -> Void = { _ in },
+        onFindRoute: @escaping () -> Void = {}
+    ) {
+        self.onNavigate = onNavigate
+        self.onFindRoute = onFindRoute
+        _viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -18,51 +31,58 @@ struct TripListView: View {
                 if viewModel.isLoading {
                     LoadingView()
                 } else if let error = viewModel.errorMessage {
-                    ErrorView(message: error) {
-                        Task { await viewModel.retry() }
-                    }
-                } else if viewModel.trips.isEmpty {
+                    ErrorView(message: error) { Task { await viewModel.retry() } }
+                } else if viewModel.isEmpty {
                     EmptyStateView(
-                        title: "暂无行程",
-                        message: "开始规划你的下一次户外探险吧",
+                        title: "还没有行程",
+                        message: "从路线详情生成第一趟个人行程。",
                         icon: "map",
-                        actionTitle: "创建行程"
-                    ) {
-                        // TODO: 跳转到创建行程页
-                    }
+                        actionTitle: "查找路线",
+                        action: onFindRoute
+                    )
                 } else {
                     tripListContent
                 }
             }
         }
-        .navigationTitle("我的行程")
-        .task {
-            await viewModel.loadTrips()
-        }
+        .navigationTitle("我的全部行程")
+        .task { await viewModel.loadTrips() }
     }
 
     private var tripListContent: some View {
         ScrollView {
-            LazyVStack(spacing: Spacing.listItemGap) {
-                ForEach(viewModel.trips) { trip in
-                    NavigationLink(
-                        destination: TripDetailView(
-                            tripId: trip.id,
-                            repository: repository,
-                            routeService: routeService
-                        )
-                    ) {
-                        TripRowView(trip: trip)
-                    }
-                    .buttonStyle(PlainButtonStyle())
+            LazyVStack(alignment: .leading, spacing: Spacing.sectionGap) {
+                if !viewModel.currentTrips.isEmpty {
+                    tripSection(title: "当前行程", trips: viewModel.currentTrips)
+                }
+                if !viewModel.historicalTrips.isEmpty {
+                    tripSection(title: "历史行程", trips: viewModel.historicalTrips)
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, Spacing.pageHorizontal)
             .padding(.vertical, Spacing.md)
         }
-        .background(AppColors.bgBase)
-        .refreshable {
-            await viewModel.refresh()
+        .background(AppColors.pageBase)
+        .refreshable { await viewModel.refresh() }
+    }
+
+    private func tripSection(
+        title: String,
+        trips: [PersonalTripSummary]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.listItemGap) {
+            Text(title)
+                .font(.sectionTitle)
+                .foregroundStyle(AppColors.textPrimary)
+
+            ForEach(trips) { trip in
+                Button {
+                    onNavigate(.tripDetail(trip.tripID))
+                } label: {
+                    TripRowView(trip: trip)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 }

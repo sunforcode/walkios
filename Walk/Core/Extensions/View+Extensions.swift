@@ -14,11 +14,11 @@ extension View {
     /// 卡片背景样式
     func cardBackground() -> some View {
         self
-            .background(AppColors.surfaceCard)
+            .background(AppColors.surfacePrimary)
             .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-                    .stroke(AppColors.border, lineWidth: 1)
+                    .stroke(AppColors.borderPrimary, lineWidth: 1)
             }
             .appShadow(AppShadow.floating)
     }

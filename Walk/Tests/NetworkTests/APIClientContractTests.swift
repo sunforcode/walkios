@@ -116,7 +116,8 @@ final class APIClientContractTests: XCTestCase {
             baseURL: URL(string: "https://example.test/api/v1")!,
             session: makeSession(statusCode: 200, data: responseData),
             storage: storage,
-            storageContext: context
+            storageContext: context,
+            accessToken: { "test-token" }
         )
 
         let remoteRoute = try await remote.execute(request)
@@ -175,6 +176,143 @@ final class APIClientContractTests: XCTestCase {
         XCTAssertEqual(page.totalPages, 1)
         XCTAssertEqual(page.items[0].date.timeIntervalSince1970, 1_724_544_000, accuracy: 0.001)
         XCTAssertEqual(envelope.timestamp.timeIntervalSince1970, 1_724_544_001, accuracy: 0.001)
+    }
+
+    func testTargetRequestsDeclarePublicOptionalAndRequiredAuthenticationPolicies() throws {
+        XCTAssertEqual(PublicRouteAPI.Featured().authenticationPolicy, .none)
+        XCTAssertEqual(PublicRouteAPI.Detail(id: "route-1").authenticationPolicy, .none)
+        XCTAssertEqual(try AccountAPI.SendVerificationCode(phone: "+8613800138000").authenticationPolicy, .none)
+        XCTAssertEqual(try AccountAPI.CreateSession(verificationID: "verification-1", code: "123456").authenticationPolicy, .none)
+        XCTAssertEqual(AccountAPI.Current().authenticationPolicy, .required)
+        XCTAssertEqual(PersonalTripAPI.Focus().authenticationPolicy, .required)
+        XCTAssertEqual(PersonalEquipmentAPI.Collection().authenticationPolicy, .required)
+        XCTAssertEqual(TestRequest(authenticationPolicy: .optional).authenticationPolicy, .optional)
+    }
+
+    func testRemoteAddsBearerOnlyToOptionalAndRequiredRequests() async throws {
+        let responseData = try Fixture.data("api-success")
+        let client = AlamofireRemoteAPIClient(
+            baseURL: URL(string: "https://example.test/api/v1")!,
+            session: makeSession(statusCode: 200, data: responseData) { request in
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer access-token")
+            },
+            accessToken: { "access-token" }
+        )
+        _ = try await client.execute(TestRequest(authenticationPolicy: .required))
+
+        let optionalClient = AlamofireRemoteAPIClient(
+            baseURL: URL(string: "https://example.test/api/v1")!,
+            session: makeSession(statusCode: 200, data: responseData) { request in
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer access-token")
+            },
+            accessToken: { "access-token" }
+        )
+        _ = try await optionalClient.execute(TestRequest(authenticationPolicy: .optional))
+
+        let publicClient = AlamofireRemoteAPIClient(
+            baseURL: URL(string: "https://example.test/api/v1")!,
+            session: makeSession(statusCode: 200, data: responseData) { request in
+                XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+            },
+            accessToken: { "access-token" }
+        )
+        _ = try await publicClient.execute(TestRequest(authenticationPolicy: .none))
+    }
+
+    func testRequiredRequestWithoutTokenFailsBeforeTransportAndRequestsAuthentication() async {
+        let invalidation = SessionInvalidationRecorder()
+        let remote = AlamofireRemoteAPIClient(
+            baseURL: URL(string: "https://example.test/api/v1")!,
+            session: makeSession(statusCode: 200, data: Data()) { _ in
+                XCTFail("Required request without a token must not reach transport")
+            },
+            accessToken: { nil },
+            invalidateSession: { await invalidation.invalidate() }
+        )
+
+        do {
+            _ = try await remote.execute(TestRequest(authenticationPolicy: .required))
+            XCTFail("Expected authentication_required")
+        } catch let APIClientError.api(code, message, retryable, _) {
+            XCTAssertEqual(code, "authentication_required")
+            XCTAssertEqual(message, "请先登录")
+            XCTAssertFalse(retryable)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+        let invalidationCount = await invalidation.count
+        XCTAssertEqual(invalidationCount, 1)
+    }
+
+    func testPublicHTTP401DoesNotInvalidateLocalSession() async {
+        let invalidation = SessionInvalidationRecorder()
+        let remote = AlamofireRemoteAPIClient(
+            baseURL: URL(string: "https://example.test/api/v1")!,
+            session: makeSession(statusCode: 401, data: Data()),
+            accessToken: { "expired-token" },
+            invalidateSession: { await invalidation.invalidate() }
+        )
+
+        do {
+            _ = try await remote.execute(TestRequest(authenticationPolicy: .none))
+            XCTFail("Expected HTTP 401")
+        } catch let APIClientError.http(statusCode) {
+            XCTAssertEqual(statusCode, 401)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+        let invalidationCount = await invalidation.count
+        XCTAssertEqual(invalidationCount, 0)
+    }
+
+    func testHTTP401InvalidatesSessionAndCache() async {
+        let invalidation = SessionInvalidationRecorder()
+        let remote = AlamofireRemoteAPIClient(
+            baseURL: URL(string: "https://example.test/api/v1")!,
+            session: makeSession(statusCode: 401, data: Data()),
+            accessToken: { "expired-token" },
+            invalidateSession: { await invalidation.invalidate() }
+        )
+
+        do {
+            _ = try await remote.execute(TestRequest(authenticationPolicy: .required))
+            XCTFail("Expected HTTP 401")
+        } catch let APIClientError.http(statusCode) {
+            XCTAssertEqual(statusCode, 401)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+        let invalidationCount = await invalidation.count
+        XCTAssertEqual(invalidationCount, 1)
+    }
+
+    func testAuthenticationRequiredErrorInvalidatesSessionAndPreservesTypedDetails() async {
+        let data = Data(
+            #"{"error":{"code":"authentication_required","message":"请登录","retryable":false,"details":{"requestedTargetRouteVersionId":"route-version-1","currentPublicRouteVersionId":"route-version-2","retryAvailableAt":"2026-08-01T10:00:00Z"}}}"#.utf8
+        )
+        let invalidation = SessionInvalidationRecorder()
+        let remote = AlamofireRemoteAPIClient(
+            baseURL: URL(string: "https://example.test/api/v1")!,
+            session: makeSession(statusCode: 403, data: data),
+            accessToken: { "expired-token" },
+            invalidateSession: { await invalidation.invalidate() }
+        )
+
+        do {
+            _ = try await remote.execute(TestRequest(authenticationPolicy: .required))
+            XCTFail("Expected authentication_required")
+        } catch let APIClientError.api(code, message, retryable, details) {
+            XCTAssertEqual(code, "authentication_required")
+            XCTAssertEqual(message, "请登录")
+            XCTAssertFalse(retryable)
+            XCTAssertEqual(details?.requestedTargetRouteVersionId, "route-version-1")
+            XCTAssertEqual(details?.currentPublicRouteVersionId, "route-version-2")
+            XCTAssertNotNil(details?.retryAvailableAt)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+        let invalidationCount = await invalidation.count
+        XCTAssertEqual(invalidationCount, 1)
     }
 
     func testRequestDefaultsToNoStorageAndStorageKeyNormalizesQuery() {
@@ -240,7 +378,8 @@ final class APIClientContractTests: XCTestCase {
                 schemaVersion: "v1",
                 environment: "test",
                 userIDProvider: { identity.value }
-            )
+            ),
+            accessToken: { "test-token" }
         )
 
         _ = try await client.execute(request)
@@ -292,7 +431,8 @@ final class APIClientContractTests: XCTestCase {
                 environment: "test",
                 userID: "user-a"
             ),
-            storageGeneration: generation
+            storageGeneration: generation,
+            accessToken: { "test-token" }
         )
 
         let requestTask = Task { try await client.execute(request) }
@@ -327,7 +467,8 @@ final class APIClientContractTests: XCTestCase {
                 environment: "test",
                 userID: "user-a"
             ),
-            storageGeneration: generation
+            storageGeneration: generation,
+            accessToken: { "test-token" }
         )
 
         _ = try await client.execute(request)
@@ -351,7 +492,8 @@ final class APIClientContractTests: XCTestCase {
             baseURL: URL(string: "https://example.test/api/v1")!,
             session: session,
             storage: storage,
-            storageContext: .init(schemaVersion: "v1", environment: "test", userID: "user-1")
+            storageContext: .init(schemaVersion: "v1", environment: "test", userID: "user-1"),
+            accessToken: { "test-token" }
         )
 
         let remoteValue = try await remote.execute(storedRequest)
@@ -389,7 +531,8 @@ final class APIClientContractTests: XCTestCase {
         let session = makeSession(statusCode: 404, data: try! Fixture.data("api-failure"))
         let remote = AlamofireRemoteAPIClient(
             baseURL: URL(string: "https://example.test/api/v1")!,
-            session: session
+            session: session,
+            accessToken: { "test-token" }
         )
 
         do {
@@ -403,8 +546,13 @@ final class APIClientContractTests: XCTestCase {
         }
     }
 
-    private func makeSession(statusCode: Int, data: Data) -> Session {
+    private func makeSession(
+        statusCode: Int,
+        data: Data,
+        inspectRequest: @escaping (URLRequest) -> Void = { _ in }
+    ) -> Session {
         URLProtocolStub.handler = { request in
+            inspectRequest(request)
             let response = HTTPURLResponse(
                 url: request.url!,
                 statusCode: statusCode,
@@ -435,16 +583,19 @@ private struct TestRequest: APIRequest {
     let query: [URLQueryItem]
     let body: Data?
     let storagePolicy: APIStoragePolicy
+    let authenticationPolicy: APIAuthenticationPolicy
 
     init(
         query: [URLQueryItem] = [],
-        storagePolicy: APIStoragePolicy = .none
+        storagePolicy: APIStoragePolicy = .none,
+        authenticationPolicy: APIAuthenticationPolicy = .required
     ) {
         self.method = .get
         self.path = "/test"
         self.query = query
         self.body = nil
         self.storagePolicy = storagePolicy
+        self.authenticationPolicy = authenticationPolicy
     }
 }
 
@@ -518,4 +669,12 @@ private actor MemoryAPIStorage: APIStorage {
     func load(for key: String) async throws -> Data? { values[key] }
     func remove(for key: String) async throws { values.removeValue(forKey: key) }
     func removeAll() async throws { values.removeAll() }
+}
+
+private actor SessionInvalidationRecorder {
+    private(set) var count = 0
+
+    func invalidate() {
+        count += 1
+    }
 }

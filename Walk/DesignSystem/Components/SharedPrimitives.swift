@@ -1,5 +1,29 @@
 import SwiftUI
 
+struct PageHeroHeader: View {
+    static let titleLineLimit = 2
+    static let subtitleLineLimit = 1
+
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text(title)
+                .font(.heroTitle)
+                .tracking(-1.4)
+                .lineLimit(Self.titleLineLimit)
+
+            Text(subtitle)
+                .font(.heroSubtitle)
+                .foregroundStyle(AppColors.textSecondary)
+                .lineLimit(Self.subtitleLineLimit)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct WalkPanel<Content: View>: View {
     private let content: Content
 
@@ -10,12 +34,9 @@ struct WalkPanel<Content: View>: View {
     var body: some View {
         content
             .padding(Spacing.md)
-            .background(AppColors.surfaceCard)
+            .background(AppColors.surfacePrimary)
             .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
-                    .stroke(AppColors.border, lineWidth: 1)
-            }
+            .shadow(color: AppColors.shadowCard, radius: 8, x: 0, y: 2)
     }
 }
 
@@ -35,7 +56,7 @@ struct WalkPill<Content: View>: View {
             .background(AppColors.surfaceGlass)
             .clipShape(Capsule())
             .overlay {
-                Capsule().stroke(AppColors.border, lineWidth: 1)
+                Capsule().stroke(AppColors.borderPrimary, lineWidth: 1)
             }
     }
 }
@@ -52,11 +73,10 @@ struct GlassIconButton: View {
                 .font(.nav)
                 .foregroundStyle(AppColors.textPrimary)
                 .frame(width: size, height: size)
-                .background(.ultraThinMaterial)
                 .background(backgroundColor)
                 .clipShape(Circle())
                 .overlay {
-                    Circle().stroke(AppColors.border, lineWidth: 1)
+                    Circle().stroke(AppColors.borderPrimary, lineWidth: 1)
                 }
         }
         .buttonStyle(.plain)
@@ -72,7 +92,7 @@ struct UtilityPageContainer<Content: View>: View {
 
     var body: some View {
         ZStack {
-            AppColors.bgBase.ignoresSafeArea()
+            AppColors.pageBase.ignoresSafeArea()
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
@@ -90,7 +110,7 @@ struct ImmersivePageContainer<Content: View>: View {
     var body: some View {
         ZStack {
             RadialGradient(
-                colors: [AppColors.routeOuter, AppColors.routeMiddle, AppColors.routeInner],
+                colors: [AppColors.pageOuter, AppColors.pageMiddle, AppColors.pageBase],
                 center: .top,
                 startRadius: 0,
                 endRadius: 700

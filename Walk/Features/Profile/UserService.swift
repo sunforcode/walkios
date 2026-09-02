@@ -1,50 +1,48 @@
 import Foundation
 
-/// 用户服务
-/// Debug 模式下返回 Mock 数据，Release 模式调用真实 API
-final class UserService {
-    private let client = LegacyAPIClient.shared
+protocol AccountServicing {
+    func sendVerificationCode(phone: String) async throws -> VerificationCodeResponse
+    func createSession(verificationID: String, code: String) async throws -> AuthSessionResponse
+    func currentAccount() async throws -> AccountResponse
+    func updateProfile(_ update: ProfileUpdate) async throws -> ProfileResponse
+    func uploadAvatar(data: Data, contentType: String) async throws -> AvatarMediaResponse
+    func logout() async throws
+}
 
-    /// 获取当前用户信息
-    func getCurrentUser() async throws -> User {
-        #if DEBUG
-            try await Task.sleep(nanoseconds: 300_000_000)
-            return MockData.user
-        #else
-            let user: User = try await client.request(
-                APIEndpoints.currentUser,
-                method: .get
-            )
-            return user
-        #endif
+final class AccountService: AccountServicing {
+    private let apiClient: any APIClient
+    private let authManager: AuthManager
+
+    init(apiClient: any APIClient, authManager: AuthManager = .shared) {
+        self.apiClient = apiClient
+        self.authManager = authManager
     }
 
-    /// 获取用户详情
-    func getUserDetail(id: String) async throws -> User {
-        #if DEBUG
-            try await Task.sleep(nanoseconds: 300_000_000)
-            return MockData.user
-        #else
-            let user: User = try await client.request(
-                APIEndpoints.userDetail(id),
-                method: .get
-            )
-            return user
-        #endif
+    func sendVerificationCode(phone: String) async throws -> VerificationCodeResponse {
+        try await apiClient.execute(AccountAPI.SendVerificationCode(phone: phone))
     }
 
-    /// 更新用户信息
-    func updateUser(_ user: User) async throws -> User {
-        #if DEBUG
-            try await Task.sleep(nanoseconds: 300_000_000)
-            return user
-        #else
-            let updated: User = try await client.request(
-                APIEndpoints.userDetail(user.id),
-                method: .put,
-                parameters: [:]
-            )
-            return updated
-        #endif
+    func createSession(verificationID: String, code: String) async throws -> AuthSessionResponse {
+        let response = try await apiClient.execute(AccountAPI.CreateSession(verificationID: verificationID, code: code))
+        authManager.saveSession(accessToken: response.accessToken)
+        return response
+    }
+
+    func currentAccount() async throws -> AccountResponse {
+        try await apiClient.execute(AccountAPI.Current())
+    }
+
+    func updateProfile(_ update: ProfileUpdate) async throws -> ProfileResponse {
+        try await apiClient.execute(AccountAPI.UpdateProfile(update: update))
+    }
+
+    func uploadAvatar(data: Data, contentType: String) async throws -> AvatarMediaResponse {
+        try await apiClient.execute(AccountAPI.UploadAvatar(data: data, contentType: contentType))
+    }
+
+    func logout() async throws {
+        let response = try await apiClient.execute(AccountAPI.Logout())
+        guard response.loggedOut else { throw APIClientError.invalidResponse }
+        authManager.logout()
     }
 }
