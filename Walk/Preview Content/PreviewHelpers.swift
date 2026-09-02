@@ -50,22 +50,6 @@ extension EquipmentListViewModel {
     }
 }
 
-extension GuideListViewModel {
-    static var preview: GuideListViewModel {
-        let vm = GuideListViewModel()
-        vm.guides = MockData.guides
-        return vm
-    }
-}
-
-extension GuideDetailViewModel {
-    static var preview: GuideDetailViewModel {
-        let vm = GuideDetailViewModel()
-        vm.guide = MockData.guides.first
-        return vm
-    }
-}
-
 struct PreviewContainer<Content: View>: View {
     let content: Content
 

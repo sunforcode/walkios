@@ -68,6 +68,81 @@ final class RouteDetailViewModelTests: XCTestCase {
         XCTAssertFalse(routeSource.contains("NavigationLink(destination: RouteSearchView"))
     }
 
+    func testSelectingSegmentAgainRestoresFullRoute() async {
+        let path = [
+            PublicRouteGeoPosition(latitude: 29.0, longitude: 101.0, referenceSystem: "WGS84"),
+            PublicRouteGeoPosition(latitude: 30.0, longitude: 102.0, referenceSystem: "WGS84"),
+            PublicRouteGeoPosition(latitude: 31.0, longitude: 103.0, referenceSystem: "WGS84"),
+        ]
+        let ranged = PublicRouteSegment(
+            identity: "segment-ranged",
+            order: 1,
+            name: "明确范围",
+            mainTrackRange: PublicRouteMainTrackRange(
+                startPathPosition: .init(precedingPositionIndex: 0, progressToNextPosition: 0.5),
+                endPathPosition: .init(precedingPositionIndex: 2, progressToNextPosition: nil)
+            )
+        )
+        let unranged = PublicRouteSegment(identity: "segment-unranged", order: 2, name: "无范围")
+        let detail = Self.detail(
+            availability: .valid,
+            mainTrack: PublicRouteMainTrack(identity: "track-1", path: path),
+            segments: [ranged, unranged]
+        )
+        let sut = RouteDetailViewModel(service: RouteDetailServiceStub(detail: detail))
+        await sut.loadRoute(id: detail.routeId)
+
+        sut.selectSegment("segment-ranged")
+        XCTAssertEqual(sut.selectedSegmentID, "segment-ranged")
+
+        sut.selectSegment("segment-ranged")
+        XCTAssertNil(sut.selectedSegmentID)
+
+        sut.selectSegment("segment-unranged")
+        XCTAssertNil(sut.selectedSegmentID)
+    }
+
+    func testHighlightingInfoPointTargetsAllMapMarkersOfSameObject() async {
+        let path = [
+            PublicRouteGeoPosition(latitude: 29.6, longitude: 101.8, referenceSystem: "WGS84"),
+            PublicRouteGeoPosition(latitude: 29.7, longitude: 101.9, referenceSystem: "WGS84"),
+        ]
+        let detail = Self.detail(
+            availability: .valid,
+            mainTrack: PublicRouteMainTrack(identity: "track-1", path: path),
+            keyPoints: [
+                PublicRouteNamedPoint(identity: "point-1", name: "埄口", positions: [path[0], path[1]])
+            ]
+        )
+        let sut = RouteDetailViewModel(service: RouteDetailServiceStub(detail: detail))
+        await sut.loadRoute(id: detail.routeId)
+
+        sut.togglePointHighlight(for: "point-1")
+        XCTAssertEqual(sut.highlightedAnnotationIDs.count, 2)
+
+        sut.togglePointHighlight(for: "point-1")
+        XCTAssertTrue(sut.highlightedAnnotationIDs.isEmpty)
+    }
+
+    func testReloadingRouteClearsMapHighlight() async {
+        let detail = Self.detail(availability: .valid, mainTrack: PublicRouteMainTrack(
+            identity: "track-1",
+            path: [
+                PublicRouteGeoPosition(latitude: 29.6, longitude: 101.8, referenceSystem: "WGS84"),
+                PublicRouteGeoPosition(latitude: 29.7, longitude: 101.9, referenceSystem: "WGS84"),
+            ]
+        ))
+        let sut = RouteDetailViewModel(service: RouteDetailServiceStub(detail: detail))
+        await sut.loadRoute(id: detail.routeId)
+        sut.togglePointHighlight(for: "point-1")
+        XCTAssertFalse(sut.highlightedAnnotationIDs.isEmpty)
+
+        await sut.retry()
+
+        XCTAssertTrue(sut.highlightedAnnotationIDs.isEmpty)
+        XCTAssertNil(sut.selectedSegmentID)
+    }
+
     func testRouteDetailRequiresGenerateCallback() throws {
         let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
 

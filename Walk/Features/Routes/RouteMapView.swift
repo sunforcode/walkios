@@ -140,6 +140,7 @@ struct RouteMapView: UIViewRepresentable {
     let poiAnnotations: [RoutePOIAnnotation]
     let trackPointAnnotations: [RouteTrackPointMetadata]
     let waypointAnnotations: [RouteWaypointAnnotation]
+    let highlightedAnnotationIDs: Set<String>
     let showsUserLocation: Bool
     let mapType: MKMapType
     let zoomEnabled: Bool
@@ -156,6 +157,7 @@ struct RouteMapView: UIViewRepresentable {
         poiAnnotations: [RoutePOIAnnotation] = [],
         trackPointAnnotations: [RouteTrackPointMetadata] = [],
         waypointAnnotations: [RouteWaypointAnnotation] = [],
+        highlightedAnnotationIDs: Set<String> = [],
         showsUserLocation: Bool = true,
         mapType: MKMapType = .standard,
         zoomEnabled: Bool = true,
@@ -171,6 +173,7 @@ struct RouteMapView: UIViewRepresentable {
         self.poiAnnotations = poiAnnotations
         self.trackPointAnnotations = trackPointAnnotations
         self.waypointAnnotations = waypointAnnotations
+        self.highlightedAnnotationIDs = highlightedAnnotationIDs
         self.showsUserLocation = showsUserLocation
         self.mapType = mapType
         self.zoomEnabled = zoomEnabled
@@ -212,7 +215,8 @@ struct RouteMapView: UIViewRepresentable {
         let selectionChanged = selectedSegmentID != context.coordinator.selectedSegmentID
         let insetsFingerprint = RouteMapInsetsFingerprint(edgeInsets)
         let insetsChanged = insetsFingerprint != context.coordinator.insetsFingerprint
-        guard decision.shouldUpdateRoute || annotationsChanged || overlaysChanged || selectionChanged || insetsChanged else { return }
+        let highlightChanged = highlightedAnnotationIDs != context.coordinator.highlightedAnnotationIDs
+        guard decision.shouldUpdateRoute || annotationsChanged || overlaysChanged || selectionChanged || insetsChanged || highlightChanged else { return }
 
         let previousSelection = context.coordinator.selectedSegmentID
         context.coordinator.coordinatesFingerprint = RouteCoordinatesFingerprint(coordinates: coordinates)
@@ -281,6 +285,18 @@ struct RouteMapView: UIViewRepresentable {
         ), let first = (poiAnnotations.first?.coordinate ?? trackPointAnnotations.first?.coordinate ?? waypointAnnotations.first?.coordinate) {
             mapView.setRegion(.init(center: first, latitudinalMeters: 5_000, longitudinalMeters: 5_000), animated: false)
         }
+
+        if highlightChanged {
+            context.coordinator.highlightedAnnotationIDs = highlightedAnnotationIDs
+            context.coordinator.refreshHighlightStates(mapView: mapView)
+            context.coordinator.focusHighlightedAnnotations(
+                mapView: mapView,
+                edgeInsets: edgeInsets,
+                poiAnnotations: poiAnnotations,
+                trackPoints: trackPointAnnotations,
+                waypoints: waypointAnnotations
+            )
+        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -302,6 +318,7 @@ struct RouteMapView: UIViewRepresentable {
         var overlayFingerprint: [String] = []
         var selectedSegmentID: String?
         var insetsFingerprint: RouteMapInsetsFingerprint?
+        var highlightedAnnotationIDs: Set<String> = []
         var userHasInteracted = false
         var onSelectSegment: ((String) -> Void)?
         var onSelectMarker: ((RouteMapSelection) -> Void)?
@@ -341,14 +358,60 @@ struct RouteMapView: UIViewRepresentable {
             view.annotation = annotation
             view.canShowCallout = false
             view.glyphText = point.type.glyph
-            switch point.type {
-            case .start: view.markerTintColor = UIColor(AppColors.mapStart)
-            case .end: view.markerTintColor = UIColor(AppColors.mapEnd)
-            case .waypoint: view.markerTintColor = UIColor(AppColors.mapWaypoint)
-            case .poi: view.markerTintColor = UIColor(AppColors.mapPOI)
-            case .trackPoint: view.markerTintColor = UIColor(AppColors.mapRoute)
-            }
+            view.markerTintColor = markerColor(
+                for: point.type,
+                isHighlighted: point.selection.map { highlightedAnnotationIDs.contains($0.id) } == true
+            )
             return view
+        }
+
+        func refreshHighlightStates(mapView: MKMapView) {
+            for annotation in mapView.annotations {
+                guard let point = annotation as? RoutePointAnnotation,
+                      let selection = point.selection,
+                      let view = mapView.view(for: annotation) as? MKMarkerAnnotationView else { continue }
+                view.markerTintColor = markerColor(
+                    for: point.type,
+                    isHighlighted: highlightedAnnotationIDs.contains(selection.id)
+                )
+            }
+        }
+
+        func focusHighlightedAnnotations(
+            mapView: MKMapView,
+            edgeInsets: UIEdgeInsets,
+            poiAnnotations: [RoutePOIAnnotation],
+            trackPoints: [RouteTrackPointMetadata],
+            waypoints: [RouteWaypointAnnotation]
+        ) {
+            let highlightedIDs = highlightedAnnotationIDs
+            let coordinates = (
+                poiAnnotations.map { ($0.id, $0.coordinate) }
+                    + trackPoints.map { ($0.id, $0.coordinate) }
+                    + waypoints.map { ($0.id, $0.coordinate) }
+            )
+            .filter { highlightedIDs.contains($0.0) }
+            .map(\.1)
+            guard !coordinates.isEmpty else { return }
+            if coordinates.count == 1 {
+                mapView.setRegion(
+                    .init(center: coordinates[0], latitudinalMeters: 2_000, longitudinalMeters: 2_000),
+                    animated: true
+                )
+            } else if let fit = RouteMapCamera.fit(coordinates: coordinates, edgeInsets: edgeInsets) {
+                mapView.setVisibleMapRect(fit.mapRect, edgePadding: fit.edgeInsets, animated: true)
+            }
+        }
+
+        private func markerColor(for type: RoutePointType, isHighlighted: Bool) -> UIColor {
+            if isHighlighted { return UIColor(AppColors.interactionPrimary) }
+            switch type {
+            case .start: return UIColor(AppColors.mapStart)
+            case .end: return UIColor(AppColors.mapEnd)
+            case .waypoint: return UIColor(AppColors.mapWaypoint)
+            case .poi: return UIColor(AppColors.mapPOI)
+            case .trackPoint: return UIColor(AppColors.mapRoute)
+            }
         }
 
         func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {

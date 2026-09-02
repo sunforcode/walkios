@@ -509,6 +509,16 @@ final class RouteDetailViewModel: ObservableObject {
     @Published private(set) var mapSegments: [RouteMapSegment] = []
     @Published private(set) var elevationSamples: [RouteElevationSample] = []
     @Published private(set) var selectedSegmentID: String?
+    @Published private(set) var highlightedPointIdentity: String?
+
+    var highlightedAnnotationIDs: Set<String> {
+        guard let identity = highlightedPointIdentity else { return [] }
+        let prefix = "\(identity)-"
+        return Set(
+            (poiAnnotations.map(\.id) + selectableTrackPoints.map(\.id) + waypointAnnotations.map(\.id))
+                .filter { $0.hasPrefix(prefix) }
+        )
+    }
 
     var presentation: RouteDetailPresentation? { route.map(RouteDetailPresentation.init) }
     var hasUnavailableTrack: Bool {
@@ -557,11 +567,16 @@ final class RouteDetailViewModel: ObservableObject {
 
     func selectSegment(_ id: String) {
         guard canSelectSegment(id) else { return }
-        selectedSegmentID = id
+        selectedSegmentID = selectedSegmentID == id ? nil : id
+    }
+
+    func togglePointHighlight(for identity: String) {
+        highlightedPointIdentity = highlightedPointIdentity == identity ? nil : identity
     }
 
     private func projectMapData(from detail: PublicRouteDetail) {
         let version = detail.currentVersion
+        highlightedPointIdentity = nil
         guard version.mainTrackAvailability == .valid, let mainTrack = version.mainTrack else {
             mapCoordinates = []
             mapSegments = []

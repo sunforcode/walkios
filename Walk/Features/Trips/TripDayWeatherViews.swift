@@ -1,5 +1,11 @@
 import SwiftUI
 
+struct TripDayPointGroup: Equatable {
+    let category: String
+    let title: String
+    let points: [PersonalTripPoint]
+}
+
 struct TripDayPresentation: Equatable {
     let day: PersonalTripDay
 
@@ -9,41 +15,43 @@ struct TripDayPresentation: Equatable {
     var pointSequence: [Int]? { day.points?.map(\.sequence) }
     var actions: [PersonalTripAction] { day.actions }
     var points: [PersonalTripPoint] { day.points ?? [] }
+
+    var dailyRouteActions: [PersonalTripAction] {
+        day.actions.filter { $0.actionType == "hike" }
+    }
+
+    var transportActions: [PersonalTripAction] {
+        day.actions.filter { $0.actionType != "hike" }
+    }
+
+    var groupedPoints: [TripDayPointGroup] {
+        let order: [(category: String, title: String)] = [
+            ("campsite", "营地"),
+            ("overnight_place", "过夜点"),
+            ("water_source", "水源"),
+            ("supply", "补给"),
+            ("other", "其他点位"),
+        ]
+        return order.compactMap { category, title in
+            let items = points.filter { $0.category == category }
+            guard !items.isEmpty else { return nil }
+            return TripDayPointGroup(category: category, title: title, points: items)
+        }
+    }
+
+    var hasDayContent: Bool {
+        !day.actions.isEmpty || !points.isEmpty
+    }
 }
 
-struct TripDaySelection: Equatable {
-    let days: [PersonalTripDay]
-    private(set) var focusedDayID: String?
-
-    init(days: [PersonalTripDay], initialDayID: String) {
-        self.days = days
-        focusedDayID = days.contains(where: { $0.identity == initialDayID })
-            ? initialDayID
-            : days.first?.identity
+enum TripDayFocusPolicy {
+    static func initialIndex(days: [PersonalTripDay], initialDayID: String) -> Int {
+        days.firstIndex(where: { $0.identity == initialDayID }) ?? 0
     }
 
-    var focusedDay: PersonalTripDay? {
-        guard let focusedDayID else { return days.first }
-        return days.first(where: { $0.identity == focusedDayID }) ?? days.first
-    }
-
-    mutating func movePrevious() -> Bool {
-        move(by: -1)
-    }
-
-    mutating func moveNext() -> Bool {
-        move(by: 1)
-    }
-
-    private mutating func move(by offset: Int) -> Bool {
-        guard let focusedDayID,
-              let index = days.firstIndex(where: { $0.identity == focusedDayID }) else {
-            return false
-        }
-        let target = index + offset
-        guard days.indices.contains(target) else { return false }
-        self.focusedDayID = days[target].identity
-        return true
+    static func clampedIndex(_ index: Int, dayCount: Int) -> Int {
+        guard dayCount > 0 else { return 0 }
+        return min(max(index, 0), dayCount - 1)
     }
 }
 
@@ -138,7 +146,8 @@ final class TripDayViewModel: ObservableObject {
 
 struct TripDayView: View {
     @StateObject private var viewModel: TripDayViewModel
-    @State private var selection: TripDaySelection?
+    @State private var days: [PersonalTripDay] = []
+    @State private var focusedIndex: Int = 0
 
     init(tripID: String, initialDayID: String, service: any PersonalTripServicing) {
         _viewModel = StateObject(wrappedValue: TripDayViewModel(
@@ -155,38 +164,56 @@ struct TripDayView: View {
                     LoadingView()
                 } else if let error = viewModel.errorMessage, viewModel.result == nil {
                     ErrorView(message: error) { Task { await viewModel.load() } }
-                } else if let day = selection?.focusedDay {
-                    TripDayPage(
-                        presentation: TripDayPresentation(day: day),
-                        canMovePrevious: canMovePrevious,
-                        canMoveNext: canMoveNext,
-                        onPrevious: { _ = selection?.movePrevious() },
-                        onNext: { _ = selection?.moveNext() }
-                    )
+                } else if !days.isEmpty {
+                    dayPages
                 } else {
                     EmptyStateView(title: "逐日安排暂不可用", icon: "calendar")
                 }
             }
         }
-        .navigationTitle(selection?.focusedDay?.primaryStage ?? "逐日详情")
+        .navigationTitle(focusedPrimaryStage)
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await viewModel.load()
             if let result = viewModel.result {
-                selection = TripDaySelection(days: result.days, initialDayID: viewModel.initialDayID)
+                days = result.days
+                focusedIndex = TripDayFocusPolicy.initialIndex(
+                    days: result.days,
+                    initialDayID: viewModel.initialDayID
+                )
             }
         }
     }
 
-    private var focusedIndex: Int? {
-        guard let id = selection?.focusedDayID else { return nil }
-        return selection?.days.firstIndex(where: { $0.identity == id })
+    private var focusedPrimaryStage: String {
+        days.indices.contains(focusedIndex) ? days[focusedIndex].primaryStage : "逐日详情"
     }
 
-    private var canMovePrevious: Bool { (focusedIndex ?? 0) > 0 }
-    private var canMoveNext: Bool {
-        guard let selection, let focusedIndex else { return false }
-        return focusedIndex < selection.days.count - 1
+    private var dayPages: some View {
+        GeometryReader { geometry in
+            TabView(selection: $focusedIndex) {
+                ForEach(Array(days.enumerated()), id: \.element.identity) { index, day in
+                    TripDayPage(
+                        presentation: TripDayPresentation(day: day),
+                        canMovePrevious: index > 0,
+                        canMoveNext: index < days.count - 1,
+                        onPrevious: { moveFocus(by: -1) },
+                        onNext: { moveFocus(by: 1) }
+                    )
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .rotationEffect(.degrees(-90))
+                    .tag(index)
+                }
+            }
+            .frame(width: geometry.size.height, height: geometry.size.width)
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .rotationEffect(.degrees(90), anchor: .topLeading)
+            .offset(x: geometry.size.width)
+        }
+    }
+
+    private func moveFocus(by offset: Int) {
+        focusedIndex = TripDayFocusPolicy.clampedIndex(focusedIndex + offset, dayCount: days.count)
     }
 }
 
@@ -197,51 +224,135 @@ private struct TripDayPage: View {
     let onPrevious: () -> Void
     let onNext: () -> Void
 
+    @State private var innerScrollOffset: CGFloat = 0
+    @State private var innerContentHeight: CGFloat = 0
+    @State private var innerViewportHeight: CGFloat = 0
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.xl) {
-                PageHeroHeader(title: presentation.dayLabel, subtitle: presentation.day.date.description)
+        VStack(alignment: .leading, spacing: Spacing.lg) {
+            PageHeroHeader(title: presentation.dayLabel, subtitle: presentation.day.date.description)
 
-                if !presentation.actions.isEmpty || !presentation.points.isEmpty || hasWeatherContent {
-                    WalkPanel {
-                        VStack(alignment: .leading, spacing: Spacing.lg) {
-                            ForEach(presentation.actions) { action in
-                                actionRow(action)
+            if presentation.hasDayContent {
+                WalkPanel {
+                    VStack(alignment: .leading, spacing: Spacing.lg) {
+                        if !presentation.dailyRouteActions.isEmpty {
+                            VStack(alignment: .leading, spacing: Spacing.md) {
+                                Text("每日路程")
+                                    .font(.sectionTitle)
+                                ForEach(presentation.dailyRouteActions) { action in
+                                    dailyRouteRow(action)
+                                }
                             }
-                            ForEach(presentation.points) { point in
-                                pointRow(point)
-                            }
-                            if hasWeatherContent {
-                                contentRow(title: "当日天气", detail: weatherLine(presentation.day.weather))
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                } else {
-                    WalkPanel {
-                        Text("当天安排暂不可用")
-                            .foregroundStyle(AppColors.textWeak)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
+                        }
 
-                if canMovePrevious || canMoveNext {
-                    HStack {
-                        Button("前一天", action: onPrevious).disabled(!canMovePrevious)
-                        Spacer()
-                        Button("后一天", action: onNext).disabled(!canMoveNext)
+                        internalScrollArea
                     }
-                    .buttonStyle(.bordered)
-                    .tint(AppColors.interactionPrimary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
+            } else {
+                WalkPanel {
+                    Text("当天安排暂不可用")
+                        .foregroundStyle(AppColors.textWeak)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .padding(.horizontal, Spacing.pageHorizontal)
-            .padding(.vertical, Spacing.xl)
+        }
+        .padding(.horizontal, Spacing.pageHorizontal)
+        .padding(.vertical, Spacing.xl)
+    }
+
+    private var internalScrollArea: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Spacing.lg) {
+                ForEach(presentation.transportActions) { action in
+                    actionRow(action)
+                }
+                ForEach(presentation.groupedPoints, id: \.category) { group in
+                    pointGroupSection(group)
+                }
+                if hasWeatherContent {
+                    contentRow(title: "当日天气", detail: weatherLine(presentation.day.weather))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                GeometryReader { proxy in
+                    AppColors.pageBase.opacity(0.001).preference(
+                        key: TripDayInnerMetricsKey.self,
+                        value: TripDayInnerMetrics(
+                            offset: proxy.frame(in: .named("trip-day-inner-scroll")).minY,
+                            contentHeight: proxy.size.height
+                        )
+                    )
+                }
+            )
+        }
+        .coordinateSpace(name: "trip-day-inner-scroll")
+        .background(
+            GeometryReader { proxy in
+                AppColors.pageBase.opacity(0.001).preference(
+                    key: TripDayInnerViewportHeightKey.self,
+                    value: proxy.size.height
+                )
+            }
+        )
+        .onPreferenceChange(TripDayInnerMetricsKey.self) { metrics in
+            innerScrollOffset = metrics.offset
+            innerContentHeight = metrics.contentHeight
+        }
+        .onPreferenceChange(TripDayInnerViewportHeightKey.self) { innerViewportHeight = $0 }
+        .simultaneousGesture(DragGesture(minimumDistance: 10).onEnded { value in
+            scrollBoundaryHandoff(predictedTranslation: value.predictedEndTranslation.height)
+        })
+    }
+
+    private func scrollBoundaryHandoff(predictedTranslation: CGFloat) {
+        let maxOffset = max(0, innerContentHeight - innerViewportHeight)
+        let atTop = innerScrollOffset >= -24
+        let atBottom = -innerScrollOffset >= maxOffset - 24
+        if predictedTranslation < -60 && atBottom && canMoveNext {
+            onNext()
+        } else if predictedTranslation > 60 && atTop && canMovePrevious {
+            onPrevious()
         }
     }
 
     private var hasWeatherContent: Bool {
         !weatherLine(presentation.day.weather).isEmpty
+    }
+
+    private func pointGroupSection(_ group: TripDayPointGroup) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text(group.title).font(.sectionTitle)
+            ForEach(group.points) { point in
+                pointRow(point)
+            }
+        }
+    }
+
+    private func dailyRouteRow(_ action: PersonalTripAction) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            if let sectionName = action.routeSectionSnapshot?.name, !sectionName.isEmpty {
+                Text(sectionName).font(.headline)
+            }
+            ForEach(dailyRouteDetails(action), id: \.self) { detail in
+                Text(detail)
+                    .font(.body)
+                    .foregroundStyle(AppColors.textSecondary)
+            }
+        }
+    }
+
+    private func dailyRouteDetails(_ action: PersonalTripAction) -> [String] {
+        var result: [String] = []
+        let start = action.start?.value?.name ?? action.origin?.value?.name
+        let end = action.end?.value?.name ?? action.destination?.value?.name
+        if let start, let end { result.append("\(start) → \(end)") }
+        if let meters = action.distance?.value?.meters { result.append("距离 \(formatDistance(meters))") }
+        if let meters = action.ascent?.value?.meters { result.append("爬升 \(Int(meters.rounded())) m") }
+        if let seconds = action.estimatedDuration?.value?.seconds { result.append("预计 \(formatDuration(seconds))") }
+        return result
     }
 
     private func actionRow(_ action: PersonalTripAction) -> some View {
@@ -439,6 +550,27 @@ func weatherLine(_ weather: PersonalTripDayWeather) -> String {
         return value
     }
     .joined(separator: " · ")
+}
+
+private struct TripDayInnerMetrics: Equatable {
+    let offset: CGFloat
+    let contentHeight: CGFloat
+}
+
+private struct TripDayInnerMetricsKey: PreferenceKey {
+    static var defaultValue: TripDayInnerMetrics = .init(offset: 0, contentHeight: 0)
+
+    static func reduce(value: inout TripDayInnerMetrics, nextValue: () -> TripDayInnerMetrics) {
+        value = nextValue()
+    }
+}
+
+private struct TripDayInnerViewportHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
 }
 
 private func formatDistance(_ meters: Double) -> String {

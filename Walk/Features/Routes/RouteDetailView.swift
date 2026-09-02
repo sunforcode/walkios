@@ -1,40 +1,11 @@
 import SwiftUI
 import MapKit
 
-enum RouteDetailDrawerState: Int, CaseIterable, Equatable {
-    case summary
-    case mapOnly
-
-    var isVisible: Bool { self == .summary }
-}
-
-struct RouteDetailSheetPhysics {
-    static func clamp(_ offset: CGFloat, summaryOffset: CGFloat, hiddenOffset: CGFloat) -> CGFloat {
-        min(hiddenOffset, max(summaryOffset, offset))
-    }
-
-    static func releaseTarget(
-        origin: RouteDetailDrawerState,
-        predictedTranslation: CGFloat
-    ) -> RouteDetailDrawerState {
-        switch origin {
-        case .summary:
-            return predictedTranslation > 0 ? .mapOnly : .summary
-        case .mapOnly:
-            return predictedTranslation < 0 ? .summary : .mapOnly
-        }
-    }
-}
-
 @MainActor
 struct RouteDetailView: View {
     let routeId: String
     @StateObject private var viewModel: RouteDetailViewModel
     @Environment(\.dismiss) private var dismiss
-    @State private var drawerState: RouteDetailDrawerState = .summary
-    @State private var overlayOffset: CGFloat = 0
-    @State private var overlayOverscroll: CGFloat = 0
-    @State private var sheetDragStart: CGFloat?
     @State private var selectedMapDetail: RouteMapDetailPresentation?
     private let onGenerateTrip: (String) -> Void
 
@@ -64,7 +35,6 @@ struct RouteDetailView: View {
         GeometryReader { geometry in
             let summaryHeight = min(max(330, geometry.size.height * 0.40), geometry.size.height * 0.48)
             let topSpacerHeight = geometry.size.height - summaryHeight
-            let hiddenOffset = geometry.size.height + Spacing.xl
 
             ZStack(alignment: .bottom) {
                 mapLayer(in: geometry)
@@ -79,15 +49,8 @@ struct RouteDetailView: View {
                     RouteDetailScrollOverlay(
                         presentation: presentation,
                         topSpacerHeight: topSpacerHeight,
-                        onTopOverscrollChange: { overscroll in
-                            overlayOverscroll = max(0, overscroll)
-                            if drawerState == .summary {
-                                overlayOffset = overlayOverscroll
-                            }
-                        }
+                        onSelectItem: handleSectionItemSelection
                     )
-                    .offset(y: overlayOffset)
-                    .simultaneousGesture(overlayDismissGesture(hiddenOffset: hiddenOffset))
                 }
 
                 VStack {
@@ -109,21 +72,6 @@ struct RouteDetailView: View {
                 .padding(.horizontal, Spacing.pageHorizontal)
                 .padding(.top, Spacing.sm)
 
-                if drawerState == .mapOnly, viewModel.presentation != nil {
-                    RouteDetailMapRecoveryZone(
-                        onDragChanged: { translation in
-                            onRecoveryDragChanged(translation, hiddenOffset: hiddenOffset)
-                        },
-                        onDragEnded: { _, predictedTranslation in
-                            onRecoveryDragEnded(
-                                predictedTranslation: predictedTranslation,
-                                hiddenOffset: hiddenOffset
-                            )
-                        }
-                    )
-                    .frame(height: max(geometry.safeAreaInsets.bottom + 52, 86))
-                }
-
                 if let presentation = viewModel.presentation {
                     RouteGenerationPrimaryAction(action: presentation.generationAction) {
                         onGenerateTrip(routeId)
@@ -142,39 +90,15 @@ struct RouteDetailView: View {
         }
     }
 
-    private func overlayDismissGesture(hiddenOffset: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 6)
-            .onEnded {
-                guard overlayOverscroll > 0 else { return }
-                let targetState = RouteDetailSheetPhysics.releaseTarget(
-                    origin: .summary,
-                    predictedTranslation: $0.predictedEndTranslation.height
-                )
-                moveOverlay(to: targetState, hiddenOffset: hiddenOffset)
-            }
-    }
-
-    private func onRecoveryDragChanged(_ translation: CGFloat, hiddenOffset: CGFloat) {
-        if sheetDragStart == nil { sheetDragStart = hiddenOffset }
-        overlayOffset = min(hiddenOffset, max(0, hiddenOffset + min(0, translation)))
-    }
-
-    private func onRecoveryDragEnded(predictedTranslation: CGFloat, hiddenOffset: CGFloat) {
-        sheetDragStart = nil
-        let targetState = RouteDetailSheetPhysics.releaseTarget(
-            origin: .mapOnly,
-            predictedTranslation: predictedTranslation
-        )
-        moveOverlay(to: targetState, hiddenOffset: hiddenOffset)
-    }
-
-    private func moveOverlay(to state: RouteDetailDrawerState, hiddenOffset: CGFloat) {
-        let target = state == .summary ? CGFloat.zero : hiddenOffset
-        withAnimation(.easeOut(duration: 0.16)) {
-            overlayOffset = target
+    private func handleSectionItemSelection(_ section: RouteDetailSectionID, _ item: RouteDetailSectionItem) {
+        switch section {
+        case .segments:
+            viewModel.selectSegment(item.id)
+        case .keyPoints, .interestPoints, .campsites, .overnightPlaces, .waterSources, .supplyPoints:
+            viewModel.togglePointHighlight(for: item.id)
+        default:
+            break
         }
-        drawerState = state
-        if state == .summary { overlayOverscroll = 0 }
     }
 
     @ViewBuilder
@@ -187,6 +111,7 @@ struct RouteDetailView: View {
                 poiAnnotations: viewModel.poiAnnotations,
                 trackPointAnnotations: viewModel.selectableTrackPoints,
                 waypointAnnotations: viewModel.waypointAnnotations,
+                highlightedAnnotationIDs: viewModel.highlightedAnnotationIDs,
                 cameraPitch: 45,
                 edgeInsets: RouteMapCamera.detailEdgeInsets(
                     viewportHeight: geometry.size.height,
@@ -248,20 +173,11 @@ struct RouteDetailView: View {
 private struct RouteDetailScrollOverlay: View {
     let presentation: RouteDetailPresentation
     let topSpacerHeight: CGFloat
-    let onTopOverscrollChange: (CGFloat) -> Void
+    let onSelectItem: (RouteDetailSectionID, RouteDetailSectionItem) -> Void
 
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                GeometryReader { proxy in
-                    AppColors.sheetBackground.opacity(0.001)
-                        .preference(
-                            key: RouteDetailScrollOffsetKey.self,
-                            value: proxy.frame(in: .named("route-detail-scroll")).minY
-                        )
-                }
-                .frame(height: 0)
-
                 AppColors.sheetBackground.opacity(0.001)
                     .frame(height: topSpacerHeight)
 
@@ -279,7 +195,7 @@ private struct RouteDetailScrollOverlay: View {
                                 if section.id == .imagery {
                                     imageStrip
                                 } else {
-                                    routeItems(section.items)
+                                    routeItems(section.id, section.items)
                                 }
                             }
                         }
@@ -294,9 +210,6 @@ private struct RouteDetailScrollOverlay: View {
             }
         }
         .coordinateSpace(name: "route-detail-scroll")
-        .onPreferenceChange(RouteDetailScrollOffsetKey.self) { rawOffset in
-            onTopOverscrollChange(max(0, rawOffset))
-        }
     }
 
     private var summary: some View {
@@ -322,21 +235,27 @@ private struct RouteDetailScrollOverlay: View {
         }
     }
 
-    private func routeItems(_ items: [RouteDetailSectionItem]) -> some View {
+    private func routeItems(_ section: RouteDetailSectionID, _ items: [RouteDetailSectionItem]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text(item.title)
-                        .font(.headline)
-                        .foregroundStyle(AppColors.sheetTextPrimary)
-                    if !item.value.isEmpty {
-                        Text(item.value)
-                            .font(.body)
-                            .foregroundStyle(AppColors.sheetTextSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    onSelectItem(section, item)
+                } label: {
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        Text(item.title)
+                            .font(.headline)
+                            .foregroundStyle(AppColors.sheetTextPrimary)
+                        if !item.value.isEmpty {
+                            Text(item.value)
+                                .font(.body)
+                                .foregroundStyle(AppColors.sheetTextSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
+                    .padding(.vertical, Spacing.sm)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.vertical, Spacing.sm)
+                .buttonStyle(.plain)
 
                 if index < items.count - 1 {
                     Divider().overlay(AppColors.sheetDivider)
@@ -417,24 +336,6 @@ private struct RouteGenerationPrimaryAction: View {
     }
 }
 
-private struct RouteDetailMapRecoveryZone: View {
-    let onDragChanged: (CGFloat) -> Void
-    let onDragEnded: (CGFloat, CGFloat) -> Void
-
-    var body: some View {
-        Rectangle()
-            .fill(AppColors.pageBase.opacity(0.001))
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 6)
-                    .onChanged { onDragChanged($0.translation.height) }
-                    .onEnded { onDragEnded($0.translation.height, $0.predictedEndTranslation.height) }
-            )
-            .accessibilityLabel("显示路线概要")
-            .accessibilityHint("向上轻扫")
-    }
-}
-
 private struct RouteDetailMetricPanel: View {
     let metrics: [RouteSummaryMetric]
     private let columns = Array(repeating: GridItem(.flexible(), spacing: Spacing.lg), count: 2)
@@ -478,14 +379,6 @@ private struct RouteDetailSectionContainer<Content: View>: View {
             .padding(Spacing.lg)
             .background(AppColors.sheetSectionBackground)
             .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
-    }
-}
-
-private struct RouteDetailScrollOffsetKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
     }
 }
 

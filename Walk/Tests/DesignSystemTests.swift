@@ -210,10 +210,8 @@ final class DesignSystemTests: XCTestCase {
     }
 
     func testStandardNavigationPagesUseSharedRootBackgroundContainer() throws {
-        let guideSource = try productionSource(at: "Features/Guide/GuideDetailView.swift")
         let equipmentSource = try productionSource(at: "Features/Equipment/EquipmentListView.swift")
 
-        XCTAssertTrue(guideSource.contains("UtilityPageContainer"))
         XCTAssertTrue(equipmentSource.contains("UtilityPageContainer"))
     }
 
@@ -230,10 +228,15 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertFalse(viewModel.hasMissingTrack)
     }
 
-    func testRouteDetailDrawerHasOnlyDefaultAndHiddenPositions() {
-        XCTAssertEqual(RouteDetailDrawerState.allCases, [.summary, .mapOnly])
-        XCTAssertTrue(RouteDetailDrawerState.summary.isVisible)
-        XCTAssertFalse(RouteDetailDrawerState.mapOnly.isVisible)
+    func testRouteDetailHasNoIndependentMapStateAndListCanHighlightMap() throws {
+        let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
+
+        XCTAssertFalse(source.contains("RouteDetailDrawerState"))
+        XCTAssertFalse(source.contains("mapOnly"))
+        XCTAssertFalse(source.contains("RouteDetailMapRecoveryZone"))
+        XCTAssertTrue(source.contains("onSelectItem"))
+        XCTAssertTrue(source.contains("togglePointHighlight"))
+        XCTAssertTrue(source.contains("highlightedAnnotationIDs"))
     }
 
     func testRouteDetailSummaryUsesIconLedMetricPanelWithoutRepeatedLabels() throws {
@@ -254,31 +257,16 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(source.contains("onGenerateTrip(routeId)"))
     }
 
-    func testMapOnlyStateHidesDrawerAndExposesSwipeRecoveryZone() throws {
-        let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
-
-        XCTAssertTrue(source.contains("let hiddenOffset = geometry.size.height + Spacing.xl"))
-        XCTAssertTrue(source.contains("RouteDetailMapRecoveryZone"))
-        XCTAssertTrue(source.contains("if drawerState == .mapOnly, viewModel.presentation != nil"))
-        XCTAssertFalse(source.contains("resolvedSheetOffset >= hiddenOffset - 1"))
-    }
-
-    func testRouteDetailOverlayUsesFullScreenContinuousScroll() throws {
+    func testRouteDetailOverlayUsesFullScreenContinuousScrollWithoutDrawerState() throws {
         let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
 
         XCTAssertTrue(source.contains("RouteDetailScrollOverlay"))
-        XCTAssertTrue(source.contains(".offset(y: overlayOffset)"))
-        XCTAssertFalse(source.contains("drawerState == .expanded"))
-        XCTAssertFalse(source.contains("drawerHeightRatio: mapDrawerHeightRatio"))
-    }
-
-    func testMapOnlyStateUsesInvisibleSwipeRecoveryZoneWithoutSpringAnimation() throws {
-        let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
-
-        XCTAssertTrue(source.contains("RouteDetailMapRecoveryZone"))
-        XCTAssertFalse(source.contains("interactiveSpring"))
-        XCTAssertFalse(source.contains(".spring("))
-        XCTAssertFalse(source.contains(".onTapGesture { onChangeState(true) }"))
+        XCTAssertTrue(source.contains(".frame(height: topSpacerHeight)"))
+        XCTAssertFalse(source.contains("drawerState"))
+        XCTAssertFalse(source.contains("overlayOffset"))
+        XCTAssertFalse(source.contains("RouteDetailSheetPhysics"))
+        XCTAssertFalse(source.contains("isScrollEnabled"))
+        XCTAssertFalse(source.contains("case expanded"))
     }
 
     func testRouteDetailUsesOneFullScreenScrollOverlay() throws {
@@ -290,55 +278,6 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertFalse(source.contains("private struct RouteDetailDrawer: View"))
         XCTAssertFalse(source.contains("isScrollEnabled"))
         XCTAssertFalse(source.contains("case expanded"))
-    }
-
-    func testDefaultSheetDismissesOnAnyCommittedDownwardRelease() {
-        XCTAssertEqual(
-            RouteDetailSheetPhysics.releaseTarget(
-                origin: .summary,
-                predictedTranslation: 4
-            ),
-            .mapOnly
-        )
-        XCTAssertEqual(
-            RouteDetailSheetPhysics.releaseTarget(
-                origin: .summary,
-                predictedTranslation: -120
-            ),
-            .summary
-        )
-    }
-
-    func testHiddenSheetUsesFinalReleaseDirectionAndAllowsReversal() {
-        XCTAssertEqual(
-            RouteDetailSheetPhysics.releaseTarget(
-                origin: .mapOnly,
-                predictedTranslation: -4
-            ),
-            .summary
-        )
-        XCTAssertEqual(
-            RouteDetailSheetPhysics.releaseTarget(
-                origin: .mapOnly,
-                predictedTranslation: 8
-            ),
-            .mapOnly
-        )
-        XCTAssertEqual(
-            RouteDetailSheetPhysics.releaseTarget(
-                origin: .mapOnly,
-                predictedTranslation: 6
-            ),
-            .mapOnly
-        )
-    }
-
-    func testDownwardDragUsesSingleScrollOverlayTopOverscroll() throws {
-        let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
-
-        XCTAssertTrue(source.contains("@State private var overlayOverscroll"))
-        XCTAssertTrue(source.contains("onTopOverscrollChange"))
-        XCTAssertTrue(source.contains("overlayOffset = overlayOverscroll"))
     }
 
     func testRouteSummaryMetricsUseOneSolidDarkGreenSection() throws {

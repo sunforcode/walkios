@@ -3,50 +3,6 @@ import XCTest
 
 @MainActor
 final class HomeAndRootViewModelTests: XCTestCase {
-    func testGuideInitialLoadRunsOnlyOnce() async {
-        var loadCount = 0
-        let sut = GuideListViewModel(loadGuides: {
-            loadCount += 1
-            return MockData.guides
-        })
-
-        await sut.loadIfNeeded()
-        await sut.loadIfNeeded()
-
-        XCTAssertEqual(loadCount, 1)
-        XCTAssertEqual(sut.guides.count, MockData.guides.count)
-        XCTAssertTrue(sut.hasLoaded)
-    }
-
-    func testGuideRefreshKeepsExistingContentVisible() async {
-        let existingGuides = MockData.guides
-        var loadCount = 0
-        var refreshContinuation: CheckedContinuation<[Guide], Never>?
-        var requestStartedContinuation: AsyncStream<Void>.Continuation!
-        let requestStarted = AsyncStream<Void> { requestStartedContinuation = $0 }
-        let sut = GuideListViewModel(loadGuides: {
-            loadCount += 1
-            if loadCount == 1 { return existingGuides }
-            return await withCheckedContinuation {
-                refreshContinuation = $0
-                requestStartedContinuation.yield()
-                requestStartedContinuation.finish()
-            }
-        })
-        await sut.loadIfNeeded()
-
-        let refreshTask = Task { await sut.refresh() }
-        for await _ in requestStarted { break }
-
-        XCTAssertEqual(sut.guides.count, existingGuides.count)
-        XCTAssertFalse(sut.isLoading)
-        XCTAssertTrue(sut.isRefreshing)
-
-        refreshContinuation?.resume(returning: existingGuides)
-        await refreshTask.value
-        XCTAssertFalse(sut.isRefreshing)
-    }
-
     func testHomeStartsLoadingAndUsesServerFocusWithoutListOrRouteResolution() async {
         var focusCallCount = 0
         let focusedTrip = PersonalTripTestFixtures.summary(id: "focus", status: .inProgress)
@@ -180,6 +136,60 @@ final class HomeAndRootViewModelTests: XCTestCase {
 
         XCTAssertEqual(sut.verificationID, "verification-1")
         XCTAssertEqual(sut.phase, .verificationCode)
+    }
+
+    func testLoginNormalizesDomesticMainlandPhoneToE164() {
+        XCTAssertEqual(LoginViewModel.normalizedPhone("13800138000"), "+8613800138000")
+        XCTAssertEqual(LoginViewModel.normalizedPhone(" 13800138000 "), "+8613800138000")
+        XCTAssertEqual(LoginViewModel.normalizedPhone("+8613800138000"), "+8613800138000")
+        XCTAssertEqual(LoginViewModel.normalizedPhone("+14155550123"), "+14155550123")
+        XCTAssertNil(LoginViewModel.normalizedPhone("12345"))
+        XCTAssertNil(LoginViewModel.normalizedPhone("23800138000"))
+        XCTAssertNil(LoginViewModel.normalizedPhone(""))
+    }
+
+    func testLoginSendCodeAcceptsDomesticFormatAndSendsNormalizedPhone() async {
+        var sentPhones: [String] = []
+        let expires = Date(timeIntervalSince1970: 1_800_000_000)
+        let sut = LoginViewModel(
+            sendCode: { phone in
+                sentPhones.append(phone)
+                return VerificationCodeResponse(
+                    verificationId: "verification-2",
+                    expiresAt: expires,
+                    resendAvailableAt: expires
+                )
+            },
+            createSession: { _, _ in },
+            loadAccount: { throw APIClientError.invalidResponse }
+        )
+        sut.phone = "13800138000"
+        XCTAssertTrue(sut.canSendCode)
+
+        await sut.sendVerificationCode()
+
+        XCTAssertEqual(sentPhones, ["+8613800138000"])
+        XCTAssertEqual(sut.phase, .verificationCode)
+        XCTAssertNil(sut.errorMessage)
+    }
+
+    func testLoginSendCodeShowsGuidanceForInvalidPhone() async {
+        let sut = LoginViewModel(
+            sendCode: { _ in
+                XCTFail("must not send for invalid phone")
+                struct UnexpectedSend: Error {}
+                throw UnexpectedSend()
+            },
+            createSession: { _, _ in },
+            loadAccount: { throw APIClientError.invalidResponse }
+        )
+        sut.phone = "12345"
+
+        await sut.sendVerificationCode()
+
+        XCTAssertNotNil(sut.errorMessage)
+        XCTAssertNil(sut.verificationID)
+        XCTAssertEqual(sut.phase, LoginViewModel.Phase.phone)
     }
 
     func testLoginCreatesSessionThenLoadsAccount() async {

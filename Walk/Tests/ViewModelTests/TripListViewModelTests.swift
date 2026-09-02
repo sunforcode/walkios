@@ -514,16 +514,40 @@ final class TripDayWeatherViewModelTests: XCTestCase {
         XCTAssertEqual(presentation.dayLabel, "D1")
     }
 
-    func testTripDaySelectionStartsAtRequestedDayAndMovesWithinBounds() {
-        var selection = TripDaySelection(
-            days: PersonalTripTestFixtures.twoDays.days,
-            initialDayID: "day-2"
-        )
+    func testTripDayFocusStartsAtRequestedDayAndClampsWhenDaysShrink() {
+        let days = PersonalTripTestFixtures.twoDays.days
 
-        XCTAssertEqual(selection.focusedDayID, "day-2")
-        XCTAssertFalse(selection.moveNext())
-        XCTAssertTrue(selection.movePrevious())
-        XCTAssertEqual(selection.focusedDayID, "day-1")
+        XCTAssertEqual(TripDayFocusPolicy.initialIndex(days: days, initialDayID: "day-2"), 1)
+        XCTAssertEqual(TripDayFocusPolicy.initialIndex(days: days, initialDayID: "missing-day"), 0)
+        XCTAssertEqual(TripDayFocusPolicy.clampedIndex(5, dayCount: days.count), 1)
+        XCTAssertEqual(TripDayFocusPolicy.clampedIndex(-3, dayCount: days.count), 0)
+        XCTAssertEqual(TripDayFocusPolicy.clampedIndex(0, dayCount: 0), 0)
+    }
+
+    func testTripDayPresentationSeparatesDailyRouteTransportAndCategorizedPoints() {
+        let day = PersonalTripTestFixtures.populatedDays.days[0]
+
+        let presentation = TripDayPresentation(day: day)
+
+        XCTAssertEqual(presentation.dailyRouteActions.map(\.sequence), [2])
+        XCTAssertTrue(presentation.dailyRouteActions.allSatisfy { $0.actionType == "hike" })
+        XCTAssertEqual(presentation.transportActions.map(\.sequence), [1])
+        XCTAssertTrue(presentation.transportActions.allSatisfy { $0.actionType != "hike" })
+        XCTAssertEqual(presentation.groupedPoints.map(\.category), ["campsite", "water_source"])
+        XCTAssertEqual(presentation.groupedPoints.map(\.title), ["营地", "水源"])
+        XCTAssertEqual(presentation.groupedPoints.first?.points.map(\.sequence), [3])
+        XCTAssertTrue(presentation.hasDayContent)
+    }
+
+    func testTripDayPageUsesFullScreenPagingWithoutDayJumpControls() throws {
+        let source = try productionSource(at: "Features/Trips/TripDayWeatherViews.swift")
+
+        XCTAssertFalse(source.contains("\"前一天\""))
+        XCTAssertFalse(source.contains("\"后一天\""))
+        XCTAssertFalse(source.contains("TripDaySelection"))
+        XCTAssertTrue(source.contains("tabViewStyle(.page"))
+        XCTAssertTrue(source.contains("scrollBoundaryHandoff"))
+        XCTAssertTrue(source.contains("每日路程"))
     }
 
     func testTripWeatherPresentationIncludesOverviewImpactsDailyWeatherAndFreshness() {
@@ -578,6 +602,15 @@ final class TripDayWeatherViewModelTests: XCTestCase {
             ),
             DateComponents(year: 2026, month: 8, day: 25, hour: 0)
         )
+    }
+
+    private func productionSource(at relativePath: String) throws -> String {
+        let testFileURL = URL(fileURLWithPath: #filePath)
+        let walkRoot = testFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        return try String(contentsOf: walkRoot.appendingPathComponent(relativePath), encoding: .utf8)
     }
 }
 

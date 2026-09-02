@@ -39,8 +39,19 @@ final class LoginViewModel: ObservableObject {
         self.loadAccount = loadAccount
     }
 
+    static func normalizedPhone(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if trimmed.range(of: #"^\+[1-9][0-9]{1,14}$"#, options: .regularExpression) != nil {
+            return trimmed
+        }
+        if trimmed.range(of: #"^1[3-9][0-9]{9}$"#, options: .regularExpression) != nil {
+            return "+86" + trimmed
+        }
+        return nil
+    }
+
     var canSendCode: Bool {
-        phone.range(of: #"^\+[1-9][0-9]{1,14}$"#, options: .regularExpression) != nil
+        Self.normalizedPhone(phone) != nil
     }
 
     var canLogin: Bool {
@@ -48,15 +59,15 @@ final class LoginViewModel: ObservableObject {
     }
 
     func sendVerificationCode() async {
-        guard canSendCode else {
-            errorMessage = "请输入国际格式手机号，例如 +8613800138000"
+        guard let normalizedPhone = Self.normalizedPhone(phone) else {
+            errorMessage = "请输入 11 位手机号或 +86 开头的国际格式，例如 13800138000"
             return
         }
         isSubmitting = true
         errorMessage = nil
         defer { isSubmitting = false }
         do {
-            let response = try await sendCode(phone)
+            let response = try await sendCode(normalizedPhone)
             verificationID = response.verificationId
             resendAvailableAt = response.resendAvailableAt
             phase = .verificationCode
@@ -128,6 +139,12 @@ struct LoginView: View {
                     VStack(alignment: .leading, spacing: Spacing.lg) {
                         EntryTextField(title: "手机号", text: $viewModel.phone, keyboardType: .phonePad)
                             .disabled(viewModel.phase == .verificationCode)
+
+                        if viewModel.phase == .phone && !viewModel.phone.isEmpty && !viewModel.canSendCode {
+                            Text("支持 11 位手机号或 +86 开头的国际格式")
+                                .font(.caption)
+                                .foregroundStyle(AppColors.textSecondary)
+                        }
 
                         if viewModel.phase == .verificationCode {
                             EntryTextField(title: "验证码", text: $viewModel.code, keyboardType: .numberPad)

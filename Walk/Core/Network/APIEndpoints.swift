@@ -34,10 +34,6 @@ enum APIEndpoints {
     static let equipment = "/equipment"
     static func equipmentDetail(_ id: String) -> String { "/equipment/\(id)" }
 
-    // MARK: - Guides
-    static let guides = "/guides"
-    static func guideDetail(_ id: String) -> String { "/guides/\(id)" }
-
     // MARK: - Users
     static let users = "/users"
     static func userDetail(_ id: String) -> String { "/users/\(id)" }
