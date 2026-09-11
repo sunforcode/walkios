@@ -900,31 +900,31 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					0F36990C6B6D71810EDF4B29 = {
-						DevelopmentTeam = "$(DEVELOPMENT_TEAM)";
+						DevelopmentTeam = A6524QBUHH;
 						ProvisioningStyle = Automatic;
 					};
 					189A5F03D6A9D6489E9C4061 = {
-						DevelopmentTeam = "$(DEVELOPMENT_TEAM)";
+						DevelopmentTeam = A6524QBUHH;
 						ProvisioningStyle = Automatic;
 						TestTargetID = 0F36990C6B6D71810EDF4B29;
 					};
 					263382169C64BE0F6C7B5B01 = {
-						DevelopmentTeam = "$(DEVELOPMENT_TEAM)";
+						DevelopmentTeam = A6524QBUHH;
 						ProvisioningStyle = Automatic;
 						TestTargetID = 0F36990C6B6D71810EDF4B29;
 					};
 					59C611BAF54582EC40F6CFC8 = {
-						DevelopmentTeam = "$(DEVELOPMENT_TEAM)";
+						DevelopmentTeam = A6524QBUHH;
 						ProvisioningStyle = Automatic;
 						TestTargetID = 0F36990C6B6D71810EDF4B29;
 					};
 					B51D4E9A2B07E4E31F3EFAE2 = {
-						DevelopmentTeam = "$(DEVELOPMENT_TEAM)";
+						DevelopmentTeam = A6524QBUHH;
 						ProvisioningStyle = Automatic;
 						TestTargetID = 0F36990C6B6D71810EDF4B29;
 					};
 					DDEF139BB7286C9F84C6F013 = {
-						DevelopmentTeam = "$(DEVELOPMENT_TEAM)";
+						DevelopmentTeam = A6524QBUHH;
 						ProvisioningStyle = Automatic;
 						TestTargetID = 0F36990C6B6D71810EDF4B29;
 					};
@@ -1374,10 +1374,11 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGNING_REQUIRED = YES;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
+				DEVELOPMENT_TEAM = A6524QBUHH;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -1481,10 +1482,11 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGNING_REQUIRED = YES;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
+				DEVELOPMENT_TEAM = A6524QBUHH;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
