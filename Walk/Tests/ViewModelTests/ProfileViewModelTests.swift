@@ -163,13 +163,13 @@ final class ProfileViewModelTests: XCTestCase {
     func testProfilePageUsesProductionComponentsWithoutPrivateDuplicatesOrMediaParsing() throws {
         let source = try productionSource(at: "Features/Profile/ProfileView.swift")
         let calendarComponentSource = try productionSource(
-            at: "DesignSystem/BusinessComponents/Trip/TripCalendarCard.swift"
+            at: "Features/Trips/Components/TripCalendarCard.swift"
         )
         let accountMenuSource = try productionSource(
-            at: "DesignSystem/BusinessComponents/AccountEquipment/AccountMenuSheet.swift"
+            at: "Features/Profile/Components/AccountMenuSheet.swift"
         )
         let equipmentComponentSource = try productionSource(
-            at: "DesignSystem/BusinessComponents/AccountEquipment/PersonalEquipmentSummaryCard.swift"
+            at: "Features/Profile/Components/PersonalEquipmentSummaryCard.swift"
         )
 
         XCTAssertTrue(source.contains("TripBusinessComponents.TripCalendarCard("))
@@ -329,7 +329,7 @@ final class ProfileViewModelTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Features/Profile/UserService.swift")
+            .appendingPathComponent("Data/Repositories/UserService.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
         XCTAssertFalse(source.contains("email:"))

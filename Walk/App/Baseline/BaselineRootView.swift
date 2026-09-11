@@ -46,7 +46,7 @@ private struct BaselineUnsupportedScenarioView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Text(scenario.pageID.rawValue)
+            Text(scenario.pageID?.rawValue ?? "component")
                 .font(.headline)
             Text("该场景尚未接入 iOS Baseline Host")
                 .font(.subheadline)

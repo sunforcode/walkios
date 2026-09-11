@@ -23,7 +23,7 @@ enum HomePreviewFixtures {
     static let weatherOmitted = WeatherSummaryModel(
         conclusion: "本次未提供天气摘要",
         impact: "行程其他内容仍可查看",
-        state: .available
+        state: .unavailable
     )
 
     static let weatherStale = WeatherSummaryModel(

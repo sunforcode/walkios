@@ -131,6 +131,8 @@ final class DesignSystemTests: XCTestCase {
             return
         }
         for case let fileURL as URL in enumerator where fileURL.pathExtension == "swift" {
+            // Features/*/Components/ 是业务组件（由组件目录与基线体系治理），不参与页面级规则扫描
+            if fileURL.path.contains("/Features/") && fileURL.path.contains("/Components/") { continue }
             let source = try String(contentsOf: fileURL, encoding: .utf8)
             if let range = source.range(of: #"struct \w*StatusBadge\b"#, options: .regularExpression) {
                 declarations.append("\(fileURL.lastPathComponent): \(source[range])")
@@ -158,6 +160,8 @@ final class DesignSystemTests: XCTestCase {
             return violations
         }
         for case let fileURL as URL in enumerator where fileURL.pathExtension == "swift" {
+            // Features/*/Components/ 是业务组件（由组件目录与基线体系治理），不参与页面级规则扫描
+            if fileURL.path.contains("/Features/") && fileURL.path.contains("/Components/") { continue }
             let source = try String(contentsOf: fileURL, encoding: .utf8)
             for violation in check(source) {
                 violations.append("\(fileURL.lastPathComponent): \(violation)")
@@ -270,6 +274,8 @@ final class DesignSystemTests: XCTestCase {
         for root in sourceRoots {
             guard let enumerator = fileManager.enumerator(at: root, includingPropertiesForKeys: nil) else { continue }
             for case let fileURL as URL in enumerator where fileURL.pathExtension == "swift" {
+            // Features/*/Components/ 是业务组件（由组件目录与基线体系治理），不参与页面级规则扫描
+            if fileURL.path.contains("/Features/") && fileURL.path.contains("/Components/") { continue }
                 let source = try String(contentsOf: fileURL, encoding: .utf8)
                 let isTokenDefinition = fileURL.lastPathComponent == "Color+App.swift"
                 for token in prohibitedEverywhere where source.contains(token) {
@@ -805,7 +811,7 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(equipment.contains("当前行程为只读"), "只读替换文案")
         // 四项概况指标由 TripEquipmentOverview 组件拥有（PAGE-TRIP-EQUIPMENT 禁止 Page 直接拥有概况内部指标），
         // 文案权威在组件 spec，断言改查组件源码而非页面源码。
-        let overview = try productionSource(at: "DesignSystem/BusinessComponents/Trip/TripEquipmentOverview.swift")
+        let overview = try productionSource(at: "Features/Trips/Components/TripEquipmentOverview.swift")
         XCTAssertTrue(overview.contains("label: \"装备条目\""), "四指标格条目数")
         XCTAssertTrue(overview.contains("预计总重量"), "四指标格完整重量")
         XCTAssertTrue(overview.contains("label: \"未确认已有\""), "四指标格未确认")
@@ -827,9 +833,9 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(profile.contains("viewModel.retryCalendar()"), "行程日历 Section 提供独立重试")
         XCTAssertTrue(profile.contains("viewModel.retryEquipment()"), "装备 Section 提供独立重试")
         // 按 PAGE-ME 权威，查看入口、脱敏账号与关于行由 TripCalendarCard / AccountMenuSheet 组件拥有，不在页面。
-        let calendarCard = try productionSource(at: "DesignSystem/BusinessComponents/Trip/TripCalendarCard.swift")
+        let calendarCard = try productionSource(at: "Features/Trips/Components/TripCalendarCard.swift")
         XCTAssertTrue(calendarCard.contains("查看全部"), "行程日历查看入口在 TripCalendarCard 组件内")
-        let accountMenu = try productionSource(at: "DesignSystem/BusinessComponents/AccountEquipment/AccountMenuSheet.swift")
+        let accountMenu = try productionSource(at: "Features/Profile/Components/AccountMenuSheet.swift")
         XCTAssertTrue(accountMenu.contains("maskedPhone"), "脱敏账号摘要在 AccountMenuSheet 组件内")
         XCTAssertTrue(accountMenu.contains("关于 Walk"), "关于行文案在 AccountMenuSheet 组件内")
     }
@@ -842,9 +848,9 @@ final class DesignSystemTests: XCTestCase {
         // PAGE-MY-EQUIPMENT 权威页签为 SegmentedControl 通用组件，非原生 .pickerStyle(.segmented)；
         // 装备行未填写重量文案属 EquipmentListRow 组件，重命名文案属 InlineListNameEditor 组件。
         XCTAssertTrue(list.contains("SegmentedControl("), "装备/清单页签使用 SegmentedControl 组件")
-        let equipmentRow = try productionSource(at: "DesignSystem/BusinessComponents/AccountEquipment/EquipmentListRow.swift")
+        let equipmentRow = try productionSource(at: "Features/Equipment/Components/EquipmentListRow.swift")
         XCTAssertTrue(equipmentRow.contains("重量未填写"), "装备行未填写重量文案在组件内")
-        let listNameEditor = try productionSource(at: "DesignSystem/BusinessComponents/AccountEquipment/InlineListNameEditor.swift")
+        let listNameEditor = try productionSource(at: "Features/Equipment/Components/InlineListNameEditor.swift")
         XCTAssertTrue(listNameEditor.contains("重命名装备清单"), "清单行内重命名文案在组件内")
         XCTAssertTrue(list.contains("新增个人装备"), "装备页签底部固定主按钮")
         XCTAssertTrue(list.contains("创建装备清单"), "清单页签底部固定主按钮")
@@ -890,7 +896,7 @@ final class DesignSystemTests: XCTestCase {
 
     func testRouteDetailSummaryUsesHeroTitleAndCanonicalSpacing() throws {
         let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
-        let summary = try productionSource(at: "DesignSystem/BusinessComponents/Route/RouteSummary.swift")
+        let summary = try productionSource(at: "Features/Routes/Components/RouteSummary.swift")
         XCTAssertTrue(summary.contains(".font(.heroTitle)"), "路线概要名称使用 hero 级标题")
         XCTAssertTrue(source.contains("spacing: Spacing.md"), "信息列表条目行间距使用 canonical md token")
         XCTAssertFalse(source.contains("Spacing.listItemGap"), "禁止旧 listItemGap alias")
@@ -929,6 +935,8 @@ final class DesignSystemTests: XCTestCase {
             return result
         }
         for case let fileURL as URL in enumerator where fileURL.pathExtension == "swift" {
+            // Features/*/Components/ 是业务组件（由组件目录与基线体系治理），不参与页面级规则扫描
+            if fileURL.path.contains("/Features/") && fileURL.path.contains("/Components/") { continue }
             result.append((fileURL.lastPathComponent, try String(contentsOf: fileURL, encoding: .utf8)))
         }
         return result

@@ -214,13 +214,13 @@ final class RouteDetailViewModelTests: XCTestCase {
     func testRouteDetailSafeProjectionAPIsPreserveOptionalityAndConfidence() throws {
         let viewModelSource = try productionSource(at: "Features/Routes/RouteDetailViewModel.swift")
         let introductionSource = try productionSource(
-            at: "DesignSystem/BusinessComponents/Route/RouteIntroduction.swift"
+            at: "Features/Routes/Components/RouteIntroduction.swift"
         )
         let referenceDaySource = try productionSource(
-            at: "DesignSystem/BusinessComponents/Route/RouteReferenceDayList.swift"
+            at: "Features/Routes/Components/RouteReferenceDayList.swift"
         )
         let segmentSource = try productionSource(
-            at: "DesignSystem/BusinessComponents/Route/RouteSegmentList.swift"
+            at: "Features/Routes/Components/RouteSegmentList.swift"
         )
 
         [

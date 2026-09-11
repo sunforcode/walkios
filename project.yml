@@ -26,16 +26,6 @@ targets:
       - path: Walk
         excludes:
           - "Tests/**/*"
-          - "DesignSystem/BusinessComponents/AccountEquipment/**/*"
-          - "DesignSystem/BusinessComponents/Route/**/*"
-          - "DesignSystem/Components/Foundation/**/*"
-          - "Preview Content/BusinessComponentPreviewFixtures.swift"
-          - "Preview Content/ComponentPreviewFixtures.swift"
-      - path: Walk/DesignSystem/BusinessComponents/AccountEquipment
-      - path: Walk/DesignSystem/BusinessComponents/Route
-      - path: Walk/DesignSystem/Components/Foundation
-      - path: Walk/Preview Content/BusinessComponentPreviewFixtures.swift
-      - path: Walk/Preview Content/ComponentPreviewFixtures.swift
     dependencies:
       - package: Alamofire
     info:
@@ -90,7 +80,7 @@ targets:
     platform: iOS
     deploymentTarget: "16.0"
     sources:
-      - path: WalkBaselineUITests
+      - path: Tests/BaselineUITests
     dependencies:
       - target: Walk
     settings:
@@ -104,7 +94,7 @@ targets:
     platform: iOS
     deploymentTarget: "16.0"
     sources:
-      - path: WalkBaselineTests
+      - path: Tests/BaselineTests
     dependencies:
       - target: Walk
     settings:
@@ -118,7 +108,7 @@ targets:
     platform: iOS
     deploymentTarget: "16.0"
     sources:
-      - path: WalkComponentTests
+      - path: Tests/ComponentTests
     dependencies:
       - target: Walk
     settings:
@@ -132,7 +122,7 @@ targets:
     platform: iOS
     deploymentTarget: "16.0"
     sources:
-      - path: WalkComponentUITests
+      - path: Tests/ComponentUITests
     dependencies:
       - target: Walk
     settings:

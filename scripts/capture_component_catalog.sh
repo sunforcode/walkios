@@ -7,7 +7,7 @@ readonly BUILD_DIR="${PROJECT_ROOT}/build/component-catalog"
 readonly RESULT_BUNDLE="${BUILD_DIR}/WalkComponents.xcresult"
 readonly EXPORTED_DIR="${BUILD_DIR}/exported"
 readonly CANDIDATE_DIR="${BUILD_DIR}/candidate"
-readonly CATALOG_SOURCE="${PROJECT_ROOT}/Walk/App/ComponentCatalog.swift"
+readonly CATALOG_SOURCE="${PROJECT_ROOT}/Walk/App/Baseline/ComponentCatalog.swift"
 
 mkdir -p "${BUILD_DIR}"
 

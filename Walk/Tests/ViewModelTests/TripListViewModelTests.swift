@@ -414,7 +414,7 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
 
     func testTripDetailPageUsesOnlySafeProductionComponentsAndKeepsBlockedRouteRegion() throws {
         let source = try productionSource(at: "Features/Trips/TripDetailView.swift")
-        let cover = try productionSource(at: "DesignSystem/BusinessComponents/Trip/TripCoverHeader.swift")
+        let cover = try productionSource(at: "Features/Trips/Components/TripCoverHeader.swift")
 
         XCTAssertTrue(source.contains("TripBusinessComponents.TripCoverHeader("))
         XCTAssertTrue(source.contains("TripBusinessComponents.TripDaySummaryCard("))

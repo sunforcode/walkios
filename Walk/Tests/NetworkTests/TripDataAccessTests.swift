@@ -258,11 +258,15 @@ final class TripDataAccessTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let apiModels = try String(
-            contentsOf: sourceRoot.appendingPathComponent("Core/Network/APIModels.swift"),
-            encoding: .utf8
-        )
-        let targetModels = try XCTUnwrap(apiModels.components(separatedBy: "enum AccountAPI").last)
+        let contractFiles = [
+            "Data/API/User/AccountAPIModels.swift",
+            "Data/API/Routes/PublicRouteModels.swift",
+            "Data/API/Equipment/EquipmentModels.swift",
+            "Data/API/Trips/PersonalTripModels.swift",
+        ]
+        let targetModels = try contractFiles
+            .map { try String(contentsOf: sourceRoot.appendingPathComponent($0), encoding: .utf8) }
+            .joined(separator: "\n")
         let tripEquipment = try String(
             contentsOf: sourceRoot.appendingPathComponent("Features/Trips/TripEquipment.swift"),
             encoding: .utf8
@@ -279,12 +283,18 @@ final class TripDataAccessTests: XCTestCase {
 
     func testTargetPersonalTripDataAccessIsIsolatedFromLegacyRepositoryAndUserID() throws {
         let testFileURL = URL(fileURLWithPath: #filePath)
-        let sourceURL = testFileURL
+        let sourceRoot = testFileURL
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Features/Trips/TripDataAccess.swift")
-        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let sourceFiles = [
+            "Data/API/Trips/PersonalTripAPI.swift",
+            "Data/Repositories/PersonalTripService.swift",
+            "Data/Repositories/PersonalTripWeatherValidator.swift",
+        ]
+        let source = try sourceFiles
+            .map { try String(contentsOf: sourceRoot.appendingPathComponent($0), encoding: .utf8) }
+            .joined(separator: "\n")
 
         XCTAssertFalse(source.contains("TripRepository"))
         XCTAssertFalse(source.contains("LegacyAPIClient"))
