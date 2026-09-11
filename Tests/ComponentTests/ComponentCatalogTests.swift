@@ -7,10 +7,10 @@ final class ComponentCatalogTests: XCTestCase {
     func testCatalogMatchesAuthoritativeComponentInventory() {
         let entries = ComponentCatalog.entries
 
-        XCTAssertEqual(entries.count, 78)
-        XCTAssertEqual(Set(entries.map(\.id)).count, 78)
+        XCTAssertEqual(entries.count, 84)
+        XCTAssertEqual(Set(entries.map(\.id)).count, 84)
         XCTAssertEqual(entries.filter { $0.category == .common }.count, 38)
-        XCTAssertEqual(entries.filter { $0.category == .business }.count, 40)
+        XCTAssertEqual(entries.filter { $0.category == .business }.count, 46)
         XCTAssertEqual(Set(entries.map(\.id)), Set(Self.expectedComponentIDs))
     }
 
@@ -55,13 +55,14 @@ final class ComponentCatalogTests: XCTestCase {
     private static let businessComponentIDs = [
         "AccountMenuSheet", "AuthPanel", "ChecklistItemRow", "ChecklistPanel", "DailyWeatherCard",
         "ElevationProfile", "EquipmentDeletionImpact", "EquipmentListRow", "FocusTripSummary",
-        "GenerationRouteSummaryCard", "GenerationWaitingView", "HeatmapCalendar", "InlineEquipmentEditor",
-        "InlineListNameEditor", "PersonalEquipmentForm", "PersonalEquipmentSummaryCard", "ProfileIdentityHeader",
+        "GearRing", "GenerationRouteSummaryCard", "GenerationWaitingView", "HeatmapCalendar",
+        "InlineEquipmentEditor", "InlineListNameEditor", "PersonalEquipmentForm", "PersonalEquipmentSummaryCard", "ProfileIdentityHeader",
         "RouteFactSection", "RouteImageGallery", "RouteImageViewer", "RouteIntroduction", "RouteListRow",
         "RouteMap", "RoutePointDetail", "RoutePointSection", "RouteReferenceDayList", "RouteScene",
-        "RouteSegmentList", "RouteSummary", "TripCalendarCard", "TripCoverHeader", "TripDayArrangement",
-        "TripDaySummaryCard", "TripEquipmentSummaryCard", "TripListRow", "TripRouteSummaryCard",
-        "TripStatusBadge", "TripWeatherSummaryCard", "WeatherOverview", "WeatherSummary",
+        "RouteSegmentList", "RouteSummary", "TrekDayBadge", "TripCalendarCard", "TripCoverHeader", "TripDayArrangement",
+        "TripDayHikeSummary", "TripDaySummaryCard", "TripDayTransportSummary", "TripEquipmentGearRings",
+        "TripEquipmentSummaryCard", "TripListRow", "TripRouteSummaryCard",
+        "TripStatusBadge", "TripWeatherSummaryCard", "TripWeatherTrendChart", "WeatherOverview", "WeatherSummary",
     ]
 
     private static let expectedComponentIDs = commonComponentIDs + businessComponentIDs

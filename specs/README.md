@@ -104,53 +104,61 @@
 
 ### 业务组件
 
-| 总 UI Component ID | SwiftUI 承载 | 源码 |
-|---|---|---|
-| `account-menu-sheet` | `AccountMenuSheet` | `Walk/Features/Profile/Components/AccountMenuSheet.swift` |
-| `auth-panel` | `AuthPanel` | `Walk/Features/Profile/Components/AuthPanel.swift` |
-| `checklist-item-row` | `ChecklistItemRow` | `Walk/Features/Equipment/Components/ChecklistItemRow.swift` |
-| `checklist-panel` | `ChecklistPanel` | `Walk/Features/Equipment/Components/ChecklistPanel.swift` |
-| `daily-weather-card` | `DailyWeatherCard` | `Walk/Features/Trips/Components/DailyWeatherCard.swift` |
-| `elevation-profile` | `ElevationProfile` | `Walk/Features/Routes/Components/ElevationProfile.swift` |
-| `equipment-deletion-impact` | `EquipmentDeletionImpact` | `Walk/Features/Equipment/Components/EquipmentDeletionImpact.swift` |
-| `equipment-list-row` | `EquipmentListRow` | `Walk/Features/Equipment/Components/EquipmentListRow.swift` |
-| `focus-trip-summary` | `FocusTripSummary` | `Walk/Features/Home/Components/FocusTripSummary.swift` |
-| `generation-equipment-selection` | `GenerationEquipmentSelection` | `Walk/Features/Routes/Components/GenerationEquipmentSelection.swift` |
-| `generation-route-summary-card` | `GenerationRouteSummaryCard` | `Walk/Features/Routes/Components/GenerationRouteSummaryCard.swift` |
-| `generation-waiting-view` | `GenerationWaitingView` | `Walk/Features/Routes/Components/GenerationWaitingView.swift` |
-| `inline-equipment-editor` | `InlineEquipmentEditor` | `Walk/Features/Trips/Components/InlineEquipmentEditor.swift` |
-| `inline-list-name-editor` | `InlineListNameEditor` | `Walk/Features/Equipment/Components/InlineListNameEditor.swift` |
-| `personal-equipment-form` | `PersonalEquipmentForm` | `Walk/Features/Equipment/Components/PersonalEquipmentForm.swift` |
-| `personal-equipment-summary-card` | `PersonalEquipmentSummaryCard` | `Walk/Features/Profile/Components/PersonalEquipmentSummaryCard.swift` |
-| `profile-identity-header` | `ProfileIdentityHeader` | `Walk/Features/Profile/Components/ProfileIdentityHeader.swift` |
-| `route-fact-section` | `RouteFactSection` | `Walk/Features/Routes/Components/RouteFactSection.swift` |
-| `route-image-gallery` | `RouteImageGallery` | `Walk/Features/Routes/Components/RouteImageGallery.swift` |
-| `route-introduction` | `RouteIntroduction` | `Walk/Features/Routes/Components/RouteIntroduction.swift` |
-| `route-list-row` | `RouteListRow` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
-| `route-map` | `RouteMap` | `Walk/Features/Routes/Components/RouteMap.swift` |
-| `route-point-detail` | `RoutePointDetail` | `Walk/Features/Routes/Components/RoutePointDetail.swift` |
-| `route-point-section` | `RoutePointSection` | `Walk/Features/Routes/Components/RoutePointSection.swift` |
-| `route-reference-day-list` | `RouteReferenceDayList` | `Walk/Features/Routes/Components/RouteReferenceDayList.swift` |
-| `route-scene` | `RouteScene` | `Walk/Features/Routes/Components/RouteScene.swift` |
-| `route-segment-list` | `RouteSegmentList` | `Walk/Features/Routes/Components/RouteSegmentList.swift` |
-| `route-summary` | `RouteSummary` | `Walk/Features/Routes/Components/RouteSummary.swift` |
-| `search-route-result-row` | `SearchRouteResultRow` | `Walk/Features/Routes/Components/SearchRouteResultRow.swift` |
-| `transport-option-selection` | `TransportOptionSelection` | `Walk/Features/Routes/Components/TransportOptionSelection.swift` |
-| `trip-calendar-card` | `TripCalendarCard` | `Walk/Features/Trips/Components/TripCalendarCard.swift` |
-| `trip-cover-header` | `TripCoverHeader` | `Walk/Features/Trips/Components/TripCoverHeader.swift` |
-| `trip-day-arrangement` | `TripDayArrangement` | `Walk/Features/Trips/Components/TripDayArrangement.swift` |
-| `trip-day-summary-card` | `TripDaySummaryCard` | `Walk/Features/Trips/Components/TripDaySummaryCard.swift` |
-| `trip-equipment-item-row` | `TripEquipmentItemRow` | `Walk/Features/Trips/Components/TripEquipmentItemRow.swift` |
-| `trip-equipment-overview` | `TripEquipmentOverview` | `Walk/Features/Trips/Components/TripEquipmentOverview.swift` |
-| `trip-equipment-summary-card` | `TripEquipmentSummaryCard` | `Walk/Features/Trips/Components/TripEquipmentSummaryCard.swift` |
-| `trip-list-row` | `TripListRow` | `Walk/Features/Trips/Components/TripListRow.swift` |
-| `trip-route-metrics-summary` | `TripRouteMetricsSummary` | `Walk/Features/Trips/Components/TripRouteMetricsSummary.swift` |
-| `trip-route-summary-card` | `TripRouteSummaryCard` | `Walk/Features/Trips/Components/TripRouteSummaryCard.swift` |
-| `trip-route-version-card` | `TripRouteVersionCard` | `Walk/Features/Trips/Components/TripRouteVersionCard.swift` |
-| `trip-status-badge` | `TripStatusBadge` | `Walk/Features/Trips/TripStatusBadge.swift` |
-| `trip-weather-summary-card` | `TripWeatherSummaryCard` | `Walk/Features/Trips/Components/TripWeatherSummaryCard.swift` |
-| `weather-overview` | `WeatherOverview` | `Packages/WalkData/Sources/WalkData/API/Trips/PersonalTripModels.swift` |
-| `weather-summary` | `WeatherSummary` | `Walk/Features/Home/Components/WeatherSummary.swift` |
+| 总 UI Component ID | 层 | SwiftUI 承载 | 源码 |
+|---|---|---|---|
+| `account-menu-sheet` | L2b 业务独立 | `AccountMenuSheet` | `Walk/Features/Profile/Components/AccountMenuSheet.swift` |
+| `auth-panel` | L2b 业务独立 | `AuthPanel` | `Walk/Features/Profile/Components/AuthPanel.swift` |
+| `checklist-item-row` | L2b 业务独立 | `ChecklistItemRow` | `Walk/Features/Equipment/Components/ChecklistItemRow.swift` |
+| `checklist-panel` | L2c 业务组合 | `ChecklistPanel` | `Walk/Features/Equipment/Components/ChecklistPanel.swift` |
+| `daily-weather-card` | L2b 业务独立 | `DailyWeatherCard` | `Walk/Features/Trips/Components/DailyWeatherCard.swift` |
+| `elevation-profile` | L2b 业务独立 | `ElevationProfile` | `Walk/Features/Routes/Components/ElevationProfile.swift` |
+| `equipment-deletion-impact` | L2b 业务独立 | `EquipmentDeletionImpact` | `Walk/Features/Equipment/Components/EquipmentDeletionImpact.swift` |
+| `equipment-list-row` | L2b 业务独立 | `EquipmentListRow` | `Walk/Features/Equipment/Components/EquipmentListRow.swift` |
+| `focus-trip-summary` | L2b 业务独立 | `FocusTripSummary` | `Walk/Features/Home/Components/FocusTripSummary.swift` |
+| `gear-ring` | L2a 业务原子 | `GearRing` | `Walk/Features/Trips/Components/GearRing.swift` |
+| `generation-equipment-selection` | L2c 业务组合 | `GenerationEquipmentSelection` | `Walk/Features/Routes/Components/GenerationEquipmentSelection.swift` |
+| `generation-route-summary-card` | L2b 业务独立 | `GenerationRouteSummaryCard` | `Walk/Features/Routes/Components/GenerationRouteSummaryCard.swift` |
+| `generation-waiting-view` | L2b 业务独立 | `GenerationWaitingView` | `Walk/Features/Routes/Components/GenerationWaitingView.swift` |
+| `inline-equipment-editor` | L2b 业务独立 | `InlineEquipmentEditor` | `Walk/Features/Trips/Components/InlineEquipmentEditor.swift` |
+| `inline-list-name-editor` | L2b 业务独立 | `InlineListNameEditor` | `Walk/Features/Equipment/Components/InlineListNameEditor.swift` |
+| `personal-equipment-form` | L2b 业务独立 | `PersonalEquipmentForm` | `Walk/Features/Equipment/Components/PersonalEquipmentForm.swift` |
+| `personal-equipment-summary-card` | L2b 业务独立 | `PersonalEquipmentSummaryCard` | `Walk/Features/Profile/Components/PersonalEquipmentSummaryCard.swift` |
+| `profile-identity-header` | L2b 业务独立 | `ProfileIdentityHeader` | `Walk/Features/Profile/Components/ProfileIdentityHeader.swift` |
+| `route-fact-section` | L2b 业务独立 | `RouteFactSection` | `Walk/Features/Routes/Components/RouteFactSection.swift` |
+| `route-image-gallery` | L2b 业务独立 | `RouteImageGallery` | `Walk/Features/Routes/Components/RouteImageGallery.swift` |
+| `route-introduction` | L2b 业务独立 | `RouteIntroduction` | `Walk/Features/Routes/Components/RouteIntroduction.swift` |
+| `route-list-row` | L2b 业务独立 | `RouteListRow` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `route-map` | L2b 业务独立 | `RouteMap` | `Walk/Features/Routes/Components/RouteMap.swift` |
+| `route-point-detail` | L2b 业务独立 | `RoutePointDetail` | `Walk/Features/Routes/Components/RoutePointDetail.swift` |
+| `route-point-section` | L2b 业务独立 | `RoutePointSection` | `Walk/Features/Routes/Components/RoutePointSection.swift` |
+| `route-reference-day-list` | L2b 业务独立 | `RouteReferenceDayList` | `Walk/Features/Routes/Components/RouteReferenceDayList.swift` |
+| `route-scene` | L2b 业务独立 | `RouteScene` | `Walk/Features/Routes/Components/RouteScene.swift` |
+| `route-segment-list` | L2b 业务独立 | `RouteSegmentList` | `Walk/Features/Routes/Components/RouteSegmentList.swift` |
+| `route-summary` | L2b 业务独立 | `RouteSummary` | `Walk/Features/Routes/Components/RouteSummary.swift` |
+| `search-route-result-row` | L2b 业务独立 | `SearchRouteResultRow` | `Walk/Features/Routes/Components/SearchRouteResultRow.swift` |
+| `transport-option-selection` | L2b 业务独立 | `TransportOptionSelection` | `Walk/Features/Routes/Components/TransportOptionSelection.swift` |
+| `trek-day-badge` | L2a 业务原子 | `TrekDayBadge` | `Walk/Features/Trips/Components/TrekDayBadge.swift` |
+| `trip-calendar-card` | L2b 业务独立 | `TripCalendarCard` | `Walk/Features/Trips/Components/TripCalendarCard.swift` |
+| `trip-cover-header` | L2b 业务独立 | `TripCoverHeader` | `Walk/Features/Trips/Components/TripCoverHeader.swift` |
+| `trip-day-arrangement` | L2c 业务组合 | `TripDayArrangement` | `Walk/Features/Trips/Components/TripDayArrangement.swift` |
+| `trip-day-hike-summary` | L2c 业务组合 | `TripDayHikeSummary` | `Walk/Features/Trips/Components/TripDayHikeSummary.swift` |
+| `trip-day-summary-card` | L2c 业务组合 | `TripDaySummaryCard` | `Walk/Features/Trips/Components/TripDaySummaryCard.swift` |
+| `trip-day-transport-summary` | L2c 业务组合 | `TripDayTransportSummary` | `Walk/Features/Trips/Components/TripDayTransportSummary.swift` |
+| `trip-equipment-gear-rings` | L2c 业务组合 | `TripEquipmentGearRings` | `Walk/Features/Trips/Components/TripEquipmentGearRings.swift` |
+| `trip-equipment-item-row` | L2b 业务独立 | `TripEquipmentItemRow` | `Walk/Features/Trips/Components/TripEquipmentItemRow.swift` |
+| `trip-equipment-overview` | L2b 业务独立 | `TripEquipmentOverview` | `Walk/Features/Trips/Components/TripEquipmentOverview.swift` |
+| `trip-equipment-summary-card` | L2c 业务组合 | `TripEquipmentSummaryCard` | `Walk/Features/Trips/Components/TripEquipmentSummaryCard.swift` |
+| `trip-list-row` | L2b 业务独立 | `TripListRow` | `Walk/Features/Trips/Components/TripListRow.swift` |
+| `trip-route-metrics-summary` | L2b 业务独立 | `TripRouteMetricsSummary` | `Walk/Features/Trips/Components/TripRouteMetricsSummary.swift` |
+| `trip-route-summary-card` | L2b 业务独立 | `TripRouteSummaryCard` | `Walk/Features/Trips/Components/TripRouteSummaryCard.swift` |
+| `trip-route-version-card` | L2b 业务独立 | `TripRouteVersionCard` | `Walk/Features/Trips/Components/TripRouteVersionCard.swift` |
+| `trip-status-badge` | L2a 业务原子 | `TripStatusBadge` | `Walk/Features/Trips/TripStatusBadge.swift` |
+| `trip-weather-summary-card` | L2c 业务组合 | `TripWeatherSummaryCard` | `Walk/Features/Trips/Components/TripWeatherSummaryCard.swift` |
+| `trip-weather-trend-chart` | L2c 业务组合 | `TripWeatherTrendChart` | `Walk/Features/Trips/Components/TripWeatherTrendChart.swift` |
+| `weather-overview` | L2b 业务独立 | `WeatherOverview` | `Packages/WalkData/Sources/WalkData/API/Trips/PersonalTripModels.swift` |
+| `weather-summary` | L2a 业务原子 | `WeatherSummary` | `Walk/Features/Home/Components/WeatherSummary.swift` |
+
+「层」对应根仓 `docs/ui/taxonomy.md` 的业务组件分层（L2a 业务原子 / L2b 业务独立 / L2c 业务组合），由总 UI 目录 `components/business/{atoms,components,composites}/` 的共置目录决定，本文件不另行归层。
 
 ## Token 映射
 

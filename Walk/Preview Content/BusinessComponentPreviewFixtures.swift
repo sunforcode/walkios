@@ -1156,7 +1156,28 @@ enum BusinessComponentPreviewFixtures {
             title: "河谷入口至林线营地",
             endpoints: "徒步入口 → 林线营地",
             metrics: tripRouteMetrics
-        )
+        ),
+        totalTrekDays: 2,
+        outboundTransport: TripDayTransportSummaryProjection(
+            direction: .outbound,
+            title: "大交通与路线接驳",
+            timeRange: "08:00 出发",
+            duration: "3.0 小时",
+            path: "成都 → 四姑娘山镇",
+            modes: "公共交通",
+            notice: "游客中心换乘"
+        ),
+        hikeSummary: TripDayHikeSummaryProjection(
+            segment: "河谷入口至林线营地",
+            distance: "12.4 km",
+            ascent: "860 m",
+            duration: "5.0 小时",
+            nodes: [
+                TripDayHikeNodeProjection(type: "起点", name: "河谷入口", position: nil),
+                TripDayHikeNodeProjection(type: "终点", name: "林线营地", position: nil),
+            ]
+        ),
+        returnTransport: nil
     )
 
     static let tripDayPartial = TripDayProjection(
@@ -1179,6 +1200,27 @@ enum BusinessComponentPreviewFixtures {
             title: "林线营地至河谷出口",
             endpoints: nil,
             metrics: [tripRouteMetrics[0]]
+        ),
+        totalTrekDays: 2,
+        outboundTransport: nil,
+        hikeSummary: TripDayHikeSummaryProjection(
+            segment: "林线营地至河谷出口",
+            distance: nil,
+            ascent: nil,
+            duration: nil,
+            nodes: [
+                TripDayHikeNodeProjection(type: "起点", name: "林线营地", position: nil),
+                TripDayHikeNodeProjection(type: "终点", name: "河谷出口", position: nil),
+            ]
+        ),
+        returnTransport: TripDayTransportSummaryProjection(
+            direction: .return,
+            title: "返程接驳与大交通",
+            timeRange: nil,
+            duration: nil,
+            path: nil,
+            modes: nil,
+            notice: nil
         )
     )
 
@@ -1684,22 +1726,34 @@ enum BusinessComponentPreviewFixtures {
     )
 
     static let tripWeatherDefault = TripWeatherSummaryProjection(
-        days: [weatherDayDefault, weatherDayKnownSecond],
+        samples: [
+            TripWeatherTrendSampleProjection(id: "d1", date: "09-08", low: 8, high: 16, rain: 0.2),
+            TripWeatherTrendSampleProjection(id: "d2", date: "09-09", low: 6, high: 14, rain: 0.45),
+        ],
         notice: nil
     )
 
     static let tripWeatherPartial = TripWeatherSummaryProjection(
-        days: [weatherDayDefault, weatherDayUnavailable],
+        samples: [
+            TripWeatherTrendSampleProjection(id: "d1", date: "09-08", low: 8, high: 16, rain: 0.2),
+        ],
         notice: TripNoticeProjection(
             id: "weather-partial",
             title: "部分天气待确认",
-            message: "不可用日期仍保留，其他日期与已知字段不变。",
+            message: "缺失日期不在趋势图中，其他日期与已知字段不变。",
             tone: .warning
         )
     )
 
     static let tripWeatherLongContent = TripWeatherSummaryProjection(
-        days: [weatherDayLong],
+        samples: [
+            TripWeatherTrendSampleProjection(id: "d1", date: "09-08", low: -3, high: 21, rain: 0.65),
+            TripWeatherTrendSampleProjection(id: "d2", date: "09-09", low: 2, high: 18, rain: 0.3),
+            TripWeatherTrendSampleProjection(id: "d3", date: "09-10", low: 0, high: 12, rain: 0.8),
+            TripWeatherTrendSampleProjection(id: "d4", date: "09-11", low: 5, high: 19, rain: 0.1),
+            TripWeatherTrendSampleProjection(id: "d5", date: "09-12", low: 7, high: 17, rain: 0.55),
+            TripWeatherTrendSampleProjection(id: "d6", date: "09-13", low: 4, high: 15, rain: 0.25),
+        ],
         notice: TripNoticeProjection(
             id: "weather-long",
             title: "部分天气可能过期",

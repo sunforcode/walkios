@@ -292,6 +292,11 @@ enum ComponentCatalog {
             FocusTripSummary(model: HomePreviewFixtures.focusComplete, onOpen: {})
                 .frame(height: 700)
         },
+        entry("GearRing", .business) {
+            TripBusinessComponents.GearRing(
+                projection: GearRingProjection(value: 6, total: 8, tone: .mint, label: "已有")
+            )
+        },
         entry("GenerationRouteSummaryCard", .business) {
             RouteBusinessComponents.GenerationRouteSummaryCard(
                 projection: BusinessComponentPreviewFixtures.generationRouteDefault
@@ -409,6 +414,11 @@ enum ComponentCatalog {
         entry("RouteSummary", .business) {
             RouteBusinessComponents.RouteSummary(projection: BusinessComponentPreviewFixtures.routeSummary)
         },
+        entry("TrekDayBadge", .business) {
+            TripBusinessComponents.TrekDayBadge(
+                projection: TrekDayBadgeProjection(trekDayNumber: 2, totalTrekDays: 3)
+            )
+        },
         entry("TripCalendarCard", .business) {
             TripBusinessComponents.TripCalendarCard(
                 projection: BusinessComponentPreviewFixtures.tripCalendarDefault,
@@ -435,10 +445,41 @@ enum ComponentCatalog {
                 onActivate: { _ in }
             )
         },
+        entry("TripDayHikeSummary", .business) {
+            TripBusinessComponents.TripDayHikeSummary(
+                projection: BusinessComponentPreviewFixtures.tripDayDefault.hikeSummary
+                    ?? TripDayHikeSummaryProjection(
+                        segment: "徒步段",
+                        distance: nil,
+                        ascent: nil,
+                        duration: nil,
+                        nodes: []
+                    )
+            )
+        },
+        entry("TripDayTransportSummary", .business) {
+            TripBusinessComponents.TripDayTransportSummary(
+                projection: BusinessComponentPreviewFixtures.tripDayDefault.outboundTransport
+                    ?? TripDayTransportSummaryProjection(
+                        direction: .outbound,
+                        title: "大交通与路线接驳",
+                        timeRange: nil,
+                        duration: nil,
+                        path: nil,
+                        modes: nil,
+                        notice: nil
+                    )
+            )
+        },
         entry("TripEquipmentSummaryCard", .business) {
             TripBusinessComponents.TripEquipmentSummaryCard(
                 projection: BusinessComponentPreviewFixtures.tripEquipmentDefault,
                 onActivate: {}
+            )
+        },
+        entry("TripEquipmentGearRings", .business) {
+            TripBusinessComponents.TripEquipmentGearRings(
+                projection: BusinessComponentPreviewFixtures.tripEquipmentDefault.gearRings
             )
         },
         entry("TripListRow", .business) {
@@ -462,6 +503,11 @@ enum ComponentCatalog {
             TripBusinessComponents.TripWeatherSummaryCard(
                 projection: BusinessComponentPreviewFixtures.tripWeatherDefault,
                 onActivate: {}
+            )
+        },
+        entry("TripWeatherTrendChart", .business) {
+            TripBusinessComponents.TripWeatherTrendChart(
+                samples: BusinessComponentPreviewFixtures.tripWeatherDefault.samples
             )
         },
         entry("WeatherOverview", .business) {

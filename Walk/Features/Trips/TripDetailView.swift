@@ -75,7 +75,6 @@ struct TripDetailView: View {
                     tripDetailContent(TripDetailPresentation(
                         detail: detail,
                         days: days,
-                        weather: nil,
                         routeVersionStatus: viewModel.routeVersionStatus ?? detail.routeVersionStatus
                     ))
                 } else {

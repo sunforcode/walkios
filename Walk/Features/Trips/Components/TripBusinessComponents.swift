@@ -103,6 +103,10 @@ struct TripDayProjection: Equatable {
     var points: [TripPointProjection]
     let weather: TripWeatherProjection
     var dailyRouteSummary: TripDailyRouteSummaryProjection?
+    var totalTrekDays: Int = 0
+    var outboundTransport: TripDayTransportSummaryProjection?
+    var hikeSummary: TripDayHikeSummaryProjection?
+    var returnTransport: TripDayTransportSummaryProjection?
 }
 
 enum TripNoticeTone: Equatable {

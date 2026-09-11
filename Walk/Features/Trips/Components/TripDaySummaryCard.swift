@@ -2,6 +2,8 @@ import SwiftUI
 import WalkData
 import WalkDesignSystem
 
+/// 业务组合 TripDaySummaryCard（L2c）：冻结自然日摘要（徽章、接驳、徒步与天气块）。
+/// 合同见 docs/ui/components/business/composites/trip-day-summary-card/spec.md。
 extension TripBusinessComponents {
     struct TripDaySummaryCard: View {
         let day: TripDayProjection
@@ -24,30 +26,28 @@ extension TripBusinessComponents {
                 VStack(alignment: .leading, spacing: Spacing.md) {
                     dayIdentity
 
-                    Timeline(day.actions, optionalTime: \.time) { item in
-                        actionContent(item)
+                    if day.hikingDayNumber != nil {
+                        TripBusinessComponents.TrekDayBadge(
+                            projection: TrekDayBadgeProjection(
+                                trekDayNumber: day.hikingDayNumber,
+                                totalTrekDays: day.totalTrekDays
+                            )
+                        )
                     }
 
-                    if !day.points.isEmpty {
-                        divider
-                        VStack(alignment: .leading, spacing: 0) {
-                            ForEach(Array(day.points.enumerated()), id: \.element.id) { index, point in
-                                pointRow(point)
-                                if index < day.points.count - 1 { divider }
-                            }
-                        }
+                    if let outbound = day.outboundTransport {
+                        TripBusinessComponents.TripDayTransportSummary(projection: outbound)
                     }
 
-                    divider
-                    VStack(alignment: .leading, spacing: Spacing.xs) {
-                        Text("天气")
-                            .font(.listTitle)
-                            .foregroundStyle(AppColors.textPrimary)
-                        Text(day.weather.conclusion)
-                            .font(.appCaption)
-                            .foregroundStyle(AppColors.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                    if let hike = day.hikeSummary {
+                        TripBusinessComponents.TripDayHikeSummary(projection: hike)
                     }
+
+                    if let returnTransport = day.returnTransport {
+                        TripBusinessComponents.TripDayTransportSummary(projection: returnTransport)
+                    }
+
+                    weatherBlock
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -71,65 +71,48 @@ extension TripBusinessComponents {
                         .foregroundStyle(AppColors.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(day.primaryStage)
-                        .font(.micro)
-                        .foregroundStyle(AppColors.textWeak)
+                        .font(.listTitle)
+                        .foregroundStyle(AppColors.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
 
-        private func actionContent(_ item: TripTimelineItemProjection) -> some View {
+        /// 天气块：借用本卡投影的非组件块；整体不可用时保留块并显示「暂不可用」。
+        private var weatherBlock: some View {
             VStack(alignment: .leading, spacing: Spacing.xs) {
-                Text(item.title)
-                    .font(.listTitle)
-                    .foregroundStyle(AppColors.textPrimary)
+                HStack(alignment: .firstTextBaseline, spacing: Spacing.sm) {
+                    Text("天气")
+                        .font(.listTitle)
+                        .foregroundStyle(AppColors.textPrimary)
+                    Text(weatherStateLabel)
+                        .font(.appCaption)
+                        .foregroundStyle(AppColors.textWeak)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Text(day.weather.fields.map { $0.value.displayText }.joined(separator: " · "))
+                    .font(.appCaption)
+                    .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                ForEach(Array(item.details.enumerated()), id: \.offset) { _, detail in
-                    Text(detail)
-                        .foregroundStyle(AppColors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                ForEach(Array(item.notices.enumerated()), id: \.offset) { _, notice in
-                    Text(notice)
-                        .foregroundStyle(AppColors.warning)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
             }
+            .padding(Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                AppColors.surfaceSoft,
+                in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+            )
         }
 
-        private func pointRow(_ point: TripPointProjection) -> some View {
-            ListRow(variant: .grouped) {
-                HStack(alignment: .top, spacing: Spacing.md) {
-                    VStack(alignment: .leading, spacing: Spacing.xs) {
-                        Text(point.title)
-                            .font(.listTitle)
-                            .foregroundStyle(AppColors.textPrimary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        ForEach(Array(point.details.enumerated()), id: \.offset) { _, detail in
-                            Text(detail)
-                                .font(.appCaption)
-                                .foregroundStyle(AppColors.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    if let trailing = tripNonEmpty(point.trailing) {
-                        Text(trailing)
-                            .font(.appCaption)
-                            .foregroundStyle(AppColors.textWeak)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
+        private var weatherStateLabel: String {
+            if day.weather.fields.allSatisfy({ $0.value.isUnavailable }) {
+                return "暂不可用"
             }
-        }
-
-        private var divider: some View {
-            Rectangle()
-                .fill(AppColors.surfaceDivider)
-                .frame(height: 1)
-                .accessibilityHidden(true)
+            if day.weather.hasStaleField {
+                return "信息已过期"
+            }
+            return "当日摘要"
         }
     }
 }

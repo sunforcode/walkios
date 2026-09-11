@@ -107,11 +107,12 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         XCTAssertNil(sut.weather)
         XCTAssertTrue(sut.isWeatherUnavailable)
         XCTAssertNil(sut.errorMessage)
-        XCTAssertFalse(
+        // app-flow（ui-component-restructure）：天气结果可用时天气入口必须呈现，
+        // 不因天气关联投影的装配方式被静默省略；冻结逐日样本仍然可用。
+        XCTAssertTrue(
             TripDetailPresentation(
                 detail: detail,
                 days: PersonalTripTestFixtures.days,
-                weather: nil,
                 routeVersionStatus: detail.routeVersionStatus
             ).blocks.contains(.weather)
         )
@@ -339,7 +340,6 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         let presentation = TripDetailPresentation(
             detail: detail,
             days: PersonalTripTestFixtures.populatedDays,
-            weather: PersonalTripTestFixtures.populatedWeather,
             routeVersionStatus: detail.routeVersionStatus
         )
 
@@ -364,7 +364,6 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         let presentation = TripDetailPresentation(
             detail: detail,
             days: PersonalTripTestFixtures.days,
-            weather: PersonalTripTestFixtures.populatedWeather,
             routeVersionStatus: detail.routeVersionStatus
         )
 
@@ -380,7 +379,6 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         let presentation = TripDetailPresentation(
             detail: detail,
             days: PersonalTripTestFixtures.populatedDays,
-            weather: PersonalTripTestFixtures.populatedWeather,
             routeVersionStatus: detail.routeVersionStatus
         )
 
@@ -391,7 +389,7 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         XCTAssertEqual(presentation.dayProjections[0].actions.map(\.id), ["1", "2"])
         XCTAssertEqual(presentation.dayProjections[0].points.map(\.id), ["3", "8"])
         XCTAssertEqual(presentation.dayProjections[0].weather.condition.value, "多云")
-        XCTAssertEqual(presentation.weatherSummaryProjection?.days.map(\.id), ["day-1"])
+        XCTAssertEqual(presentation.weatherSummaryProjection?.samples.map(\.id), ["day-1"])
         XCTAssertNil(presentation.weatherSummaryProjection?.notice)
         XCTAssertEqual(presentation.equipmentSummaryProjection.itemCount, 0)
         XCTAssertEqual(presentation.equipmentSummaryProjection.knownTotalWeight, "0 g")

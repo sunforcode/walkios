@@ -10,12 +10,12 @@ struct TripEquipmentSummaryProjection: Equatable {
     let missingWeightItemCount: Int
     let editable: Bool
 
-    var metrics: [MetricItemModel] {
-        [
-            MetricItemModel(id: "item-count", value: "\(itemCount)", label: "清单条目"),
-            MetricItemModel(id: "owned-count", value: "\(ownedItemCount)", label: "已有条目"),
-            MetricItemModel(id: "unconfirmed-count", value: "\(unconfirmedOwnedItemCount)", label: "未确认已有"),
-        ]
+    var gearRings: TripEquipmentGearRingsProjection {
+        TripEquipmentGearRingsProjection(
+            itemCount: itemCount,
+            ownedItemCount: ownedItemCount,
+            unconfirmedOwnedItemCount: unconfirmedOwnedItemCount
+        )
     }
 }
 
@@ -29,7 +29,7 @@ extension TripBusinessComponents {
                 WalkCard {
                     VStack(alignment: .leading, spacing: Spacing.lg) {
                         HStack(alignment: .top, spacing: Spacing.md) {
-                            Text("本次装备")
+                            Text("行程装备")
                                 .font(.sectionTitle)
                                 .foregroundStyle(AppColors.textPrimary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -49,9 +49,15 @@ extension TripBusinessComponents {
                                 .font(.appCaption)
                                 .foregroundStyle(AppColors.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
+                            Text("数量基于本次行程清单，未确认不等于缺少")
+                                .font(.appCaption)
+                                .foregroundStyle(AppColors.textWeak)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
 
-                        MetricGroup(items: projection.metrics, variant: .grid)
+                        TripBusinessComponents.TripEquipmentGearRings(
+                            projection: projection.gearRings
+                        )
                     }
                     .padding(.trailing, Spacing.xl)
                     .overlay(alignment: .trailing) {

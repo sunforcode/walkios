@@ -29,22 +29,35 @@ def master_object_ids():
     )
     components = []
     for group in ("common", "business"):
+        # business/ is tiered (atoms/ components/ composites/); scan recursively.
+        # Component ID is the leaf directory name and stays globally unique.
+        base = MASTER_UI / "components" / group
         components += sorted(
             d.name
-            for d in (MASTER_UI / "components" / group).iterdir()
+            for d in base.rglob("*")
             if d.is_dir() and (d / "spec.md").is_file()
         )
     return pages, components
 
 
 def registry_rows():
-    """Yield (object_id, carrier, source_cell) for every registry table row."""
+    """Yield (object_id, carrier, source_cell) for every registry table row.
+
+    The business component table carries a leading 「层」 taxonomy column
+    (L2a/L2b/L2c from the master tiers), so carrier and source are read as
+    the last two cells of the row instead of fixed column positions.
+    """
     text = README.read_text(encoding="utf-8")
     for line in text.splitlines():
-        match = re.match(r"^\|\s*`([A-Za-z0-9-]+)`\s*\|\s*`?([^|`]*)`?\s*\|\s*([^|]+)\|", line)
-        if match:
-            object_id, carrier, source = match.groups()
-            yield object_id.strip(), carrier.strip(), source.strip()
+        if not line.lstrip().startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) < 3:
+            continue
+        object_id = cells[0].strip("`")
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]*", object_id):
+            continue
+        yield object_id, cells[-2].strip("`"), cells[-1]
 
 
 class PlatformSpecRegistryTests(unittest.TestCase):
