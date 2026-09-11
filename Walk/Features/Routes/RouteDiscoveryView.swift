@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import WalkData
 import WalkDesignSystem
 
@@ -26,6 +27,9 @@ struct RouteDiscoveryView: View {
         _viewModel = StateObject(wrappedValue: RouteDiscoveryViewModel(service: routeService))
     }
 
+    @State private var currentRouteIndex = 0
+    @State private var lastAnnouncedIndex: Int?
+
     var body: some View {
         GeometryReader { geometry in
             ImmersivePageContainer {
@@ -52,7 +56,11 @@ struct RouteDiscoveryView: View {
                 .frame(width: viewport.width, height: viewport.height)
         } else if let message = viewModel.errorMessage, viewModel.routes.isEmpty {
             RouteSceneState {
-                ErrorView(message: message, title: "暂时无法加载路线", variant: .section) {
+                ErrorView(
+                    message: "不会用缓存猜测替代真实路线资料。",
+                    title: "暂时无法加载路线",
+                    variant: .scene
+                ) {
                     Task { await viewModel.retry() }
                 }
             }
@@ -62,8 +70,8 @@ struct RouteDiscoveryView: View {
                 EmptyStateView(
                     title: "暂无路线",
                     message: "当前暂无可发现路线",
-                    icon: nil,
-                    variant: .compactText
+                    icon: "route",
+                    variant: .default
                 )
             }
             .frame(width: viewport.width, height: viewport.height)
@@ -112,9 +120,50 @@ struct RouteDiscoveryView: View {
                     }
                 }
                 .background(RoutePagingConfigurator())
+                .background(
+                    GeometryReader { proxy in
+                        AppColors.surfacePrimary.opacity(0)
+                            .preference(
+                            key: RoutePagingOffsetKey.self,
+                            value: proxy.frame(in: .named("routePaging")).minY
+                        )
+                    }
+                )
             }
+            .coordinateSpace(name: "routePaging")
             .scrollIndicators(.hidden)
+            .onPreferenceChange(RoutePagingOffsetKey.self) { offset in
+                guard !viewModel.routes.isEmpty else { return }
+                let index = max(
+                    0,
+                    min(
+                        viewModel.routes.count - 1,
+                        Int(round(-offset / viewport.height))
+                    )
+                )
+                guard index != currentRouteIndex else { return }
+                currentRouteIndex = index
+                announcePage(at: index)
+            }
         }
+    }
+
+    /// R3：换页公告。首尾用边界文案，中段用「{路线身份}，第 X 条，共 N 条」；
+    /// 单条路线不暴露相邻切换，不做公告。
+    private func announcePage(at index: Int) {
+        let count = viewModel.routes.count
+        guard count > 1, lastAnnouncedIndex != index else { return }
+        lastAnnouncedIndex = index
+        let route = viewModel.routes[index]
+        let message: String
+        if index == 0 {
+            message = "已到第一条路线"
+        } else if index == count - 1 {
+            message = "已到最后一条路线"
+        } else {
+            message = "\(route.name)，第 \(index + 1) 条，共 \(count) 条"
+        }
+        UIAccessibility.post(notification: .announcement, argument: message)
     }
 
     private func horizontalPadding(for width: CGFloat) -> CGFloat {
@@ -186,16 +235,20 @@ struct RouteCollectionView: View {
         if viewModel.isLoading && viewModel.routes.isEmpty {
             RouteRowSkeletonList()
         } else if let message = viewModel.errorMessage, viewModel.routes.isEmpty {
-            ErrorView(message: message, variant: .section) {
+            ErrorView(
+                message: "不会使用缓存或猜测路线替代。",
+                title: "暂时无法加载全部路线",
+                variant: .section
+            ) {
                 Task { await viewModel.retry() }
             }
             .frame(minHeight: 360)
         } else if viewModel.routes.isEmpty {
             EmptyStateView(
-                title: "暂无路线",
-                message: "当前暂无可选择路线",
-                icon: "map",
-                variant: .section
+                title: "当前暂无可选择路线",
+                message: "路线准备完成后会出现在这里。",
+                icon: "route",
+                variant: .default
             )
             .frame(maxWidth: .infinity, minHeight: 360, alignment: .center)
         } else {
@@ -228,16 +281,36 @@ struct RouteCollectionView: View {
 
 struct RouteSearchView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var viewModel: RouteDiscoveryViewModel
-    @State private var query = ""
+    /// S5：会话状态由 App 层持有，返回后再进恢复 query 与结果；预览/独立使用时用 convenience init 自建。
+    @ObservedObject private var viewModel: RouteDiscoveryViewModel
+    @Binding private var query: String
+    private let ownsModel: Bool
+    @State private var localQuery = ""
     private let onNavigate: (AppDestination) -> Void
 
     init(
-        routeService: RouteService,
+        model: RouteDiscoveryViewModel,
+        query: Binding<String>,
+        onNavigate: @escaping (AppDestination) -> Void
+    ) {
+        _viewModel = ObservedObject(wrappedValue: model)
+        _query = query
+        ownsModel = false
+        self.onNavigate = onNavigate
+    }
+
+    init(
+        routeService: RouteDiscoveryServicing,
         onNavigate: @escaping (AppDestination) -> Void = { _ in }
     ) {
+        _viewModel = ObservedObject(wrappedValue: RouteDiscoveryViewModel(service: routeService))
+        _query = .constant("")
+        ownsModel = true
         self.onNavigate = onNavigate
-        _viewModel = StateObject(wrappedValue: RouteDiscoveryViewModel(service: routeService))
+    }
+
+    private var boundQuery: Binding<String> {
+        ownsModel ? $localQuery : $query
     }
 
     var body: some View {
@@ -268,19 +341,19 @@ struct RouteSearchView: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
-        .task(id: query) {
-            await viewModel.search(query: normalizedQueryIsEmpty(query) ? nil : query)
+        .task(id: boundQuery.wrappedValue) {
+            await viewModel.search(query: normalizedQueryIsEmpty(boundQuery.wrappedValue) ? nil : boundQuery.wrappedValue)
         }
     }
 
     private var searchInputRegion: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             SearchField(
-                text: $query,
-                placeholder: "搜索路线名称或地区",
+                text: boundQuery,
+                placeholder: "输入路线名称或地区",
                 onSubmit: submitSearch
             )
-            .background(SearchFocusActivator(placeholder: "搜索路线名称或地区"))
+            .background(SearchFocusActivator(placeholder: "输入路线名称或地区"))
 
             Text("只搜索 Walk 当前提供的徒步路线")
                 .font(.appCaption)
@@ -301,13 +374,18 @@ struct RouteSearchView: View {
         if viewModel.isLoading {
             RouteRowSkeletonList()
         } else if let message = viewModel.errorMessage {
-            ErrorView(message: message, title: "搜索失败", variant: .section) {
+            ErrorView(
+                message: "已保留关键词，不会用猜测结果替代。",
+                title: "暂时无法搜索路线",
+                variant: .section,
+                retryTitle: "重新搜索"
+            ) {
                 submitSearch()
             }
         } else if viewModel.searchState == .initial {
             EmptyStateView(
-                title: "搜索路线",
-                message: "输入路线名称或地区",
+                title: "输入名称或地区",
+                message: "初始状态不展示默认结果。",
                 icon: nil,
                 variant: .compactText
             )
@@ -344,8 +422,9 @@ struct RouteSearchView: View {
         }
     }
 
+    /// S4：submit 立即提交同一 query，不经防抖。
     private func submitSearch() {
-        Task { await viewModel.search(query: query) }
+        Task { await viewModel.search(query: boundQuery.wrappedValue, immediate: true) }
     }
 
     private func normalizedQueryIsEmpty(_ value: String) -> Bool {
@@ -411,6 +490,13 @@ private extension UIView {
             if let match = subview.firstTextField(placeholder: placeholder) { return match }
         }
         return nil
+    }
+}
+
+private struct RoutePagingOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 

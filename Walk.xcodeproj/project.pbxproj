@@ -49,7 +49,6 @@
 		5C2627064CD04C04C3461508 /* TripWeatherSummaryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEC86503816BD496356B44FD /* TripWeatherSummaryCard.swift */; };
 		5E49113C7618A9F052C5F1C6 /* WeatherSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE187F6977D2974DEA59736B /* WeatherSummary.swift */; };
 		61B772F5BD448199CD6F569D /* TripDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83A71BF8928F1A59C4C48B2D /* TripDetailViewModel.swift */; };
-		63681F1BC342B448FCDBD91F /* RouteImageViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C38D79612126AAB98BA2B55C /* RouteImageViewer.swift */; };
 		65E591A09ADECDD922BA0B8C /* GearRing.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7153C525323FE15AA76809F /* GearRing.swift */; };
 		6832CD3E798B407E63E98482 /* RouteServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B690C9253F9396BBCF3C40F7 /* RouteServiceTests.swift */; };
 		684BCBD5B1D1A7A33F67499C /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74ED2E97F8E3A7A019F59AEB /* ProfileView.swift */; };
@@ -291,7 +290,6 @@
 		BF88D3C4E618B2BD0E0CA648 /* RouteDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteDetailViewModel.swift; sourceTree = "<group>"; };
 		C03E5325191C948A81B01945 /* InlineEquipmentEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineEquipmentEditor.swift; sourceTree = "<group>"; };
 		C04A313DB157577565B65E9D /* trip-error.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "trip-error.json"; sourceTree = "<group>"; };
-		C38D79612126AAB98BA2B55C /* RouteImageViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteImageViewer.swift; sourceTree = "<group>"; };
 		C58ADCA1B4564AD4EB35FB90 /* page-dates.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "page-dates.json"; sourceTree = "<group>"; };
 		C613BA3A0A69003BCAE2B966 /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
 		C7153C525323FE15AA76809F /* GearRing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GearRing.swift; sourceTree = "<group>"; };
@@ -763,7 +761,6 @@
 				D1D789BEF5D6B2F768BB50C2 /* RouteBusinessComponents.swift */,
 				A4EE69D98D191BE05CE0B2EF /* RouteFactSection.swift */,
 				BDC1E98213C90BD8C481440C /* RouteImageGallery.swift */,
-				C38D79612126AAB98BA2B55C /* RouteImageViewer.swift */,
 				DEB80044BA5FF757D45DAA3F /* RouteIntroduction.swift */,
 				4B69F5B7E0350CECEFA93075 /* RouteListRow.swift */,
 				2DA5A6F087837F367589EEDE /* RouteMap.swift */,
@@ -1084,7 +1081,6 @@
 				A9F3AB1BA71B121E31F1BA2B /* RouteDiscoveryViewModel.swift in Sources */,
 				B1FAA930018081ADFE609AE1 /* RouteFactSection.swift in Sources */,
 				251B91364A8FA25DB645E213 /* RouteImageGallery.swift in Sources */,
-				63681F1BC342B448FCDBD91F /* RouteImageViewer.swift in Sources */,
 				0B63700009F97E809FD73E6E /* RouteIntroduction.swift in Sources */,
 				DC629909314FCC317D7B86E9 /* RouteListRow.swift in Sources */,
 				50E71CF001364D0404D047DE /* RouteMap.swift in Sources */,

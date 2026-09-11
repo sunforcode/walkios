@@ -349,18 +349,9 @@ enum ComponentCatalog {
         },
         entry("RouteImageGallery", .business) {
             RouteBusinessComponents.RouteImageGallery(
-                images: BusinessComponentPreviewFixtures.routeImages,
-                onOpenImage: { _ in }
+                images: BusinessComponentPreviewFixtures.routeImages
             ) { image in
                 RouteDeterministicImageSurface(style: BusinessComponentPreviewFixtures.imageStyle(for: image.id))
-            }
-        },
-        entry("RouteImageViewer", .business) {
-            RouteBusinessComponents.RouteImageViewer(
-                image: BusinessComponentPreviewFixtures.routeImages[0],
-                onDismiss: {}
-            ) {
-                RouteDeterministicImageSurface(style: .ridge)
             }
         },
         entry("RouteIntroduction", .business) {

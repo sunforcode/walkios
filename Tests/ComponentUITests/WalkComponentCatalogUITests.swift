@@ -107,7 +107,7 @@ final class WalkComponentCatalogUITests: XCTestCase {
         "ElevationProfile", "EquipmentDeletionImpact", "EquipmentListRow", "FocusTripSummary",
         "GenerationRouteSummaryCard", "GenerationWaitingView", "HeatmapCalendar", "InlineEquipmentEditor",
         "InlineListNameEditor", "PersonalEquipmentForm", "PersonalEquipmentSummaryCard", "ProfileIdentityHeader",
-        "RouteFactSection", "RouteImageGallery", "RouteImageViewer", "RouteIntroduction", "RouteListRow",
+        "RouteFactSection", "RouteImageGallery", "RouteIntroduction", "RouteListRow",
         "RouteMap", "RoutePointDetail", "RoutePointSection", "RouteReferenceDayList", "RouteScene",
         "RouteSegmentList", "RouteSummary", "TripCalendarCard", "TripCoverHeader", "TripDayArrangement",
         "TripDaySummaryCard", "TripEquipmentSummaryCard", "TripListRow", "TripRouteSummaryCard",

@@ -7,10 +7,10 @@ final class ComponentCatalogTests: XCTestCase {
     func testCatalogMatchesAuthoritativeComponentInventory() {
         let entries = ComponentCatalog.entries
 
-        XCTAssertEqual(entries.count, 84)
-        XCTAssertEqual(Set(entries.map(\.id)).count, 84)
+        XCTAssertEqual(entries.count, 83)
+        XCTAssertEqual(Set(entries.map(\.id)).count, 83)
         XCTAssertEqual(entries.filter { $0.category == .common }.count, 38)
-        XCTAssertEqual(entries.filter { $0.category == .business }.count, 46)
+        XCTAssertEqual(entries.filter { $0.category == .business }.count, 45)
         XCTAssertEqual(Set(entries.map(\.id)), Set(Self.expectedComponentIDs))
     }
 
@@ -57,7 +57,7 @@ final class ComponentCatalogTests: XCTestCase {
         "ElevationProfile", "EquipmentDeletionImpact", "EquipmentListRow", "FocusTripSummary",
         "GearRing", "GenerationRouteSummaryCard", "GenerationWaitingView", "HeatmapCalendar",
         "InlineEquipmentEditor", "InlineListNameEditor", "PersonalEquipmentForm", "PersonalEquipmentSummaryCard", "ProfileIdentityHeader",
-        "RouteFactSection", "RouteImageGallery", "RouteImageViewer", "RouteIntroduction", "RouteListRow",
+        "RouteFactSection", "RouteImageGallery", "RouteIntroduction", "RouteListRow",
         "RouteMap", "RoutePointDetail", "RoutePointSection", "RouteReferenceDayList", "RouteScene",
         "RouteSegmentList", "RouteSummary", "TrekDayBadge", "TripCalendarCard", "TripCoverHeader", "TripDayArrangement",
         "TripDayHikeSummary", "TripDaySummaryCard", "TripDayTransportSummary", "TripEquipmentGearRings",

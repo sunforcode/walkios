@@ -207,10 +207,11 @@ final class RouteDetailViewModelTests: XCTestCase {
         let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
 
         XCTAssertTrue(source.contains("RouteMapView("))
-        XCTAssertTrue(source.contains("private struct RoutePointBottomDetail"))
-        XCTAssertTrue(source.contains("private struct RouteImageGrid"))
-        XCTAssertTrue(source.contains("private struct RouteImageViewer"))
-        XCTAssertTrue(source.contains("@State private var selectedImage: RouteDetailImagePresentation?"))
+        XCTAssertFalse(source.contains("private struct RoutePointBottomDetail"), "6.3 后页面不再持有私有点位详情")
+        XCTAssertTrue(source.contains("RouteBusinessComponents.RoutePointDetail("), "点位详情使用生产 RoutePointDetail 组件")
+        XCTAssertFalse(source.contains("private struct RouteImageGrid"), "6.3 后页面不保留私有图片网格")
+        XCTAssertFalse(source.contains("private struct RouteImageViewer"), "6.3 后页面不保留图片查看器")
+        XCTAssertFalse(source.contains("@State private var selectedImage: RouteDetailImagePresentation?"), "6.3 后页面不持有图片覆盖层状态")
     }
 
     func testRouteDetailSafeProjectionAPIsPreserveOptionalityAndConfidence() throws {

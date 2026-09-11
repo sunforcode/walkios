@@ -3,6 +3,7 @@ import SwiftUI
 public struct ErrorView: View {
      public let message: String
      public let retryAction: (() -> Void)?
+     public let retryTitle: String
      public var title: String
      public var variant: StatePresentationVariant
 
@@ -10,10 +11,12 @@ public struct ErrorView: View {
         message: String,
         title: String = "加载失败",
         variant: StatePresentationVariant = .page,
+        retryTitle: String = "重试",
         retry: (() -> Void)? = nil
     ) {
         self.message = message
         self.retryAction = retry
+        self.retryTitle = retryTitle
         self.title = title
         self.variant = variant
     }
@@ -41,7 +44,7 @@ public struct ErrorView: View {
 
                 if let retryAction {
                     SecondaryAction(
-                        title: "重试",
+                        title: retryTitle,
                         variant: variant == .page ? .default : .inline,
                         action: retryAction
                     )

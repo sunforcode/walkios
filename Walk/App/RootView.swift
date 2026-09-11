@@ -3,12 +3,20 @@ import WalkData
 import WalkDesignSystem
 
 struct RootView: View {
-    @EnvironmentObject private var appEnvironment: AppEnvironment
+    @ObservedObject private var appEnvironment: AppEnvironment
     @State private var shell = AppShellState()
     @State private var pendingAuthIntent: PendingAuthIntent?
     @State private var pendingAuthTab: AppTab?
     @State private var routeListShowsBackButton = false
     @State private var authenticationGeneration = 0
+    /// S5：搜索会话状态提升到 App 层，返回后再进 PAGE-SEARCH 恢复 query 与结果。
+    @StateObject private var routeSearchModel: RouteDiscoveryViewModel
+    @State private var routeSearchQuery = ""
+
+    init(appEnvironment: AppEnvironment) {
+        _appEnvironment = ObservedObject(wrappedValue: appEnvironment)
+        _routeSearchModel = StateObject(wrappedValue: RouteDiscoveryViewModel(service: appEnvironment.routeService))
+    }
 
     var body: some View {
         TabView(selection: selectedTabBinding) {
@@ -189,7 +197,8 @@ struct RootView: View {
                 )
             case .routeSearch:
                 RouteSearchView(
-                    routeService: appEnvironment.routeService,
+                    model: routeSearchModel,
+                    query: $routeSearchQuery,
                     onNavigate: { navigate($0, in: shell.selectedTab) }
                 )
             case let .routeDetail(routeID):

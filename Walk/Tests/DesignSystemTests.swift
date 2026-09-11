@@ -464,13 +464,15 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(source.contains("highlightedAnnotationIDs"))
     }
 
+    /// 6.3 修订（D2）：RouteSummary 内 MetricGroup.grid 是指标唯一承载，页面不再叠加私有指标面板。
     func testRouteDetailSummaryUsesIconLedMetricPanelWithoutRepeatedLabels() throws {
-        let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
+        let detail = try productionSource(at: "Features/Routes/RouteDetailView.swift")
+        XCTAssertFalse(detail.contains("RouteDetailMetricPanel"), "页面不再叠加私有指标面板")
 
-        XCTAssertTrue(source.contains("RouteDetailMetricPanel"))
-        XCTAssertTrue(source.contains("metric.systemImage"))
-        XCTAssertFalse(source.contains("Text(metric.0)"))
-        XCTAssertFalse(source.contains("查看路线"))
+        let summary = try productionSource(at: "Features/Routes/Components/RouteSummary.swift")
+        XCTAssertTrue(summary.contains("MetricGroup(items: projection.metrics, variant: .grid)"), "指标由 RouteSummary 内 MetricGroup.grid 承载")
+        XCTAssertFalse(summary.contains("Text(metric.0)"))
+        XCTAssertFalse(summary.contains("查看路线"))
     }
 
     func testRouteDetailKeepsEligibilityAwareGenerationActionOutsideScrollableContent() throws {
@@ -506,10 +508,9 @@ final class DesignSystemTests: XCTestCase {
     }
 
     func testRouteSummaryMetricsUseOneSolidDarkGreenSection() throws {
-        let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
+        let source = try productionSource(at: "Features/Routes/Components/RouteSummary.swift")
 
-        XCTAssertTrue(source.contains("RouteDetailMetricPanel"))
-        XCTAssertTrue(source.contains(".background(AppColors.sheetSectionBackground)"))
+        XCTAssertTrue(source.contains("MetricGroup(items: projection.metrics, variant: .grid)"))
         XCTAssertFalse(source.contains("sheetSectionBorder"))
         XCTAssertFalse(source.contains("RouteDetailMetricCard"))
     }
@@ -517,8 +518,8 @@ final class DesignSystemTests: XCTestCase {
     func testExpandedGroupsUseSolidSectionsWithTransparentGaps() throws {
         let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
 
-        XCTAssertTrue(source.contains("RouteDetailSectionContainer"))
-        XCTAssertTrue(source.contains(".background(AppColors.sheetSectionBackground)"))
+        // 6.3（D1）后页面不再持有私有 section 容器；14 区由各生产组件的 RouteBusinessSection 承载。
+        XCTAssertFalse(source.contains("RouteDetailSectionContainer"))
         XCTAssertTrue(source.contains("VStack(alignment: .leading, spacing: Spacing.xl)"))
         XCTAssertFalse(source.contains(".stroke(AppColors.sheetSectionBorder"))
         XCTAssertFalse(source.contains(".background(AppColors.sheetCardBackground)"))
@@ -686,7 +687,7 @@ final class DesignSystemTests: XCTestCase {
         let discovery = try productionSource(at: "Features/Routes/RouteDiscoveryView.swift")
         XCTAssertTrue(discovery.contains("暂时无法加载路线"), "路线列表不可用空态")
         XCTAssertTrue(discovery.contains("只搜索 Walk 当前提供的徒步路线"), "搜索范围说明")
-        XCTAssertTrue(discovery.contains("搜索路线名称或地区"), "搜索输入占位")
+        XCTAssertTrue(discovery.contains("输入路线名称或地区"), "搜索输入占位（6.3 钉入 spec）")
     }
 
     func testRouteBrowsePagesUseProductionComponentsWithoutResolvingMediaReferences() throws {
@@ -732,6 +733,75 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(searchSource.contains("routeID: route.routeId"), "搜索行绑定路线 ID")
         XCTAssertFalse(searchSource.contains("RouteListCompactRow"), "搜索页不再保留私有 RouteListCompactRow")
         XCTAssertFalse(searchSource.contains("RouteBusinessComponents.RouteListRow("), "搜索页不得使用 RouteListRow.search")
+    }
+
+    /// 6.3 修订（R1/R2/L1/L2/S1/S2/S3/S6）：四个路线页面的状态文案与变体钉入 spec 后的契约。
+    func testRoutePagesUseApprovedStateCopyAndVariants() throws {
+        let source = try productionSource(at: "Features/Routes/RouteDiscoveryView.swift")
+        let collectionStart = try XCTUnwrap(source.range(of: "struct RouteCollectionView: View"))
+        let searchStart = try XCTUnwrap(source.range(of: "struct RouteSearchView: View"))
+        let discoverySource = String(source[..<collectionStart.lowerBound])
+        let collectionSource = String(source[collectionStart.lowerBound..<searchStart.lowerBound])
+        let searchSource = String(source[searchStart.lowerBound...])
+
+        XCTAssertTrue(discoverySource.contains("variant: .scene"), "重点路线失败态使用 ErrorView.scene")
+        XCTAssertTrue(discoverySource.contains("暂时无法加载路线"), "重点路线失败态标题")
+        XCTAssertTrue(discoverySource.contains("不会用缓存猜测替代真实路线资料。"), "重点路线失败态说明")
+        XCTAssertTrue(discoverySource.contains("variant: .default"), "重点路线空态使用 EmptyState.default")
+        XCTAssertFalse(discoverySource.contains("variant: .compactText"), "发现页不再用 compactText")
+
+        XCTAssertTrue(discoverySource.contains("UIAccessibility.post"), "R3：换页做无障碍公告")
+        XCTAssertTrue(discoverySource.contains("已到第一条路线"), "R3：首页边界公告")
+        XCTAssertTrue(discoverySource.contains("已到最后一条路线"), "R3：末页边界公告")
+        XCTAssertTrue(discoverySource.contains("第 \\(index + 1) 条，共 \\(count) 条"), "R3：中段「{路线身份}，第 X 条，共 N 条」")
+        XCTAssertTrue(discoverySource.contains("guard count > 1"), "R3：单条路线不做公告")
+
+        XCTAssertTrue(collectionSource.contains("当前暂无可选择路线"), "全部路线空态标题（原型 h3）")
+        XCTAssertTrue(collectionSource.contains("路线准备完成后会出现在这里。"), "全部路线空态说明（原型 p）")
+        XCTAssertTrue(collectionSource.contains("icon: \"route\""), "全部路线空态 icon route 口径")
+        XCTAssertTrue(collectionSource.contains("暂时无法加载全部路线"), "全部路线失败态标题")
+        XCTAssertTrue(collectionSource.contains("不会使用缓存或猜测路线替代。"), "全部路线失败态说明")
+
+        XCTAssertTrue(searchSource.contains("输入路线名称或地区"), "搜索框 placeholder（原型 searchbox）")
+        XCTAssertTrue(searchSource.contains("初始状态不展示默认结果。"), "initial 说明（原型 empty-search p）")
+        XCTAssertTrue(searchSource.contains("暂时无法搜索路线"), "搜索失败态标题")
+        XCTAssertTrue(searchSource.contains("已保留关键词，不会用猜测结果替代。"), "搜索失败态说明")
+        XCTAssertTrue(searchSource.contains("重新搜索"), "搜索失败重试文案")
+        XCTAssertTrue(searchSource.contains("Walk 当前没有找到相关路线"), "noResults 说明钉入 spec")
+    }
+
+    /// 6.3 修订（S4/S5）：输入 change 经短延时防抖、submit 直通；搜索会话状态提升到 App 层以支持返回恢复。
+    func testRouteSearchDebounceAndRestorationWiring() throws {
+        let viewModel = try productionSource(at: "Features/Routes/RouteDiscoveryViewModel.swift")
+        XCTAssertTrue(viewModel.contains("immediate: Bool"), "search 提供立即提交通道（submit 不经防抖）")
+        XCTAssertTrue(viewModel.contains("Task.sleep"), "change 路径先经短延时防抖")
+
+        let root = try productionSource(at: "App/RootView.swift")
+        XCTAssertTrue(root.contains("routeSearchModel"), "App 层持有搜索会话状态")
+        XCTAssertTrue(root.contains("routeSearchQuery"), "App 层持有搜索关键词")
+
+        let search = try productionSource(at: "Features/Routes/RouteDiscoveryView.swift")
+        let searchStart = try XCTUnwrap(search.range(of: "struct RouteSearchView: View"))
+        let searchSource = String(search[searchStart.lowerBound...])
+        XCTAssertTrue(searchSource.contains("@ObservedObject"), "搜索页接受外部持有的会话状态")
+        XCTAssertTrue(searchSource.contains("@Binding"), "搜索页接受外部持有的 query")
+    }
+
+    /// 6.3 修订（D1）：RouteImageGallery 只读去事件化，页面不建私有图片网格，无图片查看器。
+    func testRouteImageGalleryIsReadonlyWithoutViewer() throws {
+        let gallery = try productionSource(at: "Features/Routes/Components/RouteImageGallery.swift")
+        XCTAssertFalse(gallery.contains("Button"), "图片不建立按钮或打开状态")
+        XCTAssertFalse(gallery.contains("onOpenImage"), "不产生打开图片事件")
+        XCTAssertFalse(gallery.contains("?? \"路线图片\""), "不用默认文案补标题")
+
+        let detail = try productionSource(at: "Features/Routes/RouteDetailView.swift")
+        XCTAssertTrue(detail.contains("RouteBusinessComponents.RouteImageGallery("), "页面使用生产图片区组件")
+        XCTAssertFalse(detail.contains("RouteImageGrid"), "不保留页面私有图片网格")
+        XCTAssertFalse(detail.contains("RouteImageViewer"), "不建立图片查看器覆盖层")
+        XCTAssertFalse(detail.contains("selectedImage"), "不持有图片覆盖层状态")
+
+        let catalog = try productionSource(at: "App/Baseline/ComponentCatalog.swift")
+        XCTAssertFalse(catalog.contains("RouteImageViewer"), "RouteImageViewer 退役后从目录移除")
     }
 
     // MARK: 批次 2/3 —— PAGE-LOGIN / TRIP-DETAIL / TRIPS / TRIP-DAY / TRIP-WEATHER / TRIP-EQUIPMENT
@@ -956,9 +1026,12 @@ final class DesignSystemTests: XCTestCase {
 
     func testRouteMapDetailSheetHasDismissControl() throws {
         let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
-        XCTAssertTrue(source.contains("systemName: \"xmark\""), "点位详情浮层提供关闭按钮")
-        XCTAssertTrue(source.contains("关闭详情"), "关闭按钮可访问标签")
-        XCTAssertTrue(source.contains("@Environment(\\.dismiss)"), "浮层可自行关闭")
+        XCTAssertTrue(source.contains("RouteBusinessComponents.RoutePointDetail("), "点位详情浮层由生产组件承载")
+
+        let component = try productionSource(at: "Features/Routes/Components/RoutePointDetail.swift")
+        XCTAssertTrue(component.contains("systemName: \"xmark\""), "点位详情浮层提供关闭按钮")
+        XCTAssertTrue(component.contains("关闭点位详情"), "关闭按钮可访问标签")
+        XCTAssertTrue(component.contains("ModalBottomSheet(onDismiss:"), "关闭事件由通用 Sheet 承载")
     }
 
     func testSpacingSourceUsesApprovedContractCanonicalNames() throws {

@@ -62,13 +62,13 @@ struct WalkApp: App {
         } else if let scenario = appEnvironment.configuration.baselineScenario {
             BaselineRootView(scenario: scenario)
         } else {
-            RootView()
+            RootView(appEnvironment: appEnvironment)
         }
 #else
         if let scenario = appEnvironment.configuration.baselineScenario {
             BaselineRootView(scenario: scenario)
         } else {
-            RootView()
+            RootView(appEnvironment: appEnvironment)
         }
 #endif
     }

@@ -738,7 +738,7 @@ struct RouteDetailPresentation: Equatable {
             id: .imagery,
             title: "路线影像",
             items: images.map {
-                .init(id: $0.id, title: $0.caption ?? "路线图片", value: $0.source)
+                .init(id: $0.id, title: $0.caption ?? "", value: $0.source)
             }
         )
     }

@@ -9,6 +9,8 @@ final class RouteDiscoveryViewModel: ObservableObject {
     @Published private(set) var searchState: PublicRouteSearchState = .initial
     @Published var isLoading = false
     @Published var errorMessage: String?
+    /// S5：记录最近一次成功搜索的 query，返回恢复时避免同 query 重复请求。
+    private(set) var lastSearchQuery: String?
 
     private let service: any RouteDiscoveryServicing
     private var searchGeneration = 0
@@ -30,7 +32,9 @@ final class RouteDiscoveryViewModel: ObservableObject {
         }
     }
 
-    func search(query: String?) async {
+    /// S4：非空输入 change 后先经短延时防抖（用户停手才提交）；submit 传 `immediate: true` 直通。
+    /// `searchGeneration` 是 requestVersion 等价物，迟到的旧结果不会覆盖当前结果。
+    func search(query: String?, immediate: Bool = false) async {
         searchGeneration += 1
         let generation = searchGeneration
 
@@ -48,6 +52,15 @@ final class RouteDiscoveryViewModel: ObservableObject {
             return
         }
 
+        if !immediate {
+            // S5：返回恢复场景下同 query 已有结果且无错误，不重复请求。
+            if query == lastSearchQuery, errorMessage == nil, !searchResults.isEmpty {
+                return
+            }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard generation == searchGeneration, !Task.isCancelled else { return }
+        }
+
         isLoading = true
         errorMessage = nil
 
@@ -56,6 +69,7 @@ final class RouteDiscoveryViewModel: ObservableObject {
             guard generation == searchGeneration, !Task.isCancelled else { return }
             searchState = result.state
             searchResults = result.items
+            lastSearchQuery = query
             isLoading = false
         } catch {
             guard generation == searchGeneration, !Task.isCancelled else { return }
