@@ -4,9 +4,6 @@ import WalkDesignSystem
 import WalkData
 
 enum HomePreviewFixtures {
-    static let completeMetrics = MetricPreviewFixtures.completeMetrics
-
-    static let missingMetrics = MetricPreviewFixtures.missingMetrics
 
     static let weatherAvailable = WeatherSummaryModel(
         conclusion: "16°·多云",

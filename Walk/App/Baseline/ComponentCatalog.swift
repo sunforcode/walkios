@@ -56,7 +56,7 @@ enum ComponentCatalog {
         },
         entry("Card", .common) {
             WalkCard {
-                Text(ComponentPreviewFixtures.longSupportingText)
+                Text(WalkDesignSystem.ComponentPreviewFixtures.longSupportingText)
                     .font(.appBody)
                     .foregroundStyle(AppColors.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -64,8 +64,8 @@ enum ComponentCatalog {
         },
         entry("ConfirmationDialog", .common) {
             ConfirmationDialog(
-                title: ComponentPreviewFixtures.confirmationTitle,
-                message: ComponentPreviewFixtures.confirmationMessage,
+                title: WalkDesignSystem.ComponentPreviewFixtures.confirmationTitle,
+                message: WalkDesignSystem.ComponentPreviewFixtures.confirmationMessage,
                 confirmationTitle: "确认",
                 onCancel: {},
                 onConfirm: {}
@@ -74,30 +74,30 @@ enum ComponentCatalog {
         },
         entry("ContentSection", .common) {
             ContentSection(
-                title: ComponentPreviewFixtures.sectionTitle,
-                subtitle: ComponentPreviewFixtures.supportingText
+                title: WalkDesignSystem.ComponentPreviewFixtures.sectionTitle,
+                subtitle: WalkDesignSystem.ComponentPreviewFixtures.supportingText
             ) {
-                WalkCard { Text(ComponentPreviewFixtures.longSupportingText) }
+                WalkCard { Text(WalkDesignSystem.ComponentPreviewFixtures.longSupportingText) }
             }
         },
         entry("DangerAction", .common) {
             DangerAction(title: "删除", systemImage: "trash", action: {})
         },
         entry("DateInput", .common) {
-            DateInput(value: .constant(ComponentPreviewFixtures.fixedDate), label: "出发日期")
+            DateInput(value: .constant(WalkDesignSystem.ComponentPreviewFixtures.fixedDate), label: "出发日期")
         },
         entry("EmptyState", .common) {
-            EmptyStateView(title: "暂无内容", message: ComponentPreviewFixtures.supportingText, icon: "tray")
+            EmptyStateView(title: "暂无内容", message: WalkDesignSystem.ComponentPreviewFixtures.supportingText, icon: "tray")
         },
         entry("ErrorView", .common) {
-            ErrorView(message: ComponentPreviewFixtures.errorMessage, retry: {})
+            ErrorView(message: WalkDesignSystem.ComponentPreviewFixtures.errorMessage, retry: {})
         },
         entry("FixedActionArea", .common) {
             FixedActionArea { PrimaryAction(title: "继续", fillsWidth: true, action: {}) }
         },
         entry("FormField", .common) {
-            FormField(label: ComponentPreviewFixtures.formLabel, requirement: .required) {
-                TextField(ComponentPreviewFixtures.formPlaceholder, text: .constant(""))
+            FormField(label: WalkDesignSystem.ComponentPreviewFixtures.formLabel, requirement: .required) {
+                TextField(WalkDesignSystem.ComponentPreviewFixtures.formPlaceholder, text: .constant(""))
             }
         },
         entry("IconButton", .common) {
@@ -109,8 +109,8 @@ enum ComponentCatalog {
         entry("ListRow", .common) {
             ListRow {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text(ComponentPreviewFixtures.shortTitle).font(.listTitle)
-                    Text(ComponentPreviewFixtures.supportingText).font(.appCaption)
+                    Text(WalkDesignSystem.ComponentPreviewFixtures.shortTitle).font(.listTitle)
+                    Text(WalkDesignSystem.ComponentPreviewFixtures.supportingText).font(.appCaption)
                 }
             }
         },
@@ -118,10 +118,10 @@ enum ComponentCatalog {
             LoadingView(message: "正在加载", variant: .page)
         },
         entry("MetricGroup", .common) {
-            MetricGroup(items: HomePreviewFixtures.completeMetrics)
+            MetricGroup(items: WalkDesignSystem.MetricPreviewFixtures.completeMetrics)
         },
         entry("MetricItem", .common) {
-            MetricItem(model: HomePreviewFixtures.completeMetrics[0])
+            MetricItem(model: WalkDesignSystem.MetricPreviewFixtures.completeMetrics[0])
         },
         entry("MixedPageShell", .common) {
             MixedPageShell {
@@ -134,19 +134,19 @@ enum ComponentCatalog {
             ModalBottomSheet(onDismiss: {}) {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
                     Text(ComponentPreviewFixtures.sheetTitle).font(.sectionTitle)
-                    Text(ComponentPreviewFixtures.longSupportingText).font(.appBody)
+                    Text(WalkDesignSystem.ComponentPreviewFixtures.longSupportingText).font(.appBody)
                     PrimaryAction(title: ComponentPreviewFixtures.sheetAction, fillsWidth: true, action: {})
                 }
             }
         },
         entry("Notice", .common) {
-            NoticeView(message: ComponentPreviewFixtures.supportingText, title: "补充信息", tone: .info)
+            NoticeView(message: WalkDesignSystem.ComponentPreviewFixtures.supportingText, title: "补充信息", tone: .info)
         },
         entry("PageTitleBlock", .common) {
             PageTitleBlock(
-                title: ComponentPreviewFixtures.longTitle,
+                title: WalkDesignSystem.ComponentPreviewFixtures.longTitle,
                 kicker: "准备出发",
-                description: ComponentPreviewFixtures.longSupportingText
+                description: WalkDesignSystem.ComponentPreviewFixtures.longSupportingText
             )
         },
         entry("Panel", .common) {
@@ -163,8 +163,8 @@ enum ComponentCatalog {
         },
         entry("SearchField", .common) {
             SearchField(
-                text: .constant(ComponentPreviewFixtures.searchQuery),
-                placeholder: ComponentPreviewFixtures.searchPlaceholder,
+                text: .constant(WalkDesignSystem.ComponentPreviewFixtures.searchQuery),
+                placeholder: WalkDesignSystem.ComponentPreviewFixtures.searchPlaceholder,
                 onSubmit: {}
             )
         },
@@ -173,24 +173,24 @@ enum ComponentCatalog {
         },
         entry("SectionHeader", .common) {
             SectionHeader(
-                title: ComponentPreviewFixtures.longTitle,
-                subtitle: ComponentPreviewFixtures.longSupportingText
+                title: WalkDesignSystem.ComponentPreviewFixtures.longTitle,
+                subtitle: WalkDesignSystem.ComponentPreviewFixtures.longSupportingText
             )
         },
         entry("SegmentedControl", .common) {
-            SegmentedControl(options: ComponentPreviewFixtures.segmentOptions, selection: .constant("overview"))
+            SegmentedControl(options: WalkDesignSystem.ComponentPreviewFixtures.segmentOptions, selection: .constant("overview"))
         },
         entry("SelectInput", .common) {
             SelectInput(
                 selection: .constant("moderate"),
                 label: "难度",
                 placeholder: "请选择难度",
-                options: ComponentPreviewFixtures.selectOptions
+                options: WalkDesignSystem.ComponentPreviewFixtures.selectOptions
             )
         },
         entry("SelectableOptionCard", .common) {
             SelectableOptionCard(isSelected: false, action: {}) {
-                Text(ComponentPreviewFixtures.longSupportingText).font(.appBody)
+                Text(WalkDesignSystem.ComponentPreviewFixtures.longSupportingText).font(.appBody)
             }
         },
         entry("SettingsListRow", .common) {
@@ -200,13 +200,13 @@ enum ComponentCatalog {
             SheetHandle()
         },
         entry("SourceNote", .common) {
-            SourceNote(source: ComponentPreviewFixtures.source, updatedAt: ComponentPreviewFixtures.updatedAt)
+            SourceNote(source: WalkDesignSystem.ComponentPreviewFixtures.source, updatedAt: WalkDesignSystem.ComponentPreviewFixtures.updatedAt)
         },
         entry("TextInput", .common) {
             TextInput(text: .constant("云岭环线"), label: "路线名称", placeholder: "输入路线名称")
         },
         entry("Timeline", .common) {
-            Timeline(ComponentPreviewFixtures.timelineItems, optionalTime: { $0.time }) { item in
+            Timeline(WalkDesignSystem.ComponentPreviewFixtures.timelineItems, optionalTime: { $0.time }) { item in
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Text(item.title).font(.listTitle)
                     ForEach(item.details, id: \.self) { Text($0) }
@@ -214,7 +214,7 @@ enum ComponentCatalog {
             }
         },
         entry("UnavailableState", .common) {
-            UnavailableStateView(title: "天气暂不可用", message: ComponentPreviewFixtures.longSupportingText)
+            UnavailableStateView(title: "天气暂不可用", message: WalkDesignSystem.ComponentPreviewFixtures.longSupportingText)
         },
         entry("UtilityNavigationHeader", .common) {
             UtilityNavigationHeader(
