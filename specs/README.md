@@ -63,44 +63,44 @@
 
 | 总 UI Component ID | SwiftUI 承载 | 源码 |
 |---|---|---|
-| `avatar-button` | `AvatarButton` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `card` | `WalkCard` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `confirmation-dialog` | `ConfirmationDialog` | `Walk/DesignSystem/Components/ConfirmationDialog.swift` |
-| `content-section` | `ContentSection` | `Walk/DesignSystem/Components/ContentSection.swift` |
-| `danger-action` | `DangerAction` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `date-input` | `DateInput` | `Walk/DesignSystem/Components/DateInput.swift` |
-| `empty-state` | `EmptyStateView` | `Walk/DesignSystem/Components/EmptyStateView.swift` |
-| `error-view` | `ErrorView` | `Walk/DesignSystem/Components/ErrorView.swift` |
-| `fixed-action-area` | `FixedActionArea` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `form-field` | `FormField` | `Walk/DesignSystem/Components/FormField.swift` |
-| `icon-button` | `IconButton` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `info-tag` | `InfoTag` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `list-row` | `ListRow` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `loading-state` | `LoadingView` | `Walk/DesignSystem/Components/LoadingView.swift` |
-| `metric-group` | `MetricGroup` | `Walk/DesignSystem/Components/MetricGroup.swift` |
-| `metric-item` | `MetricItem` | `Walk/DesignSystem/Components/MetricItem.swift` |
-| `mixed-page-shell` | `MixedPageShell` | `Walk/DesignSystem/Components/MixedPageShell.swift` |
-| `modal-bottom-sheet` | `ModalBottomSheet` | `Walk/DesignSystem/Components/ModalBottomSheet.swift` |
-| `notice` | `NoticeView` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `page-title-block` | `PageTitleBlock` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `panel` | `WalkPanel` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `primary-action` | `PrimaryAction` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `primary-tab-bar` | `PrimaryTabBar` | `Walk/DesignSystem/Components/PrimaryTabBar.swift` |
-| `quantity-stepper` | `QuantityStepper` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `search-field` | `SearchField` | `Walk/DesignSystem/Components/SearchField.swift` |
-| `secondary-action` | `SecondaryAction` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `section-header` | `SectionHeader` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `segmented-control` | `SegmentedControl` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `select-input` | `SelectInput` | `Walk/DesignSystem/Components/SelectInput.swift` |
-| `selectable-option-card` | `SelectableOptionCard` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `settings-list-row` | `SettingsListRow` | `Walk/DesignSystem/Components/SettingsListRow.swift` |
-| `sheet-handle` | `SheetHandle` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `source-note` | `SourceNote` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `text-input` | `TextInput` | `Walk/DesignSystem/Components/TextInput.swift` |
-| `timeline` | `Timeline` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `unavailable-state` | `UnavailableStateView` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
-| `utility-navigation-header` | `UtilityNavigationHeader` | `Walk/DesignSystem/Components/UtilityNavigationHeader.swift` |
-| `utility-page` | `UtilityPage` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
+| `avatar-button` | `AvatarButton` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `card` | `WalkCard` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `confirmation-dialog` | `ConfirmationDialog` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/ConfirmationDialog.swift` |
+| `content-section` | `ContentSection` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/ContentSection.swift` |
+| `danger-action` | `DangerAction` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `date-input` | `DateInput` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/DateInput.swift` |
+| `empty-state` | `EmptyStateView` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/EmptyStateView.swift` |
+| `error-view` | `ErrorView` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/ErrorView.swift` |
+| `fixed-action-area` | `FixedActionArea` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `form-field` | `FormField` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/FormField.swift` |
+| `icon-button` | `IconButton` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `info-tag` | `InfoTag` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `list-row` | `ListRow` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `loading-state` | `LoadingView` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/LoadingView.swift` |
+| `metric-group` | `MetricGroup` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/MetricGroup.swift` |
+| `metric-item` | `MetricItem` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/MetricItem.swift` |
+| `mixed-page-shell` | `MixedPageShell` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/MixedPageShell.swift` |
+| `modal-bottom-sheet` | `ModalBottomSheet` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/ModalBottomSheet.swift` |
+| `notice` | `NoticeView` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `page-title-block` | `PageTitleBlock` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `panel` | `WalkPanel` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `primary-action` | `PrimaryAction` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `primary-tab-bar` | `PrimaryTabBar` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/PrimaryTabBar.swift` |
+| `quantity-stepper` | `QuantityStepper` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `search-field` | `SearchField` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SearchField.swift` |
+| `secondary-action` | `SecondaryAction` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `section-header` | `SectionHeader` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `segmented-control` | `SegmentedControl` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `select-input` | `SelectInput` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SelectInput.swift` |
+| `selectable-option-card` | `SelectableOptionCard` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `settings-list-row` | `SettingsListRow` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SettingsListRow.swift` |
+| `sheet-handle` | `SheetHandle` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `source-note` | `SourceNote` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `text-input` | `TextInput` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/TextInput.swift` |
+| `timeline` | `Timeline` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `unavailable-state` | `UnavailableStateView` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `utility-navigation-header` | `UtilityNavigationHeader` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/UtilityNavigationHeader.swift` |
+| `utility-page` | `UtilityPage` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
 
 ### 业务组件
 
@@ -126,7 +126,7 @@
 | `route-fact-section` | `RouteFactSection` | `Walk/Features/Routes/Components/RouteFactSection.swift` |
 | `route-image-gallery` | `RouteImageGallery` | `Walk/Features/Routes/Components/RouteImageGallery.swift` |
 | `route-introduction` | `RouteIntroduction` | `Walk/Features/Routes/Components/RouteIntroduction.swift` |
-| `route-list-row` | `RouteListRow` | `Walk/DesignSystem/Components/SharedPrimitives.swift` |
+| `route-list-row` | `RouteListRow` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
 | `route-map` | `RouteMap` | `Walk/Features/Routes/Components/RouteMap.swift` |
 | `route-point-detail` | `RoutePointDetail` | `Walk/Features/Routes/Components/RoutePointDetail.swift` |
 | `route-point-section` | `RoutePointSection` | `Walk/Features/Routes/Components/RoutePointSection.swift` |
@@ -149,12 +149,12 @@
 | `trip-route-version-card` | `TripRouteVersionCard` | `Walk/Features/Trips/Components/TripRouteVersionCard.swift` |
 | `trip-status-badge` | `TripStatusBadge` | `Walk/Features/Trips/TripStatusBadge.swift` |
 | `trip-weather-summary-card` | `TripWeatherSummaryCard` | `Walk/Features/Trips/Components/TripWeatherSummaryCard.swift` |
-| `weather-overview` | `WeatherOverview` | `Walk/Data/API/Trips/PersonalTripModels.swift` |
+| `weather-overview` | `WeatherOverview` | `Packages/WalkData/Sources/WalkData/API/Trips/PersonalTripModels.swift` |
 | `weather-summary` | `WeatherSummary` | `Walk/Features/Home/Components/WeatherSummary.swift` |
 
 ## Token 映射
 
-Token 承载家族位于 `Walk/DesignSystem/Theme/`（`Color+App.swift`、`Font+App.swift`、`Spacing.swift`、`Radius.swift`、`Shadow.swift`）。
+Token 承载家族位于 `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Theme/`（`Color+App.swift`、`Font+App.swift`、`Spacing.swift`、`Radius.swift`、`Shadow.swift`）。
 
 **已知缺口**：Token 尚未建立与总 UI Token 一一对应的逐项分区登记（历史版本的逐项表随旧规范结构一并移除）。逐项分区与配套测试列入后续平台符合性 Change，在此之前不得从近似颜色、字号或阴影推断符合。
 

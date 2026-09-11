@@ -1,4 +1,6 @@
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 enum TripEquipmentItemSourceProjection: String, Equatable {
     case systemSuggestion = "system_suggestion"

@@ -1,5 +1,7 @@
 import SwiftUI
 import MapKit
+import WalkData
+import WalkDesignSystem
 
 private enum RouteDetailLayout {
     static let mapRevealHeight: CGFloat = 330

@@ -1,6 +1,8 @@
 import SwiftUI
 import MapKit
 import CoreLocation
+import WalkData
+import WalkDesignSystem
 
 struct RouteCoordinatesFingerprint: Equatable {
     private struct Coordinate: Equatable {

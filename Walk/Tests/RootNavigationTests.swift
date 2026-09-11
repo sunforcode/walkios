@@ -1,5 +1,7 @@
 import SwiftUI
 import XCTest
+import WalkData
+import WalkDesignSystem
 @testable import Walk
 
 @MainActor

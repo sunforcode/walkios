@@ -1,5 +1,7 @@
 #if DEBUG
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 struct ComponentPreviewRootView: View {
     static let canvasAccessibilityIdentifier = "component-preview-canvas"

@@ -1,0 +1,52 @@
+import SwiftUI
+
+/// 统计卡片组件
+public struct StatCardView: View {
+     public let title: String
+     public let value: String
+     public let icon: String?
+     public let trend: String?
+
+     public init(title: String, value: String, icon: String? = nil, trend: String? = nil) {
+        self.title = title
+        self.value = value
+        self.icon = icon
+        self.trend = trend
+    }
+
+     public var body: some View {
+        WalkPanel(variant: .default) {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                HStack(spacing: Spacing.sm) {
+                    if let icon {
+                        Image(systemName: icon)
+                            .foregroundStyle(AppColors.interactionPrimary)
+                            .font(.navTitle)
+                    }
+                    Text(title)
+                        .font(.label)
+                        .foregroundStyle(AppColors.textSecondary)
+                }
+
+                Text(value)
+                    .font(.sectionTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+
+                if let trend {
+                    Text(trend)
+                        .font(.appCaption)
+                        .foregroundStyle(AppColors.statusProgress)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .appShadow(AppShadow.floating)
+    }
+}
+
+#Preview {
+    UtilityPageContainer {
+        StatCardView(title: "总行程", value: "12", icon: "map", trend: "+2 本月")
+            .padding()
+    }
+}

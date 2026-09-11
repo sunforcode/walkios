@@ -1,4 +1,6 @@
 import Foundation
+import WalkData
+import WalkDesignSystem
 
 struct HomeWeatherSummary: Equatable {
     let conclusion: String

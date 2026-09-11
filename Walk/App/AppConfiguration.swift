@@ -1,4 +1,6 @@
 import Foundation
+import WalkData
+import WalkDesignSystem
 
 enum AppConfigurationError: Error, Equatable {
     case invalidDataSourceMode(String)

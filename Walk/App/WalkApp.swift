@@ -1,4 +1,6 @@
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 @main
 struct WalkApp: App {

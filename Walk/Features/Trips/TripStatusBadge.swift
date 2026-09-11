@@ -1,4 +1,6 @@
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 extension PersonalTripStatus {
     var badgeTitle: String { title }

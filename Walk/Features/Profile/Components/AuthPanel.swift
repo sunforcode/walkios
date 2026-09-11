@@ -1,5 +1,7 @@
 import Foundation
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 enum AuthPanelStage: Equatable {
     case phone

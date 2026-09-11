@@ -1,5 +1,7 @@
 import SwiftUI
 import Foundation
+import WalkData
+import WalkDesignSystem
 
 final class AppEnvironment: ObservableObject {
     let configuration: AppConfiguration

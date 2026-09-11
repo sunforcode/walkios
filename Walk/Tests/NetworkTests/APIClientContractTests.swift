@@ -1,5 +1,7 @@
 import XCTest
 import Alamofire
+import WalkData
+import WalkDesignSystem
 @testable import Walk
 
 final class APIClientContractTests: XCTestCase {
@@ -159,7 +161,7 @@ final class APIClientContractTests: XCTestCase {
         XCTAssertEqual(failure.message, "行程不存在")
         XCTAssertEqual(failure.code, 404)
 
-        let empty: APIEnvelope<Walk.EmptyResponse> = try Fixture.decode("api-empty")
+        let empty: APIEnvelope<WalkData.EmptyResponse> = try Fixture.decode("api-empty")
         XCTAssertTrue(empty.success)
         XCTAssertNil(empty.data)
         XCTAssertNoThrow(try empty.unwrap())

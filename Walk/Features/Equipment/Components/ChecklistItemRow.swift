@@ -1,4 +1,6 @@
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 struct ChecklistItemRowProjection: Identifiable, Equatable {
     let identity: String

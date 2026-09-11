@@ -1,4 +1,6 @@
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 extension TripBusinessComponents {
     struct DailyWeatherCard: View {

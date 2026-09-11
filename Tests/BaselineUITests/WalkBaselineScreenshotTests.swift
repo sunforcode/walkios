@@ -1,5 +1,7 @@
 import XCTest
 import UIKit
+import WalkData
+import WalkDesignSystem
 
 final class WalkBaselineScreenshotTests: XCTestCase {
     @MainActor

@@ -1,4 +1,6 @@
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 enum GenerationEligibilityProjection: Equatable {
     case eligible(label: String)

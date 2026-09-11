@@ -1,4 +1,6 @@
 import Foundation
+import WalkData
+import WalkDesignSystem
 
 struct TripDetailBaselinePresentation: Equatable {
     enum ScrollPosition: Equatable {

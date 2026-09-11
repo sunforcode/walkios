@@ -1,5 +1,7 @@
 import Foundation
 import CoreLocation
+import WalkData
+import WalkDesignSystem
 
 /// 定位服务
 /// 封装 CLLocationManager，提供位置更新、权限管理和轨迹记录

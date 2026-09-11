@@ -1,4 +1,6 @@
 import XCTest
+import WalkData
+import WalkDesignSystem
 @testable import Walk
 
 final class TripDataAccessTests: XCTestCase {
@@ -259,10 +261,10 @@ final class TripDataAccessTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let contractFiles = [
-            "Data/API/User/AccountAPIModels.swift",
-            "Data/API/Routes/PublicRouteModels.swift",
-            "Data/API/Equipment/EquipmentModels.swift",
-            "Data/API/Trips/PersonalTripModels.swift",
+            "../Packages/WalkData/Sources/WalkData/API/User/AccountAPIModels.swift",
+            "../Packages/WalkData/Sources/WalkData/API/Routes/PublicRouteModels.swift",
+            "../Packages/WalkData/Sources/WalkData/API/Equipment/EquipmentModels.swift",
+            "../Packages/WalkData/Sources/WalkData/API/Trips/PersonalTripModels.swift",
         ]
         let targetModels = try contractFiles
             .map { try String(contentsOf: sourceRoot.appendingPathComponent($0), encoding: .utf8) }
@@ -288,9 +290,9 @@ final class TripDataAccessTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let sourceFiles = [
-            "Data/API/Trips/PersonalTripAPI.swift",
-            "Data/Repositories/PersonalTripService.swift",
-            "Data/Repositories/PersonalTripWeatherValidator.swift",
+            "../Packages/WalkData/Sources/WalkData/API/Trips/PersonalTripAPI.swift",
+            "../Packages/WalkData/Sources/WalkData/Repositories/PersonalTripService.swift",
+            "../Packages/WalkData/Sources/WalkData/Repositories/PersonalTripWeatherValidator.swift",
         ]
         let source = try sourceFiles
             .map { try String(contentsOf: sourceRoot.appendingPathComponent($0), encoding: .utf8) }

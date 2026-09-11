@@ -1,4 +1,6 @@
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 struct EquipmentListSummaryProjection: Identifiable, Equatable {
     let identity: String

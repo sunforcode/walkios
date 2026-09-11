@@ -1,4 +1,6 @@
 import Foundation
+import WalkData
+import WalkDesignSystem
 
 struct ProfileCalendarDayPresentation: Equatable, Identifiable {
     let date: LocalDate

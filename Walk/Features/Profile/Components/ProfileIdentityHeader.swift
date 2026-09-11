@@ -1,4 +1,6 @@
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 struct ProfileIdentityHeaderProjection: Equatable {
     let nickname: String?

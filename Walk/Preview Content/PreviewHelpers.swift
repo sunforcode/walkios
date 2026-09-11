@@ -1,5 +1,7 @@
 #if DEBUG
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 enum PreviewHelpers {
     static let apiClient = MockAPIClient(fixtures: DefaultMockFixtures.all())

@@ -1,4 +1,6 @@
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 struct RouteBrowseRowProjection: Equatable {
     let routeID: String

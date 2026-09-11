@@ -1,5 +1,7 @@
 import XCTest
 import CoreLocation
+import WalkData
+import WalkDesignSystem
 @testable import Walk
 
 final class RouteMapViewTests: XCTestCase {

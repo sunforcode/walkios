@@ -1,4 +1,6 @@
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 struct PersonalEquipmentSummaryCard: View {
     let summary: PersonalEquipmentSummary

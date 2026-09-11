@@ -1,6 +1,8 @@
 #if DEBUG
 import Foundation
 import CoreLocation
+import WalkData
+import WalkDesignSystem
 
 /// 全局 Mock 数据
 /// 用于 SwiftUI Preview 和开发联调（无后端时）

@@ -1,4 +1,6 @@
 import XCTest
+import WalkData
+import WalkDesignSystem
 @testable import Walk
 
 @MainActor
@@ -329,7 +331,7 @@ final class ProfileViewModelTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Data/Repositories/UserService.swift")
+            .appendingPathComponent("../Packages/WalkData/Sources/WalkData/Repositories/UserService.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
         XCTAssertFalse(source.contains("email:"))

@@ -1,4 +1,6 @@
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 struct RouteSceneProjection: Equatable {
     let routeID: String

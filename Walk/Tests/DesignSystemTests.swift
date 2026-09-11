@@ -1,5 +1,7 @@
 import SwiftUI
 import XCTest
+import WalkData
+import WalkDesignSystem
 @testable import Walk
 
 @MainActor
@@ -53,7 +55,7 @@ final class DesignSystemTests: XCTestCase {
     }
 
     func testAppTypographyUsesApprovedContractCanonicalNames() throws {
-        let source = try productionSource(at: "DesignSystem/Theme/Font+App.swift")
+        let source = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Theme/Font+App.swift")
 
         XCTAssertTrue(source.contains("static let appBody = Font.system(size: 15, weight: .regular)"))
         XCTAssertTrue(source.contains("static let appCaption = Font.system(size: 13, weight: .regular)"))
@@ -83,7 +85,7 @@ final class DesignSystemTests: XCTestCase {
     }
 
     func testDesignSystemComponentsUseRegisteredTypographyOnly() throws {
-        let violations = try violations(in: "DesignSystem/Components") { source in
+        let violations = try violations(in: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components") { source in
             var found: [String] = []
             if regexMatches(#"\.system\(size:"#, in: source) {
                 found.append("raw .system(size:) font; use AppTypography tokens or Font.ornament")
@@ -96,7 +98,7 @@ final class DesignSystemTests: XCTestCase {
 
         XCTAssertTrue(violations.isEmpty, violations.joined(separator: "\n"))
 
-        let errorView = try productionSource(at: "DesignSystem/Components/ErrorView.swift")
+        let errorView = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/ErrorView.swift")
         XCTAssertTrue(errorView.contains(".font(.ornament(48, weight: .regular))"))
         XCTAssertFalse(errorView.contains(".system(size: 48)"))
     }
@@ -341,13 +343,13 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertFalse(home.contains("private struct FocusTripContent:"))
         XCTAssertTrue(home.contains("FocusTripSummary("))
 
-        let metricItem = try productionSource(at: "DesignSystem/Components/MetricItem.swift")
+        let metricItem = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/MetricItem.swift")
         XCTAssertTrue(metricItem.contains("case `default`"))
         XCTAssertTrue(metricItem.contains("case inlineCompact"))
         XCTAssertTrue(metricItem.contains("case gridCompact"))
         XCTAssertFalse(metricItem.contains("minimumScaleFactor"))
 
-        let metricGroup = try productionSource(at: "DesignSystem/Components/MetricGroup.swift")
+        let metricGroup = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/MetricGroup.swift")
         XCTAssertTrue(metricGroup.contains("dynamicTypeSize"))
         XCTAssertTrue(metricGroup.contains("ViewThatFits"))
         XCTAssertTrue(metricGroup.contains("MetricItem(model:"))
@@ -362,20 +364,24 @@ final class DesignSystemTests: XCTestCase {
 
     func testHomePilotFixtureCarriesApprovedDefaultBaselineValues() throws {
         let fixtures = try productionSource(at: "Preview Content/HomePreviewFixtures.swift")
+        let metricFixtures = try productionSource(
+            at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/MetricPreviewFixtures.swift"
+        )
+        let combined = fixtures + metricFixtures
 
-        XCTAssertTrue(fixtures.contains("routeName: \"云岭环线\""))
-        XCTAssertTrue(fixtures.contains("start: \"云栈口\""))
-        XCTAssertTrue(fixtures.contains("end: \"云栈口\""))
-        XCTAssertTrue(fixtures.contains("value: \"12.1\", unit: \"km\""))
-        XCTAssertTrue(fixtures.contains("value: \"600\", unit: \"m\""))
-        XCTAssertTrue(fixtures.contains("value: \"约 5 h 20 min\""))
-        XCTAssertTrue(fixtures.contains("conclusion: \"16°·多云\""))
-        XCTAssertTrue(fixtures.contains("impact: \"山脊4级风\""))
+        XCTAssertTrue(combined.contains("routeName: \"云岭环线\""))
+        XCTAssertTrue(combined.contains("start: \"云栈口\""))
+        XCTAssertTrue(combined.contains("end: \"云栈口\""))
+        XCTAssertTrue(combined.contains("value: \"12.1\", unit: \"km\""))
+        XCTAssertTrue(combined.contains("value: \"600\", unit: \"m\""))
+        XCTAssertTrue(combined.contains("value: \"约 5 h 20 min\""))
+        XCTAssertTrue(combined.contains("conclusion: \"16°·多云\""))
+        XCTAssertTrue(combined.contains("impact: \"山脊4级风\""))
     }
 
     func testRootUsesTheProductionPrimaryTabBar() throws {
         let root = try productionSource(at: "App/RootView.swift")
-        let tabBar = try productionSource(at: "DesignSystem/Components/PrimaryTabBar.swift")
+        let tabBar = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/PrimaryTabBar.swift")
         XCTAssertTrue(root.contains("PrimaryTabBar("))
         XCTAssertTrue(root.contains("shell.path(for: shell.selectedTab).isEmpty"))
         XCTAssertTrue(root.contains(".toolbar(.hidden, for: .tabBar)"))
@@ -386,9 +392,9 @@ final class DesignSystemTests: XCTestCase {
     }
 
     func testHomePilotUsesRegisteredVisualTokens() throws {
-        let colors = try productionSource(at: "DesignSystem/Theme/Color+App.swift")
-        let typography = try productionSource(at: "DesignSystem/Theme/Font+App.swift")
-        let shadows = try productionSource(at: "DesignSystem/Theme/Shadow.swift")
+        let colors = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Theme/Color+App.swift")
+        let typography = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Theme/Font+App.swift")
+        let shadows = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Theme/Shadow.swift")
         XCTAssertTrue(colors.contains("static let surfaceNavigation"))
         XCTAssertTrue(colors.contains("static let borderNavigation"))
         XCTAssertTrue(colors.contains("static let interactionOnPrimary"))
@@ -407,12 +413,12 @@ final class DesignSystemTests: XCTestCase {
     }
 
     func testHomePilotPreviewsInstantiateProductionViews() throws {
-        let metricItem = try productionSource(at: "DesignSystem/Components/MetricItem.swift")
-        let metricGroup = try productionSource(at: "DesignSystem/Components/MetricGroup.swift")
+        let metricItem = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/MetricItem.swift")
+        let metricGroup = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/MetricGroup.swift")
         let weather = try productionSource(at: "Features/Home/Components/WeatherSummary.swift")
         let focus = try productionSource(at: "Features/Home/Components/FocusTripSummary.swift")
         let home = try productionSource(at: "Features/Home/HomeView.swift")
-        let tabBar = try productionSource(at: "DesignSystem/Components/PrimaryTabBar.swift")
+        let tabBar = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/PrimaryTabBar.swift")
 
         XCTAssertTrue(metricItem.contains("#Preview"))
         XCTAssertTrue(metricItem.contains("MetricItem("))
@@ -607,7 +613,7 @@ final class DesignSystemTests: XCTestCase {
             "S4：Feature 不得读取或接收系统区域 inset 后自行计算避让\n" + files.joined(separator: "\n")
         )
 
-        let sharedPrimitives = try productionSource(at: "DesignSystem/Components/SharedPrimitives.swift")
+        let sharedPrimitives = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift")
         XCTAssertTrue(sharedPrimitives.contains(".ignoresSafeArea()"), "页面壳负责将沉浸式背景延伸到系统区域")
         let routeDetail = try productionSource(at: "Features/Routes/RouteDetailView.swift")
         XCTAssertTrue(routeDetail.contains("ImmersivePageContainer"), "路线详情复用统一沉浸式页面壳")
@@ -661,7 +667,7 @@ final class DesignSystemTests: XCTestCase {
     }
 
     func testSharedShellAndPanelKeepCanonicalStructure() throws {
-        let source = try productionSource(at: "DesignSystem/Components/SharedPrimitives.swift")
+        let source = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift")
         XCTAssertTrue(source.contains("enum WalkPanelSurface"))
         XCTAssertTrue(source.contains("case primary"))
         XCTAssertTrue(source.contains("case glass"))
@@ -910,7 +916,7 @@ final class DesignSystemTests: XCTestCase {
     }
 
     func testSpacingSourceUsesApprovedContractCanonicalNames() throws {
-        let source = try productionSource(at: "DesignSystem/Theme/Spacing.swift")
+        let source = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Theme/Spacing.swift")
         let forbiddenAliases = ["pageVertical", "componentPadding", "listItemGap", "sectionGap"]
 
         XCTAssertFalse(source.contains("static let hero:"))

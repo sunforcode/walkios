@@ -1,28 +1,6 @@
 import SwiftUI
-
-enum AppTab: String, CaseIterable, Identifiable, Hashable {
-    case home
-    case routes
-    case profile
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .home: "首页"
-        case .routes: "路线"
-        case .profile: "我的"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .home: "house"
-        case .routes: "map"
-        case .profile: "person"
-        }
-    }
-}
+import WalkData
+import WalkDesignSystem
 
 enum PendingAuthIntent: Equatable {
     case homeStart

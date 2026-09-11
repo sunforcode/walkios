@@ -1,4 +1,6 @@
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 struct RouteSegmentProjection: Identifiable, Equatable {
     let id: String

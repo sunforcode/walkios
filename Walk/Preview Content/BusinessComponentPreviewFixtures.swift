@@ -1,6 +1,8 @@
 #if DEBUG
 import Foundation
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 struct BusinessComponentPreviewHost<Content: View>: View {
     private let content: Content

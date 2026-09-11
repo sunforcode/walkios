@@ -1,4 +1,6 @@
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 struct TripDetailView: View {
     @Environment(\.dismiss) private var dismiss

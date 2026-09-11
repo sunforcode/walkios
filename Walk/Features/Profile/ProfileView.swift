@@ -1,4 +1,6 @@
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 enum ProfileLayout {
     static let avatarSize = RootNavigation.minimumHitSize

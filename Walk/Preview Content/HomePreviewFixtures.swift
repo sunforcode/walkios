@@ -1,18 +1,12 @@
 #if DEBUG
 import Foundation
+import WalkDesignSystem
+import WalkData
 
 enum HomePreviewFixtures {
-    static let completeMetrics = [
-        MetricItemModel(id: "distance", value: "12.1", unit: "km", label: "距离"),
-        MetricItemModel(id: "ascent", value: "600", unit: "m", label: "累计爬升"),
-        MetricItemModel(id: "duration", value: "约 5 h 20 min", label: "预计用时"),
-    ]
+    static let completeMetrics = MetricPreviewFixtures.completeMetrics
 
-    static let missingMetrics = [
-        MetricItemModel(id: "distance", value: nil, unit: "km", label: "距离"),
-        MetricItemModel(id: "ascent", value: nil, unit: "m", label: "累计爬升"),
-        MetricItemModel(id: "duration", value: "约 5 h 20 min", label: "预计用时"),
-    ]
+    static let missingMetrics = MetricPreviewFixtures.missingMetrics
 
     static let weatherAvailable = WeatherSummaryModel(
         conclusion: "16°·多云",

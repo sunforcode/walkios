@@ -16,6 +16,10 @@ settings:
 packages:
   Alamofire:
     path: .swiftpm-packages/checkouts/Alamofire
+  WalkData:
+    path: Packages/WalkData
+  WalkDesignSystem:
+    path: Packages/WalkDesignSystem
 
 targets:
   Walk:
@@ -28,6 +32,8 @@ targets:
           - "Tests/**/*"
     dependencies:
       - package: Alamofire
+      - package: WalkData
+      - package: WalkDesignSystem
     info:
       path: Walk/Resources/Info.plist
       properties:
@@ -68,7 +74,10 @@ targets:
       - path: Walk/Resources/MockAPI/route-detail-route-1.json
         buildPhase: resources
     dependencies:
+      - package: Alamofire
       - target: Walk
+      - package: WalkData
+      - package: WalkDesignSystem
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.walk.app.tests
@@ -83,6 +92,8 @@ targets:
       - path: Tests/BaselineUITests
     dependencies:
       - target: Walk
+      - package: WalkData
+      - package: WalkDesignSystem
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.walk.app.baseline-ui-tests
@@ -97,6 +108,8 @@ targets:
       - path: Tests/BaselineTests
     dependencies:
       - target: Walk
+      - package: WalkData
+      - package: WalkDesignSystem
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.walk.app.baseline-tests
@@ -111,6 +124,8 @@ targets:
       - path: Tests/ComponentTests
     dependencies:
       - target: Walk
+      - package: WalkData
+      - package: WalkDesignSystem
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.walk.app.component-tests
@@ -125,6 +140,8 @@ targets:
       - path: Tests/ComponentUITests
     dependencies:
       - target: Walk
+      - package: WalkData
+      - package: WalkDesignSystem
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.walk.app.component-ui-tests

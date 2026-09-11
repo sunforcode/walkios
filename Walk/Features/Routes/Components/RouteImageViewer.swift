@@ -1,4 +1,6 @@
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 extension RouteBusinessComponents {
     struct RouteImageViewer<ImageContent: View>: View {

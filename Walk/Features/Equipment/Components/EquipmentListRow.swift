@@ -1,5 +1,7 @@
 import Foundation
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 struct PersonalEquipmentRowProjection: Equatable {
     let identity: String

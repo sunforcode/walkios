@@ -1,4 +1,6 @@
 import Foundation
+import WalkData
+import WalkDesignSystem
 
 @MainActor
 final class RouteDiscoveryViewModel: ObservableObject {

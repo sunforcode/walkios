@@ -1,5 +1,7 @@
 import SwiftUI
 import CoreLocation
+import WalkData
+import WalkDesignSystem
 
 struct RoutePOIAnnotation: Identifiable, Equatable {
     let id: String

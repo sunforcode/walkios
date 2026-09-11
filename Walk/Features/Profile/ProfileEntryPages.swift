@@ -1,5 +1,7 @@
 import SwiftUI
 import PhotosUI
+import WalkData
+import WalkDesignSystem
 
 @MainActor
 final class ProfileDetailsViewModel: ObservableObject {

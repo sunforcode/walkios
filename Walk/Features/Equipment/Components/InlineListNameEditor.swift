@@ -1,4 +1,6 @@
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 enum InlineListNameEditorMode: Equatable {
     case create

@@ -1,4 +1,6 @@
 import SwiftUI
+import WalkData
+import WalkDesignSystem
 
 struct NavigationPlaceholderView: View {
     let routeID: String
