@@ -108,6 +108,7 @@ struct TripEquipmentView: View {
     @State private var editorUnitWeight = ""
     @State private var editorNote = ""
     @State private var deletingItem: TripEquipmentItem?
+    @State private var lastFailedDeletionItemID: String?
     private let onManagePersonalEquipment: () -> Void
     private let onRevisionChange: (String) -> Void
 
@@ -155,23 +156,24 @@ struct TripEquipmentView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
-        .confirmationDialog(
-            "删除这件本次装备？",
-            isPresented: Binding(
-                get: { deletingItem != nil },
-                set: { if !$0 { deletingItem = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            if let deletingItem {
-                Button("删除装备", role: .destructive) {
-                    let itemID = deletingItem.identity
-                    self.deletingItem = nil
-                    Task { await viewModel.deleteItem(itemID: itemID) }
-                }
+        .overlay {
+            if let item = deletingItem {
+                ConfirmationDialog(
+                    title: "删除这件本次装备？",
+                    message: "仅从本次行程快照中删除，不会删除个人装备。",
+                    confirmationTitle: "删除装备",
+                    variant: .danger,
+                    isLoading: viewModel.isMutating,
+                    error: item.identity == lastFailedDeletionItemID ? viewModel.errorMessage : nil,
+                    onCancel: {
+                        guard !viewModel.isMutating else { return }
+                        deletingItem = nil
+                        lastFailedDeletionItemID = nil
+                        viewModel.errorMessage = nil
+                    },
+                    onConfirm: { deleteItem(item) }
+                )
             }
-        } message: {
-            Text("仅从本次行程快照中删除，不会删除个人装备。")
         }
         .onAppear { Task { await viewModel.handleAppearance() } }
         .onChange(of: viewModel.projection?.revision) { revision in
@@ -194,18 +196,10 @@ struct TripEquipmentView: View {
                         )
                     )
 
-                    if projection.snapshot.summary.missingWeightItemCount > 0 {
-                        NoticeView(
-                            message: "\(projection.snapshot.summary.missingWeightItemCount) 项缺少单件重量。",
-                            title: "部分重量未计入",
-                            tone: .info
-                        )
-                    }
-
                     if !projection.editable {
                         NoticeView(
-                            message: "装备快照继续保留，但不显示管理操作。",
-                            title: "当前行程为只读",
+                            message: "只有规划中的行程可以调整本次装备。",
+                            title: "当前行程只读",
                             icon: "lock",
                             tone: .readonly
                         )
@@ -234,8 +228,8 @@ struct TripEquipmentView: View {
                     ContentSection(title: "装备清单") {
                         if projection.snapshot.items.isEmpty {
                             EmptyStateView(
-                                title: "本次装备清单为空",
-                                message: "当前快照确认没有可见条目。",
+                                title: "本次清单为空",
+                                message: "预计总重量 0 kg。规划中的行程可以新增只属于当前行程的装备。",
                                 icon: "backpack",
                                 variant: .section
                             )
@@ -279,7 +273,6 @@ struct TripEquipmentView: View {
                 .padding(.top, Spacing.md)
                 .padding(.bottom, projection.editable ? 108 : Spacing.xl)
             }
-            .refreshable { await viewModel.load() }
 
             if projection.editable {
                 FixedActionArea {
@@ -353,10 +346,25 @@ struct TripEquipmentView: View {
         onManagePersonalEquipment()
     }
 
+    /// 删除确认失败保留投影与 Dialog，错误就位显示；成功才关闭。
+    private func deleteItem(_ item: TripEquipmentItem) {
+        guard !viewModel.isMutating else { return }
+        let itemID = item.identity
+        Task {
+            await viewModel.deleteItem(itemID: itemID)
+            if viewModel.errorMessage != nil {
+                lastFailedDeletionItemID = itemID
+            } else {
+                deletingItem = nil
+                lastFailedDeletionItemID = nil
+            }
+        }
+    }
+
     private var independentCopyNote: some View {
         NoticeView(
-            message: "本页修改只作用于当前行程装备，不自动修改长期个人装备。",
-            title: "独立行程快照",
+            message: "增删改不会影响个人装备、用户装备清单或系统标准装备清单。",
+            title: "本次清单是独立副本",
             icon: "backpack",
             tone: .info
         )
@@ -445,9 +453,7 @@ struct TripEquipmentView: View {
     }
 
     private func dateRange(_ trip: TripEquipmentTrip) -> String {
-        trip.startDate == trip.endDate
-            ? trip.startDate.description
-            : "\(trip.startDate.description)–\(trip.endDate.description)"
+        DateCopy.dateRange(start: trip.startDate.description, end: trip.endDate.description)
     }
 }
 

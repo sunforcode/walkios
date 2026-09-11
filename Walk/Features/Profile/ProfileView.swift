@@ -107,7 +107,7 @@ struct ProfileView: View {
     private var signedInPageHeader: some View {
         HStack(alignment: .center, spacing: Spacing.lg) {
             Text("我的")
-                .font(.ornament(31, weight: .bold))
+                .font(.pageTitle)
                 .foregroundStyle(AppColors.textPrimary)
                 .lineLimit(1)
 
@@ -124,38 +124,39 @@ struct ProfileView: View {
     @ViewBuilder
     private var avatarHeaderContent: some View {
         if viewModel.isAccountLoading && viewModel.account == nil {
-            ProgressView()
-                .tint(AppColors.interactionPrimary)
-                .frame(width: 44, height: 44)
-                .accessibilityLabel("账号信息加载中")
+            AvatarButton(
+                variant: .pageHeader,
+                state: .loading,
+                accessibilityLabel: "账号信息加载中"
+            ) {}
         } else if let profile = viewModel.account?.profile {
             AvatarButton(
                 avatarLabel: profile.nickname,
                 variant: .pageHeader,
-                accessibilityLabel: "个人与设置"
+                accessibilityLabel: "打开个人与设置"
             ) {
                 isSettingsPresented = true
             }
         } else {
-            IconButton(
-                systemName: "arrow.clockwise",
-                accessibilityLabel: "重新加载账号信息"
+            AvatarButton(
+                variant: .pageHeader,
+                state: .unavailable,
+                accessibilityLabel: "账号信息加载失败，重试"
             ) {
                 Task { await viewModel.retryAccount() }
             }
-            .accessibilityHint(viewModel.accountErrorMessage ?? "账号信息加载失败")
         }
     }
 
     private var guestContent: some View {
         EmptyStateView(
             title: "你的徒步记录，都在这里",
-            message: "登录后可以查看最近一年的行程分布，维护长期个人装备与装备清单。",
+            message: "登录后查看个人行程、行程日历、个人装备和装备清单。",
             icon: "person.crop.circle",
             actionTitle: "登录",
             action: { onAuthenticate(.profile) }
         )
-        .frame(maxWidth: .infinity, minHeight: 420)
+        .frame(maxWidth: .infinity, minHeight: 440)
     }
 
     private var signedInContent: some View {

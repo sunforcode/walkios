@@ -38,25 +38,28 @@ struct AuthPanel: View {
 
     var body: some View {
         WalkPanel(variant: .glass) {
-            VStack(alignment: .leading, spacing: Spacing.lg) {
-                SheetHandle()
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.lg) {
+                    SheetHandle()
 
-                header
+                    header
 
-                Text(projection.sourceContext)
-                    .font(.bodySmall)
-                    .foregroundStyle(AppColors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    Text(projection.sourceContext)
+                        .font(.bodySmall)
+                        .foregroundStyle(AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                stageContent
+                    stageContent
 
-                Text("首次验证通过后将直接建立或复用 Walk 账号")
-                    .font(.appCaption)
-                    .foregroundStyle(AppColors.textWeak)
-                    .frame(maxWidth: .infinity)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+                    Text("首次验证通过后将直接建立或复用 Walk 账号")
+                        .font(.appCaption)
+                        .foregroundStyle(AppColors.textWeak)
+                        .frame(maxWidth: .infinity)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
+            .scrollIndicators(.hidden)
         }
     }
 

@@ -12,20 +12,11 @@ struct TripListRowProjection: Equatable {
 
     /// 日期区间按 spec shortDate 口径展示（「M月D日」，区间用「—」连接）。
     var dateRange: String {
-        let start = Self.shortDate(startDate)
-        return startDate == endDate ? start : "\(start)—\(Self.shortDate(endDate))"
+        DateCopy.dateRange(start: startDate, end: endDate)
     }
 
     var detailLine: String {
         "\(routeName) · \(dateRange)"
-    }
-
-    private static func shortDate(_ value: String) -> String {
-        let parts = value.split(separator: "-")
-        guard parts.count == 3,
-              let month = Int(parts[1]),
-              let day = Int(parts[2]) else { return value }
-        return "\(month)月\(day)日"
     }
 }
 

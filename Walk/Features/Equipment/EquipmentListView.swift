@@ -139,7 +139,6 @@ struct EquipmentListView: View {
                     scrollProxy.scrollTo(targetID ?? "equipment-page-top", anchor: .top)
                 }
             }
-            .refreshable { await viewModel.load() }
         }
     }
 
@@ -176,8 +175,8 @@ struct EquipmentListView: View {
         Group {
             if viewModel.items.isEmpty {
                 EmptyStateView(
-                    title: "尚未维护个人装备",
-                    message: "个人装备不是行程生成的前置条件，你可以稍后再补充。",
+                    title: "还没有个人装备",
+                    message: "没有个人装备也不会阻断行程生成。",
                     icon: "backpack",
                     variant: .section
                 )
@@ -221,8 +220,8 @@ struct EquipmentListView: View {
 
             if viewModel.equipmentLists.isEmpty {
                 EmptyStateView(
-                    title: "还没有装备清单",
-                    message: "按自己的习惯组织已有个人装备，生成行程时可以选择其中一份。",
+                    title: "还没有用户装备清单",
+                    message: "可以按自己的习惯创建一日、三日或五日清单。",
                     icon: "list.bullet",
                     variant: .section
                 )

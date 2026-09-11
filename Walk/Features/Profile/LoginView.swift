@@ -7,38 +7,53 @@ final class LoginViewModel: ObservableObject {
     enum Phase: Equatable {
         case phone
         case verificationCode
+        case confirmingFocus
+        case focusError
     }
 
     @Published var phone = ""
     @Published var code = ""
     @Published var phase: Phase = .phone
     @Published var verificationID: String?
+    @Published private(set) var expiresAt: Date?
     @Published private(set) var resendAvailableAt: Date?
+    @Published private(set) var retryAvailableAt: Date?
     @Published private(set) var account: AccountResponse?
     @Published private(set) var didAuthenticate = false
+    @Published private(set) var confirmedFocusTripExists: Bool?
     @Published private(set) var isSubmitting = false
     @Published var errorMessage: String?
+    @Published private(set) var focusErrorMessage: String?
 
     private let sendCode: (String) async throws -> VerificationCodeResponse
     private let createSession: (String, String) async throws -> Void
     private let loadAccount: () async throws -> AccountResponse
+    private let confirmFocusTrip: (() async throws -> Bool)?
+    private var focusConfirmationGeneration = 0
+    private var isAuthenticationCancelled = false
 
-    init(accountService: any AccountServicing) {
+    init(
+        accountService: any AccountServicing,
+        confirmFocusTrip: (() async throws -> Bool)? = nil
+    ) {
         self.sendCode = { try await accountService.sendVerificationCode(phone: $0) }
         self.createSession = { verificationID, code in
             _ = try await accountService.createSession(verificationID: verificationID, code: code)
         }
         self.loadAccount = { try await accountService.currentAccount() }
+        self.confirmFocusTrip = confirmFocusTrip
     }
 
     init(
         sendCode: @escaping (String) async throws -> VerificationCodeResponse,
         createSession: @escaping (String, String) async throws -> Void,
-        loadAccount: @escaping () async throws -> AccountResponse
+        loadAccount: @escaping () async throws -> AccountResponse,
+        confirmFocusTrip: (() async throws -> Bool)? = nil
     ) {
         self.sendCode = sendCode
         self.createSession = createSession
         self.loadAccount = loadAccount
+        self.confirmFocusTrip = confirmFocusTrip
     }
 
     static func normalizedPhone(_ raw: String) -> String? {
@@ -51,6 +66,7 @@ final class LoginViewModel: ObservableObject {
 
     var canSendCode: Bool {
         Self.normalizedPhone(phone) != nil
+            && (retryAvailableAt.map { $0 <= Date() } ?? true)
     }
 
     var canLogin: Bool {
@@ -59,37 +75,108 @@ final class LoginViewModel: ObservableObject {
     }
 
     func sendVerificationCode() async {
+        guard !isSubmitting else { return }
         guard let normalizedPhone = Self.normalizedPhone(phone) else {
             errorMessage = "请输入有效手机号"
             return
         }
+        guard retryAvailableAt.map({ $0 <= Date() }) ?? true else { return }
+        retryAvailableAt = nil
         isSubmitting = true
         errorMessage = nil
         defer { isSubmitting = false }
         do {
             let response = try await sendCode(normalizedPhone)
             verificationID = response.verificationId
+            expiresAt = response.expiresAt
             resendAvailableAt = response.resendAvailableAt
+            retryAvailableAt = nil
             phase = .verificationCode
         } catch {
-            errorMessage = Self.message(for: error)
+            if let retryAt = Self.retryAvailableAt(for: error) {
+                retryAvailableAt = retryAt
+                errorMessage = nil
+            } else {
+                errorMessage = Self.message(for: error)
+            }
         }
     }
 
     func login() async {
-        guard let verificationID, canLogin else { return }
+        guard !isSubmitting, let verificationID, canLogin else { return }
         isSubmitting = true
         errorMessage = nil
         defer { isSubmitting = false }
         do {
             try await createSession(verificationID, code)
         } catch {
+            guard !isAuthenticationCancelled, !Task.isCancelled else { return }
             errorMessage = Self.message(for: error)
             return
         }
+        guard !isAuthenticationCancelled, !Task.isCancelled else { return }
+
+        // account-access「认证成功承接原任务」：开启新行程意图在登录后先确认焦点行程，
+        // 失败进入 focusError 提供重试，不误判为没有焦点行程。
+        if let confirmFocusTrip {
+            guard await runFocusTripConfirmation(confirmFocusTrip) else { return }
+        }
+        guard !isAuthenticationCancelled, !Task.isCancelled else { return }
 
         didAuthenticate = true
         account = try? await loadAccount()
+    }
+
+    func retryFocusTripConfirmation() async {
+        guard !isAuthenticationCancelled,
+              !isSubmitting,
+              !didAuthenticate,
+              let confirmFocusTrip else { return }
+        isSubmitting = true
+        defer { isSubmitting = false }
+        guard await runFocusTripConfirmation(confirmFocusTrip),
+              !isAuthenticationCancelled,
+              !Task.isCancelled else { return }
+        didAuthenticate = true
+        account = try? await loadAccount()
+    }
+
+    func cancelPendingOperations() {
+        isAuthenticationCancelled = true
+        focusConfirmationGeneration += 1
+        confirmedFocusTripExists = nil
+    }
+
+    @discardableResult
+    private func runFocusTripConfirmation(_ confirm: () async throws -> Bool) async -> Bool {
+        let generation = focusConfirmationGeneration
+        guard !isAuthenticationCancelled else { return false }
+        phase = .confirmingFocus
+        focusErrorMessage = nil
+        do {
+            let focusExists = try await confirm()
+            guard !isAuthenticationCancelled,
+                  !Task.isCancelled,
+                  generation == focusConfirmationGeneration else { return false }
+            confirmedFocusTripExists = focusExists
+            return true
+        } catch {
+            guard !isAuthenticationCancelled,
+                  !Task.isCancelled,
+                  generation == focusConfirmationGeneration else { return false }
+            focusErrorMessage = Self.message(for: error)
+            phase = .focusError
+            return false
+        }
+    }
+
+    private static func retryAvailableAt(for error: Error) -> Date? {
+        guard let apiError = error as? APIClientError,
+              case .api(let code, _, _, let details) = apiError,
+              code == "verification_send_throttled" else {
+            return nil
+        }
+        return details?.retryAvailableAt
     }
 
     private static func message(for error: Error) -> String {
@@ -113,19 +200,25 @@ struct LoginView: View {
     @StateObject private var viewModel: LoginViewModel
     @State private var didResolveAuthenticationFlow = false
     @State private var now = Date()
-    @FocusState private var focusedField: LoginFocusedField?
     let intent: PendingAuthIntent?
+    let onConfirmedFocusTrip: (Bool) -> Void
     let onAuthenticated: () -> Void
     let onCancel: () -> Void
 
     init(
         accountService: any AccountServicing,
         intent: PendingAuthIntent? = nil,
+        onConfirmFocusTrip: (() async throws -> Bool)? = nil,
+        onConfirmedFocusTrip: @escaping (Bool) -> Void = { _ in },
         onAuthenticated: @escaping () -> Void,
         onCancel: @escaping () -> Void = {}
     ) {
-        _viewModel = StateObject(wrappedValue: LoginViewModel(accountService: accountService))
+        _viewModel = StateObject(wrappedValue: LoginViewModel(
+            accountService: accountService,
+            confirmFocusTrip: onConfirmFocusTrip
+        ))
         self.intent = intent
+        self.onConfirmedFocusTrip = onConfirmedFocusTrip
         self.onAuthenticated = onAuthenticated
         self.onCancel = onCancel
     }
@@ -133,11 +226,13 @@ struct LoginView: View {
     init(
         viewModel: LoginViewModel,
         intent: PendingAuthIntent? = nil,
+        onConfirmedFocusTrip: @escaping (Bool) -> Void = { _ in },
         onAuthenticated: @escaping () -> Void,
         onCancel: @escaping () -> Void = {}
     ) {
         _viewModel = StateObject(wrappedValue: viewModel)
         self.intent = intent
+        self.onConfirmedFocusTrip = onConfirmedFocusTrip
         self.onAuthenticated = onAuthenticated
         self.onCancel = onCancel
     }
@@ -148,15 +243,16 @@ struct LoginView: View {
                 LoginNightRidgeScene(phase: viewModel.phase)
                     .ignoresSafeArea()
 
-                WalkPanel(surface: .glass) {
-                    ViewThatFits(in: .vertical) {
-                        panelContent
-                        ScrollView(.vertical, showsIndicators: false) {
-                            panelContent
-                        }
-                        .scrollDismissesKeyboard(.interactively)
-                    }
-                }
+                AuthPanel(
+                    projection: authProjection,
+                    onClose: cancelAuthentication,
+                    onChangePhone: { viewModel.phone = $0 },
+                    onSendCode: { Task { await viewModel.sendVerificationCode() } },
+                    onChangeCode: { viewModel.code = $0 },
+                    onVerifyCode: { Task { await viewModel.login() } },
+                    onResendCode: { Task { await viewModel.sendVerificationCode() } },
+                    onRetryFocusTrip: { Task { await viewModel.retryFocusTripConfirmation() } }
+                )
                 .frame(maxWidth: 430)
                 .frame(maxHeight: max(0, geometry.size.height - 58), alignment: .bottom)
                 .padding(12)
@@ -168,20 +264,16 @@ struct LoginView: View {
         .background(AppColors.pageBase.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
-        .onAppear {
-            DispatchQueue.main.async {
-                focusedField = viewModel.phase == .phone ? .phone : .code
-            }
-        }
-        .onChange(of: viewModel.phase) { phase in
-            focusedField = phase == .phone ? .phone : .code
-        }
         .onChange(of: viewModel.didAuthenticate) { authenticated in
             guard authenticated else { return }
+            if let focusExists = viewModel.confirmedFocusTripExists {
+                onConfirmedFocusTrip(focusExists)
+            }
             didResolveAuthenticationFlow = true
             onAuthenticated()
         }
         .onDisappear {
+            viewModel.cancelPendingOperations()
             if !didResolveAuthenticationFlow { onCancel() }
         }
         .task {
@@ -199,136 +291,68 @@ struct LoginView: View {
         dismiss()
     }
 
-    private var panelContent: some View {
-        VStack(alignment: .leading, spacing: Spacing.lg) {
-            SheetHandle()
-                .overlay(alignment: .topTrailing) {
-                    GlassIconButton(systemName: "xmark", action: cancelAuthentication)
-                    .offset(y: -Spacing.sm)
-                }
+    /// AuthPanel 投影映射：四互斥阶段由 LoginViewModel.Phase 驱动；phone 阶段发送失败作为 operationError
+    /// 由组件以 ErrorView 呈现，code 阶段验证失败作为字段错误原位显示。
+    private var authProjection: AuthPanelProjection {
+        AuthPanelProjection(
+            stage: authStage,
+            sourceContext: contextualNote,
+            phone: viewModel.phone,
+            code: viewModel.code,
+            verificationID: viewModel.verificationID,
+            expiresAt: viewModel.expiresAt,
+            resendAvailableAt: viewModel.resendAvailableAt,
+            retryAvailableAt: activeRetryAvailableAt,
+            fieldError: fieldError,
+            operationError: operationError,
+            isLoading: viewModel.isSubmitting,
+            isPrimaryEnabled: viewModel.phase == .phone ? viewModel.canSendCode : viewModel.canLogin,
+            isSecondaryEnabled: canResend
+        )
+    }
 
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                Text(viewModel.phase == .phone ? "登录 Walk" : "输入验证码")
-                    .font(.sectionTitle)
-
-                Text(contextualNote)
-                    .font(.appBody)
-                    .foregroundStyle(AppColors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if viewModel.phase == .phone {
-                phoneField
-
-                if let errorMessage = viewModel.errorMessage {
-                    NoticeView(
-                        message: errorMessage,
-                        title: "验证码发送失败",
-                        icon: "exclamationmark.triangle",
-                        tone: .danger,
-                        variant: .form
-                    )
-                }
-
-                PrimaryAction(
-                    title: "获取验证码",
-                    isLoading: viewModel.isSubmitting,
-                    isDisabled: !viewModel.canSendCode,
-                    fillsWidth: true
-                ) {
-                    Task { await viewModel.sendVerificationCode() }
-                }
-            } else {
-                codeField
-
-                NoticeView(
-                    message: resendNotice,
-                    title: "验证码",
-                    icon: "clock",
-                    tone: .info,
-                    variant: .form
-                )
-
-                PrimaryAction(
-                    title: "登录并继续",
-                    isLoading: viewModel.isSubmitting,
-                    isDisabled: !viewModel.canLogin,
-                    fillsWidth: true
-                ) {
-                    Task { await viewModel.login() }
-                }
-
-                SecondaryAction(
-                    title: "重新获取验证码",
-                    variant: .default,
-                    isLoading: false,
-                    isDisabled: !canResend || viewModel.isSubmitting,
-                    fillsWidth: true
-                ) {
-                    Task { await viewModel.sendVerificationCode() }
-                }
-            }
-
-            Text("首次验证通过后直接建立 Walk 账号")
-                .font(.appCaption)
-                .foregroundStyle(AppColors.textWeak)
-                .frame(maxWidth: .infinity)
-                .multilineTextAlignment(.center)
+    private var authStage: AuthPanelStage {
+        switch viewModel.phase {
+        case .phone: .phone
+        case .verificationCode: .code
+        case .confirmingFocus: .confirmingFocus
+        case .focusError: .focusError
         }
     }
 
-    private var phoneField: some View {
-        FormField(
-            label: "手机号",
-            requirement: .required,
-            assistiveText: "请输入可接收验证码的手机号",
-            error: phoneValidationError,
-            isFocused: focusedField == .phone
-        ) {
-            TextField("手机号", text: $viewModel.phone)
-                .keyboardType(.phonePad)
-                .textContentType(.telephoneNumber)
-                .focused($focusedField, equals: .phone)
-                .submitLabel(.continue)
-                .onSubmit {
-                    guard viewModel.canSendCode else { return }
-                    Task { await viewModel.sendVerificationCode() }
-                }
-                .accessibilityLabel("手机号")
+    private var fieldError: String? {
+        switch viewModel.phase {
+        case .phone:
+            return phoneValidationError
+        case .verificationCode:
+            return viewModel.errorMessage
+        case .confirmingFocus, .focusError:
+            return nil
         }
     }
 
-    private var codeField: some View {
-        FormField(
-            label: "验证码",
-            requirement: .required,
-            assistiveText: "验证码已发送至 \(maskedPhone)",
-            error: viewModel.errorMessage,
-            isFocused: focusedField == .code
-        ) {
-            TextField("验证码", text: $viewModel.code)
-                .keyboardType(.numberPad)
-                .textContentType(.oneTimeCode)
-                .focused($focusedField, equals: .code)
-                .submitLabel(.done)
-                .onSubmit {
-                    guard viewModel.canLogin else { return }
-                    Task { await viewModel.login() }
-                }
-                .accessibilityLabel("验证码")
+    private var operationError: String? {
+        switch viewModel.phase {
+        case .phone:
+            return viewModel.errorMessage
+        case .focusError:
+            return viewModel.focusErrorMessage
+        case .verificationCode, .confirmingFocus:
+            return nil
         }
     }
 
     private var phoneValidationError: String? {
-        guard !viewModel.phone.isEmpty, !viewModel.canSendCode else { return nil }
+        guard !viewModel.phone.isEmpty,
+              LoginViewModel.normalizedPhone(viewModel.phone) == nil else {
+            return nil
+        }
         return "请输入有效手机号"
     }
 
-    private var maskedPhone: String {
-        guard let phone = LoginViewModel.normalizedPhone(viewModel.phone) else { return viewModel.phone }
-        let digits = phone.dropFirst()
-        guard digits.count > 7 else { return phone }
-        return "+\(digits.prefix(3))****\(digits.suffix(4))"
+    private var activeRetryAvailableAt: Date? {
+        guard let retryAt = viewModel.retryAvailableAt, retryAt > now else { return nil }
+        return retryAt
     }
 
     private var remainingSeconds: Int {
@@ -337,13 +361,7 @@ struct LoginView: View {
     }
 
     private var canResend: Bool {
-        remainingSeconds == 0
-    }
-
-    private var resendNotice: String {
-        remainingSeconds > 0
-            ? "\(remainingSeconds) 秒后可重新获取"
-            : "现在可以重新获取验证码"
+        remainingSeconds == 0 && activeRetryAvailableAt == nil
     }
 
     private var contextualNote: String {
@@ -387,12 +405,18 @@ private struct LoginNightRidgeScene: View {
                 .padding(.top, 126)
                 .frame(height: 412)
 
-            Text("WALK")
-                .font(.ornament(15, weight: .black))
-                .tracking(2)
-                .foregroundStyle(AppColors.textPrimary)
-                .padding(.leading, 24)
-                .padding(.top, 60)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Walk")
+                    .font(.ornament(15, weight: .black))
+                    .tracking(2)
+                    .foregroundStyle(AppColors.textPrimary)
+                Text("ROUTE 01 · PERSONAL JOURNEY")
+                    .font(.appCaption)
+                    .tracking(1)
+                    .foregroundStyle(AppColors.textSecondary)
+            }
+            .padding(.leading, 24)
+            .padding(.top, 60)
         }
         .accessibilityHidden(true)
         .allowsHitTesting(false)

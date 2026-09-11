@@ -62,12 +62,19 @@ struct CreateTripEquipmentListPresentation: Equatable {
 @MainActor
 final class CreateTripViewModel: ObservableObject {
     @Published private(set) var context: PersonalTripGenerationContext?
-    @Published var departureCity = ""
-    @Published var startDate = BusinessCalendar.startOfToday()
-    @Published var selectedEquipmentListID: String?
+    @Published var departureCity = "" {
+        didSet { invalidateTransportSelectionIfNeeded(previousValue: oldValue, currentValue: departureCity) }
+    }
+    @Published var startDate = BusinessCalendar.startOfToday() {
+        didSet { invalidateTransportSelectionIfNeeded(previousValue: oldValue, currentValue: startDate) }
+    }
+    @Published var selectedEquipmentListID: String? {
+        didSet { invalidateTransportSelectionIfNeeded(previousValue: oldValue, currentValue: selectedEquipmentListID) }
+    }
     @Published private(set) var transportSelection: PersonalTripTransportSelection?
     @Published var selectedTransportOptionID: String?
     @Published private(set) var createdTripID: String?
+    @Published private(set) var isVersionConflict = false
     @Published var isLoading = false
     @Published var isSubmitting = false
     @Published var errorMessage: String?
@@ -109,7 +116,8 @@ final class CreateTripViewModel: ObservableObject {
 
     var canSubmit: Bool {
         guard context?.route.generationEligibility.eligible == true,
-              !departureCity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+              !departureCity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !isVersionConflict else {
             return false
         }
         guard transportSelection != nil else { return true }
@@ -124,6 +132,11 @@ final class CreateTripViewModel: ObservableObject {
         do {
             context = try await loadContext(routeID)
             hasLoaded = true
+            isVersionConflict = false
+            transportSelection = nil
+            selectedTransportOptionID = nil
+            lastRequest = nil
+            lastIdempotencyKey = nil
             if let selectedEquipmentListID,
                context?.equipmentLists.contains(where: { $0.equipmentListID == selectedEquipmentListID }) != true {
                 self.selectedEquipmentListID = nil
@@ -201,11 +214,34 @@ final class CreateTripViewModel: ObservableObject {
                 transportSelection = nil
                 createdTripID = detail.trip.identity
             }
-        } catch let error as LocalizedError {
-            errorMessage = error.errorDescription ?? error.localizedDescription
         } catch {
-            errorMessage = "生成失败：\(error.localizedDescription)"
+            // personal-trip-api 409 route_version_conflict：进入 versionConflict 校准态，
+            // 保留输入但不允许继续提交旧版本；恢复动作 refreshRouteVersion / viewCurrentRoute。
+            if let apiError = error as? APIClientError,
+               case .api(let code, _, _, _) = apiError,
+               code == "route_version_conflict" {
+                isVersionConflict = true
+                transportSelection = nil
+                selectedTransportOptionID = nil
+                lastRequest = nil
+                lastIdempotencyKey = nil
+            } else if let localized = error as? LocalizedError {
+                errorMessage = localized.errorDescription ?? localized.localizedDescription
+            } else {
+                errorMessage = "生成失败：\(error.localizedDescription)"
+            }
         }
+    }
+
+    private func invalidateTransportSelectionIfNeeded<Value: Equatable>(
+        previousValue: Value,
+        currentValue: Value
+    ) {
+        guard previousValue != currentValue, transportSelection != nil else { return }
+        transportSelection = nil
+        selectedTransportOptionID = nil
+        lastRequest = nil
+        lastIdempotencyKey = nil
     }
 }
 
@@ -337,7 +373,16 @@ struct CreateTripView: View {
                             transportSection(selection)
                         }
 
-                        if let error = viewModel.errorMessage {
+                        if viewModel.isVersionConflict {
+                            versionConflictRegion
+                            if let error = viewModel.errorMessage {
+                                ErrorView(
+                                    message: error,
+                                    title: "暂时无法读取最新版本",
+                                    variant: .form
+                                )
+                            }
+                        } else if let error = viewModel.errorMessage {
                             ErrorView(
                                 message: "\(error)\n已保留本次填写内容。",
                                 title: "生成未完成",
@@ -378,8 +423,6 @@ struct CreateTripView: View {
 
     private func requiredInputs(routeType: String) -> some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            SectionHeader(title: "必要信息")
-
             FormField(
                 label: "出发城市",
                 requirement: .required,
@@ -407,12 +450,62 @@ struct CreateTripView: View {
 
             NoticeView(
                 message: routeType == "one_day"
-                    ? "一日路线只形成 D1，去程、徒步和返程都在同一自然日。"
-                    : "多日路线的自然日和结束日期由完整生成结果返回。",
+                    ? "一日路线固定只生成 \(shortStartDate) 一个自然日，去程、徒步和返程都在 D1 内完成。"
+                    : "多日路线的实际自然日和结束日期由生成结果返回，生成前不根据建议天数或参考分日推算。",
                 title: "完整日期由生成结果确定",
                 tone: .info
             )
         }
+    }
+
+    /// VersionConflictRegion：只承载两个恢复动作 refreshRouteVersion / viewCurrentRoute，
+    /// 不静默更新路线版本；恢复前主动作禁用。
+    private var versionConflictRegion: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            NoticeView(
+                message: "路线已更新到新版本，生成前需要确认使用最新公开路线版本。",
+                title: "路线版本已更新",
+                icon: "arrow.triangle.2.circlepath",
+                tone: .warning
+            )
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Spacing.sm) {
+                    conflictRecoveryActions
+                }
+                VStack(spacing: Spacing.sm) {
+                    conflictRecoveryActions
+                }
+            }
+        }
+    }
+
+    private var conflictRecoveryActions: some View {
+        Group {
+            SecondaryAction(
+                title: "重新读取最新版本",
+                isDisabled: viewModel.isLoading,
+                fillsWidth: true,
+                action: { refreshRouteVersion() }
+            )
+            SecondaryAction(
+                title: "返回路线详情",
+                isDisabled: viewModel.isLoading,
+                fillsWidth: true,
+                action: { viewCurrentRoute() }
+            )
+        }
+    }
+
+    private func refreshRouteVersion() {
+        Task { await viewModel.load() }
+    }
+
+    private func viewCurrentRoute() {
+        dismiss()
+    }
+
+    private var shortStartDate: String {
+        DateCopy.shortDate(LocalDate(date: viewModel.startDate, calendar: .business).description)
     }
 
     private func equipmentSection(_ context: PersonalTripGenerationContext) -> some View {
@@ -487,7 +580,7 @@ struct CreateTripView: View {
         guard viewModel.departureCity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return nil
         }
-        return "请输入出发城市"
+        return "请先填写城市，再生成个人行程。"
     }
 
     private var submitTitle: String {

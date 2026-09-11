@@ -7,6 +7,8 @@ struct RootView: View {
     @State private var shell = AppShellState()
     @State private var pendingAuthIntent: PendingAuthIntent?
     @State private var pendingAuthTab: AppTab?
+    /// account-access：认证链路确认的焦点行程结果，execute(.homeStart) 只消费该结果。
+    @State private var confirmedFocusTripExists: Bool?
     @State private var routeListShowsBackButton = false
     @State private var authenticationGeneration = 0
     /// S5：搜索会话状态提升到 App 层，返回后再进 PAGE-SEARCH 恢复 query 与结果。
@@ -143,20 +145,16 @@ struct RootView: View {
     private func execute(_ intent: PendingAuthIntent, in tab: AppTab) {
         switch intent {
         case .homeStart:
-            Task { @MainActor in
-                do {
-                    let focus = try await appEnvironment.personalTripService.focus()
-                    if focus.trip != nil {
-                        shell.setPath([], for: .home)
-                        shell.selectTab(.home)
-                    } else {
-                        routeListShowsBackButton = false
-                        shell.showRouteList()
-                    }
-                } catch {
-                    shell.setPath([], for: .home)
-                    shell.selectTab(.home)
-                }
+            // account-access：焦点行程结果由认证链路确认（confirmingFocus/focusError），
+            // 无法确认时不会走到这里；此处只消费已确认结果，不再自行 catch 落回首页。
+            guard let focusExists = confirmedFocusTripExists else { return }
+            confirmedFocusTripExists = nil
+            if focusExists {
+                shell.setPath([], for: .home)
+                shell.selectTab(.home)
+            } else {
+                routeListShowsBackButton = false
+                shell.showRouteList()
             }
         case .profile:
             shell.selectTab(.profile)
@@ -183,8 +181,15 @@ struct RootView: View {
                 LoginView(
                     accountService: appEnvironment.accountService,
                     intent: pendingAuthIntent,
+                    onConfirmFocusTrip: pendingAuthIntent == .homeStart
+                        ? { [appEnvironment] in
+                            try await appEnvironment.personalTripService.focus().trip != nil
+                        }
+                        : nil,
+                    onConfirmedFocusTrip: { confirmedFocusTripExists = $0 },
                     onAuthenticated: completeAuthentication,
                     onCancel: {
+                        confirmedFocusTripExists = nil
                         pendingAuthIntent = nil
                         pendingAuthTab = nil
                     }

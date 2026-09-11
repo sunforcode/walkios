@@ -95,6 +95,7 @@
 		B1964AC1F7E47201368B5283 /* WalkDesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 195472448AE00109452BB5E1 /* WalkDesignSystem */; };
 		B1FAA930018081ADFE609AE1 /* RouteFactSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4EE69D98D191BE05CE0B2EF /* RouteFactSection.swift */; };
 		B4A32675DCF52B25F3C8A744 /* MockData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 254F77072E112D90C8463F41 /* MockData.swift */; };
+		B63FFDAF9FF52D7F9BF43A05 /* DateCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A9487C7CB4511672953E099 /* DateCopy.swift */; };
 		B64C86FCFB77659039809758 /* AccountMenuSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C315B00E61D28CD16E8AEEA /* AccountMenuSheet.swift */; };
 		B790D678D3E79070D271189E /* WalkData in Frameworks */ = {isa = PBXBuildFile; productRef = ED9C7A5122A12A9917F771AA /* WalkData */; };
 		B80B2002DEA5D980EE0AB8B6 /* AuthPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4185A6906F662016B846CFF5 /* AuthPanel.swift */; };
@@ -239,6 +240,7 @@
 		65F2EC0EC9327E2310049434 /* TripStatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripStatusBadge.swift; sourceTree = "<group>"; };
 		68A5AEBF6589BF8F4051C60B /* PersonalEquipmentSummaryCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalEquipmentSummaryCard.swift; sourceTree = "<group>"; };
 		68F862DF7EF9B60F0A287781 /* ProfileEntryPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileEntryPages.swift; sourceTree = "<group>"; };
+		6A9487C7CB4511672953E099 /* DateCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateCopy.swift; sourceTree = "<group>"; };
 		6AE9C6A662BD632EEA473EA6 /* EquipmentListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EquipmentListViewModel.swift; sourceTree = "<group>"; };
 		6B598F7B07257118E28A5064 /* TripRouteVersionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripRouteVersionCard.swift; sourceTree = "<group>"; };
 		6BDC5156855F5C97B0A5CD37 /* WalkApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkApp.swift; sourceTree = "<group>"; };
@@ -589,9 +591,18 @@
 				72049B034FC968480E59CB8A /* Navigation */,
 				2BDCD7AC56169AFB59255DC4 /* Profile */,
 				5BAA143C27E7D0441694E210 /* Routes */,
+				90EE1BB24E37BF1FFBF0D73E /* Shared */,
 				8789506079B1F37D95A2A454 /* Trips */,
 			);
 			path = Features;
+			sourceTree = "<group>";
+		};
+		90EE1BB24E37BF1FFBF0D73E /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				6A9487C7CB4511672953E099 /* DateCopy.swift */,
+			);
+			path = Shared;
 			sourceTree = "<group>";
 		};
 		94A5F6FF49119833077EA8C1 /* Tests */ = {
@@ -1044,6 +1055,7 @@
 				D83950B6260B1A6143E1ADEC /* ComponentPreviewRootView.swift in Sources */,
 				41AB764063D13AFFD4071A71 /* CreateTripView.swift in Sources */,
 				3D7A6297CE3059DA6363B4D3 /* DailyWeatherCard.swift in Sources */,
+				B63FFDAF9FF52D7F9BF43A05 /* DateCopy.swift in Sources */,
 				E2CEF70A74350832EE0B02FB /* ElevationProfile.swift in Sources */,
 				E9CA943485B91F53596216D5 /* EquipmentDeletionImpact.swift in Sources */,
 				F85EBA87625FBC6371BDF721 /* EquipmentListRow.swift in Sources */,

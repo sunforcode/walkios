@@ -177,6 +177,32 @@ final class HomeAndRootViewModelTests: XCTestCase {
         XCTAssertEqual(sut.phase, LoginViewModel.Phase.phone)
     }
 
+    func testLoginSendThrottlePreservesRetryTimeAndBlocksPrematureResend() async {
+        let retryAt = Date(timeIntervalSinceNow: 300)
+        var sendCount = 0
+        let sut = LoginViewModel(
+            sendCode: { _ in
+                sendCount += 1
+                throw APIClientError.api(
+                    code: "verification_send_throttled",
+                    message: "发送受限",
+                    retryable: true,
+                    details: APIErrorDetails(retryAvailableAt: retryAt)
+                )
+            },
+            createSession: { _, _ in },
+            loadAccount: { throw APIClientError.invalidResponse }
+        )
+        sut.phone = "+8613800138000"
+
+        await sut.sendVerificationCode()
+        await sut.sendVerificationCode()
+
+        XCTAssertEqual(sendCount, 1)
+        XCTAssertEqual(sut.retryAvailableAt, retryAt)
+        XCTAssertNil(sut.errorMessage, "限流应由 AuthPanel.throttled 投影呈现，不与发送失败态叠加")
+    }
+
     func testLoginCreatesSessionThenLoadsAccount() async {
         var calls: [String] = []
         let account = AccountResponse(
@@ -285,6 +311,139 @@ final class HomeAndRootViewModelTests: XCTestCase {
         XCTAssertTrue(loginSource.contains("case .homeStart"))
         XCTAssertTrue(loginSource.contains("case .createTrip"))
         XCTAssertTrue(loginSource.contains("case .profile"))
+    }
+
+    // account-access「认证成功承接原任务」：homeStart 登录后先确认焦点行程，
+    // 确认成功才发布 didAuthenticate；失败进入 focusError 且不发布认证完成。
+    func testLoginConfirmsFocusTripAfterSessionBeforeAuthenticating() async {
+        var order: [String] = []
+        let sut = LoginViewModel(
+            sendCode: { _ in throw APIClientError.invalidResponse },
+            createSession: { _, _ in order.append("session") },
+            loadAccount: {
+                order.append("account")
+                throw APIClientError.invalidResponse
+            },
+            confirmFocusTrip: {
+                order.append("focus")
+                return true
+            }
+        )
+        sut.verificationID = "verification-1"
+        sut.phase = .verificationCode
+        sut.code = "123456"
+
+        await sut.login()
+
+        XCTAssertEqual(order, ["session", "focus", "account"])
+        XCTAssertTrue(sut.didAuthenticate)
+        XCTAssertEqual(sut.phase, .confirmingFocus, "确认成功后阶段停留 confirmingFocus，面板随认证完成关闭")
+    }
+
+    func testLoginFocusTripConfirmationFailureEntersFocusErrorWithoutAuthenticating() async {
+        let sut = LoginViewModel(
+            sendCode: { _ in throw APIClientError.invalidResponse },
+            createSession: { _, _ in },
+            loadAccount: { throw APIClientError.invalidResponse },
+            confirmFocusTrip: { throw APIClientError.api(code: "focus_unavailable", message: "无法确认", retryable: true) }
+        )
+        sut.verificationID = "verification-1"
+        sut.phase = .verificationCode
+        sut.code = "123456"
+
+        await sut.login()
+
+        XCTAssertFalse(sut.didAuthenticate, "无法确认焦点行程时不得发布认证完成")
+        XCTAssertEqual(sut.phase, .focusError)
+        XCTAssertNotNil(sut.focusErrorMessage)
+    }
+
+    func testLoginFocusTripConfirmationRetrySucceedsAndAuthenticates() async {
+        var attempts = 0
+        let sut = LoginViewModel(
+            sendCode: { _ in throw APIClientError.invalidResponse },
+            createSession: { _, _ in },
+            loadAccount: { throw APIClientError.invalidResponse },
+            confirmFocusTrip: {
+                attempts += 1
+                if attempts == 1 { throw APIClientError.invalidResponse }
+                return false
+            }
+        )
+        sut.verificationID = "verification-1"
+        sut.phase = .verificationCode
+        sut.code = "123456"
+
+        await sut.login()
+        XCTAssertEqual(sut.phase, .focusError)
+        XCTAssertFalse(sut.didAuthenticate)
+
+        await sut.retryFocusTripConfirmation()
+        XCTAssertTrue(sut.didAuthenticate, "重试确认成功后发布认证完成")
+        XCTAssertNil(sut.focusErrorMessage)
+    }
+
+    func testLoginFocusTripConfirmationRejectsConcurrentRetries() async {
+        let retryStarted = expectation(description: "first retry started")
+        let gate = AsyncGate()
+        var attempts = 0
+        let sut = LoginViewModel(
+            sendCode: { _ in throw APIClientError.invalidResponse },
+            createSession: { _, _ in },
+            loadAccount: { throw APIClientError.invalidResponse },
+            confirmFocusTrip: {
+                attempts += 1
+                if attempts == 1 { throw APIClientError.invalidResponse }
+                if attempts == 2 {
+                    retryStarted.fulfill()
+                    await gate.wait()
+                }
+                return true
+            }
+        )
+        sut.verificationID = "verification-1"
+        sut.phase = .verificationCode
+        sut.code = "123456"
+        await sut.login()
+
+        let firstRetry = Task { await sut.retryFocusTripConfirmation() }
+        await fulfillment(of: [retryStarted], timeout: 1)
+        let duplicateRetry = Task { await sut.retryFocusTripConfirmation() }
+        await duplicateRetry.value
+
+        XCTAssertEqual(attempts, 2, "确认请求进行中时不得启动第二个重试")
+        await gate.open()
+        await firstRetry.value
+    }
+
+    func testCancelledFocusTripConfirmationDoesNotAuthenticate() async {
+        let retryStarted = expectation(description: "retry started")
+        let gate = AsyncGate()
+        var attempts = 0
+        let sut = LoginViewModel(
+            sendCode: { _ in throw APIClientError.invalidResponse },
+            createSession: { _, _ in },
+            loadAccount: { throw APIClientError.invalidResponse },
+            confirmFocusTrip: {
+                attempts += 1
+                if attempts == 1 { throw APIClientError.invalidResponse }
+                retryStarted.fulfill()
+                await gate.wait()
+                return true
+            }
+        )
+        sut.verificationID = "verification-1"
+        sut.phase = .verificationCode
+        sut.code = "123456"
+        await sut.login()
+
+        let retry = Task { await sut.retryFocusTripConfirmation() }
+        await fulfillment(of: [retryStarted], timeout: 1)
+        sut.cancelPendingOperations()
+        await gate.open()
+        await retry.value
+
+        XCTAssertFalse(sut.didAuthenticate, "页面退出后迟到的焦点确认不得发布认证完成")
     }
 
     func testDefaultMockFixturesSupportTypedLoginAndLogout() async throws {

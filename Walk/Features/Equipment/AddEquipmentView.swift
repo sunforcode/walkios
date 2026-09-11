@@ -211,7 +211,7 @@ struct EquipmentEditView: View {
         PageTitleBlock(
             title: mode == .create ? "新增一件装备" : "更新装备",
             kicker: "写入长期个人资产",
-            description: "只维护装备名称、实际拥有数量和可选的单件重量。"
+            description: "本页只维护装备名称、实际拥有数量和可选的单件重量。"
         )
     }
 

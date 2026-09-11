@@ -806,11 +806,13 @@ final class DesignSystemTests: XCTestCase {
 
     // MARK: 批次 2/3 —— PAGE-LOGIN / TRIP-DETAIL / TRIPS / TRIP-DAY / TRIP-WEATHER / TRIP-EQUIPMENT
 
+    // 6.4（A1/A3）后面板内部由生产 AuthPanel 组件拥有：玻璃面、关闭、legal note 均为组件权威。
     func testLoginEstablishesWalkAccountAfterFirstVerification() throws {
         let login = try productionSource(at: "Features/Profile/LoginView.swift")
-        XCTAssertTrue(login.contains("首次验证通过后直接建立 Walk 账号"), "登录页说明建立账号方式")
-        XCTAssertTrue(login.contains("WalkPanel(surface: .glass)"), "认证面板使用 WalkPanel 的 glass 表面变体")
-        XCTAssertTrue(login.contains("GlassIconButton(systemName: \"xmark\", action: cancelAuthentication)"), "认证面板提供会退出当前页面的关闭按钮")
+        let authPanel = try productionSource(at: "Features/Profile/Components/AuthPanel.swift")
+        XCTAssertTrue(authPanel.contains("首次验证通过后将直接建立或复用 Walk 账号"), "legal note 由 AuthPanel 组件拥有")
+        XCTAssertTrue(authPanel.contains("WalkPanel(variant: .glass)"), "认证面板使用 WalkPanel 的 glass 表面变体")
+        XCTAssertTrue(authPanel.contains("关闭登录"), "认证面板提供关闭按钮")
         XCTAssertTrue(login.contains("@Environment(\\.dismiss) private var dismiss"), "登录页持有系统导航退出能力")
         XCTAssertTrue(login.contains("private func cancelAuthentication()"), "关闭动作统一清理认证意图并退出页面")
         XCTAssertTrue(login.contains("dismiss()"), "关闭动作必须真正移除登录页")
@@ -926,11 +928,11 @@ final class DesignSystemTests: XCTestCase {
         // 清单不可用用 ErrorView.page（非 UnavailableStateView），保存失败经 InlineEquipmentEditor.saveError。
         XCTAssertTrue(equipment.contains("UtilityNavigationHeader("), "固定导航头")
         XCTAssertTrue(equipment.contains("title: \"行程装备\""), "导航头标题")
-        XCTAssertTrue(equipment.contains("本次装备清单为空"), "空态")
+        XCTAssertTrue(equipment.contains("本次清单为空"), "空态标题钉入 spec（6.4 T6）")
         XCTAssertTrue(equipment.contains("新增本次装备"), "次级操作新增")
         XCTAssertTrue(equipment.contains("管理我的装备"), "次级操作管理")
         XCTAssertTrue(equipment.contains("重新核对已有状态"), "重新核对")
-        XCTAssertTrue(equipment.contains("当前行程为只读"), "只读替换文案")
+        XCTAssertTrue(equipment.contains("当前行程只读"), "只读态标题钉入 spec（6.4 T1）")
         // 四项概况指标由 TripEquipmentOverview 组件拥有（PAGE-TRIP-EQUIPMENT 禁止 Page 直接拥有概况内部指标），
         // 文案权威在组件 spec，断言改查组件源码而非页面源码。
         let overview = try productionSource(at: "Features/Trips/Components/TripEquipmentOverview.swift")
@@ -941,6 +943,92 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(equipment.contains("title: \"无法显示行程装备\""), "清单不可用有明确文案")
         XCTAssertTrue(equipment.contains("Task { await viewModel.load() }"), "清单不可用提供重试")
         XCTAssertTrue(equipment.contains("saveError: viewModel.errorMessage"), "保存失败经 InlineEquipmentEditor.saveError 接收后端失败原因")
+    }
+
+    // MARK: 批次 6.4 —— PAGE-ME / PAGE-LOGIN / PAGE-EQUIPMENT-EDIT / PAGE-MY-EQUIPMENT / PAGE-TRIP-EQUIPMENT / PAGE-TRIP-CREATE
+
+    /// PAGE-ME 6.4 修订（M1-M5）：页题字档、游客态 copy、AvatarButton unavailable、最小高、可访问名。
+    func testProfileUsesApprovedPageTitleGuestCopyAndAvatarStates() throws {
+        let profile = try productionSource(at: "Features/Profile/ProfileView.swift")
+        XCTAssertFalse(profile.contains(".ornament(31"), "登录态页头标题使用 font-pageTitle，不再自定 ornament 档")
+        XCTAssertTrue(profile.contains("登录后查看个人行程、行程日历、个人装备和装备清单。"), "游客态说明 copy 钉入 spec")
+        XCTAssertTrue(profile.contains("minHeight: 440"), "游客态最小高 440 逻辑点")
+        XCTAssertTrue(profile.contains("打开个人与设置"), "AvatarButton 可访问名为「打开个人与设置」")
+        XCTAssertTrue(profile.contains("state: .unavailable"), "profileError 回退进入 AvatarButton unavailable 重试")
+        XCTAssertFalse(profile.contains("arrow.clockwise"), "profileError 不再用重试图标按钮")
+    }
+
+    /// PAGE-LOGIN 6.4 修订（A1/A2/A3）：消费生产 AuthPanel、焦点确认双态、品牌行；RootView 修复误判。
+    func testLoginConsumesProductionAuthPanelWithFocusConfirmation() throws {
+        let login = try productionSource(at: "Features/Profile/LoginView.swift")
+        XCTAssertTrue(login.contains("AuthPanel("), "登录页消费生产 AuthPanel 组件")
+        XCTAssertFalse(login.contains("WalkPanel(surface: .glass)"), "不再私有重建认证面板玻璃面")
+        XCTAssertTrue(login.contains("AuthPanelProjection("), "登录页构造 AuthPanel 投影")
+        XCTAssertTrue(login.contains(".confirmingFocus"), "提供 confirmingFocus 校准态映射")
+        XCTAssertTrue(login.contains(".focusError"), "提供 focusError 校准态映射")
+        XCTAssertTrue(login.contains("onRetryFocusTrip"), "焦点确认失败提供重试事件")
+        XCTAssertTrue(login.contains("retryAvailableAt: activeRetryAvailableAt"), "发送限流时间投影给 AuthPanel")
+        XCTAssertTrue(login.contains("viewModel.focusErrorMessage"), "焦点确认失败原因投影给 AuthPanel")
+        XCTAssertFalse(login.contains("首次验证通过后直接建立 Walk 账号"), "legal note 由 AuthPanel 组件拥有")
+        XCTAssertTrue(login.contains("ROUTE 01 · PERSONAL JOURNEY"), "品牌行补齐「Walk / ROUTE 01 · PERSONAL JOURNEY」")
+
+        let authPanel = try productionSource(at: "Features/Profile/Components/AuthPanel.swift")
+        XCTAssertTrue(authPanel.contains("ScrollView"), "AuthPanel 在短屏、键盘或大字号下内部滚动")
+
+        let root = try productionSource(at: "App/RootView.swift")
+        XCTAssertTrue(root.contains("onConfirmFocusTrip"), "RootView 提供焦点确认处理器")
+        XCTAssertTrue(root.contains("confirmedFocusTripExists"), "execute(.homeStart) 消费认证链路确认结果，不再自行 catch 落回首页")
+    }
+
+    /// PAGE-EQUIPMENT-EDIT 6.4 修订（E1）：页题说明钉入原型 copy。
+    func testEquipmentEditPageTitleMatchesPinnedCopy() throws {
+        let source = try productionSource(at: "Features/Equipment/AddEquipmentView.swift")
+        XCTAssertTrue(source.contains("本页只维护装备名称、实际拥有数量和可选的单件重量。"), "页题说明钉入 spec")
+    }
+
+    /// PAGE-MY-EQUIPMENT 6.4 修订（L1/L2/L4）：空态 copy 钉入原型；页面不提供下拉刷新。
+    func testMyEquipmentUsesApprovedEmptyStatesAndNoRefresh() throws {
+        let source = try productionSource(at: "Features/Equipment/EquipmentListView.swift")
+        XCTAssertTrue(source.contains("还没有个人装备"), "装备空态标题钉入 spec")
+        XCTAssertTrue(source.contains("没有个人装备也不会阻断行程生成。"), "装备空态说明钉入 spec")
+        XCTAssertTrue(source.contains("还没有用户装备清单"), "清单空态标题钉入 spec")
+        XCTAssertTrue(source.contains("可以按自己的习惯创建一日、三日或五日清单。"), "清单空态说明钉入 spec")
+        XCTAssertFalse(source.contains(".refreshable"), "页面不提供下拉刷新")
+    }
+
+    /// PAGE-TRIP-EQUIPMENT 6.4 修订（T1/T2/T3/T4/T5/T6/T7）：文案钉入、删除确认组件化、共享 DateCopy、禁刷新。
+    func testTripEquipmentUsesApprovedStateCopyAndConfirmationDialog() throws {
+        let equipment = try productionSource(at: "Features/Trips/TripEquipment.swift")
+        XCTAssertTrue(equipment.contains("只有规划中的行程可以调整本次装备。"), "只读态说明钉入 spec")
+        XCTAssertTrue(equipment.contains("本次清单是独立副本"), "独立快照标题钉入 spec")
+        XCTAssertTrue(equipment.contains("增删改不会影响个人装备、用户装备清单或系统标准装备清单。"), "独立快照说明钉入 spec")
+        XCTAssertTrue(equipment.contains("预计总重量 0 kg。规划中的行程可以新增只属于当前行程的装备。"), "空列表说明钉入 spec")
+        XCTAssertFalse(equipment.contains("部分重量未计入"), "概况内部指标 Notice 不由页面拥有")
+        XCTAssertFalse(equipment.contains(".confirmationDialog("), "删除确认使用 ConfirmationDialog 组件而非系统 API")
+        XCTAssertTrue(equipment.contains("ConfirmationDialog("), "删除确认使用生产组件")
+        XCTAssertFalse(equipment.contains(".refreshable"), "页面不提供下拉刷新")
+        XCTAssertTrue(equipment.contains("DateCopy."), "行程上下文日期使用共享 DateCopy 口径")
+
+        let row = try productionSource(at: "Features/Trips/Components/TripListRow.swift")
+        XCTAssertTrue(row.contains("DateCopy."), "TripListRow 复用共享 DateCopy")
+        XCTAssertFalse(row.contains("private static func shortDate"), "私有 shortDate 收敛为共享实现")
+
+        let dateCopy = try productionSource(at: "Features/Shared/DateCopy.swift")
+        XCTAssertTrue(dateCopy.contains("月"), "shortDate 口径「M月D日」")
+        XCTAssertTrue(dateCopy.contains("—"), "区间用「—」连接")
+    }
+
+    /// PAGE-TRIP-CREATE 6.4 修订（C1/C2/C3/C4）：版本冲突区、日期模板与城市错误 copy、去除多余 SectionHeader。
+    func testTripCreateShowsVersionConflictRegionAndPinnedCopy() throws {
+        let source = try productionSource(at: "Features/Trips/CreateTripView.swift")
+        XCTAssertTrue(source.contains("route_version_conflict"), "识别 409 route_version_conflict 进入 versionConflict 态")
+        XCTAssertTrue(source.contains("refreshRouteVersion"), "VersionConflictRegion 承载重读上下文动作")
+        XCTAssertTrue(source.contains("viewCurrentRoute"), "VersionConflictRegion 承载返回路线详情动作")
+        XCTAssertTrue(source.contains("一日路线固定只生成"), "一日日期模板 copy 钉入 spec")
+        XCTAssertTrue(source.contains("去程、徒步和返程都在 D1 内完成。"), "一日日期模板原型 copy 完整钉入 spec")
+        XCTAssertTrue(source.contains("多日路线的实际自然日和结束日期由生成结果返回，生成前不根据建议天数或参考分日推算。"), "多日日期模板 copy 钉入 spec")
+        XCTAssertTrue(source.contains("请先填写城市，再生成个人行程。"), "出发城市错误文案钉入 spec")
+        XCTAssertFalse(source.contains("SectionHeader(title: \"必要信息\")"), "RequiredInputSection 只排列必要输入，无 SectionHeader")
     }
 
     // MARK: 批次 4a —— PAGE-ME / PAGE-MY-EQUIPMENT / PAGE-EQUIPMENT-EDIT
@@ -976,8 +1064,8 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(listNameEditor.contains("重命名装备清单"), "清单行内重命名文案在组件内")
         XCTAssertTrue(list.contains("新增个人装备"), "装备页签底部固定主按钮")
         XCTAssertTrue(list.contains("创建装备清单"), "清单页签底部固定主按钮")
-        XCTAssertTrue(list.contains("尚未维护个人装备"), "装备空态")
-        XCTAssertTrue(list.contains("还没有装备清单"), "清单空态")
+        XCTAssertTrue(list.contains("还没有个人装备"), "装备空态（6.4 L1 钉入原型 copy）")
+        XCTAssertTrue(list.contains("还没有用户装备清单"), "清单空态（6.4 L2 钉入原型 copy）")
         XCTAssertFalse(
             regexMatches(#"NavigationLink\s*\{[^}]*EquipmentListDetailView"#, in: list),
             "清单详情不得再以 push 页实现，改为行内展开"

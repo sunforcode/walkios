@@ -641,6 +641,106 @@ final class CreateTripViewModelTests: XCTestCase {
         XCTAssertNil(sut.selectedEquipmentListID)
     }
 
+    func testChangingGenerationInputClearsTransportSelectionBoundToPreviousInput() async {
+        let sut = CreateTripViewModel(
+            routeID: "route-1",
+            loadContext: { _ in PersonalTripTestFixtures.generationContext },
+            createTrip: { _, _ in .transportSelectionRequired(PersonalTripTestFixtures.transportSelection) }
+        )
+        await sut.load()
+        sut.departureCity = "成都"
+        await sut.submit()
+        sut.selectedTransportOptionID = "option-1"
+
+        sut.departureCity = "上海"
+
+        XCTAssertNil(sut.transportSelection)
+        XCTAssertNil(sut.selectedTransportOptionID)
+        XCTAssertTrue(sut.canSubmit, "输入变化后应从新上下文重新生成，而不是继续提交旧 selectionId")
+    }
+
+    func testVersionConflictRefreshClearsTransportSelectionBoundToOldContext() async {
+        let refreshedContext = PersonalTripGenerationContext(
+            route: PersonalTripGenerationRoute(
+                routeID: "route-1",
+                currentPublicRouteVersionID: "route-version-2",
+                routeType: "multi_day",
+                generationEligibility: RouteGenerationEligibility(eligible: true),
+                versionLabel: "v2",
+                name: "贡嘎环线",
+                region: "四川甘孜",
+                start: PublicRoutePlace(name: "老榆林"),
+                end: PublicRoutePlace(name: "草科"),
+                difficulty: "中等",
+                distance: RouteDistance(meters: 42_500),
+                estimatedDuration: RouteDuration(seconds: 172_800)
+            ),
+            personalEquipmentSummary: PersonalTripTestFixtures.generationContext.personalEquipmentSummary,
+            equipmentLists: PersonalTripTestFixtures.generationContext.equipmentLists
+        )
+        var contexts = [PersonalTripTestFixtures.generationContext, refreshedContext]
+        var submission = 0
+        let sut = CreateTripViewModel(
+            routeID: "route-1",
+            loadContext: { _ in contexts.removeFirst() },
+            createTrip: { _, _ in
+                submission += 1
+                if submission == 1 {
+                    return .transportSelectionRequired(PersonalTripTestFixtures.transportSelection)
+                }
+                throw APIClientError.api(
+                    code: "route_version_conflict",
+                    message: "路线版本已变化",
+                    retryable: true
+                )
+            }
+        )
+        await sut.load()
+        sut.departureCity = "成都"
+        await sut.submit()
+        sut.selectedTransportOptionID = "option-1"
+        await sut.submit()
+
+        XCTAssertTrue(sut.isVersionConflict)
+        XCTAssertNil(sut.transportSelection, "版本冲突后旧 selectionId 已失效")
+        XCTAssertNil(sut.selectedTransportOptionID)
+
+        await sut.load()
+
+        XCTAssertFalse(sut.isVersionConflict)
+        XCTAssertEqual(sut.context?.route.currentPublicRouteVersionID, "route-version-2")
+        XCTAssertNil(sut.transportSelection)
+        XCTAssertNil(sut.selectedTransportOptionID)
+        XCTAssertTrue(sut.canSubmit, "清除旧交通候选后应允许按新上下文重新生成")
+    }
+
+    func testVersionConflictRefreshFailureKeepsConflictAndExposesError() async {
+        var loadCount = 0
+        let sut = CreateTripViewModel(
+            routeID: "route-1",
+            loadContext: { _ in
+                loadCount += 1
+                if loadCount == 1 { return PersonalTripTestFixtures.generationContext }
+                throw APIClientError.invalidResponse
+            },
+            createTrip: { _, _ in
+                throw APIClientError.api(
+                    code: "route_version_conflict",
+                    message: "路线版本已变化",
+                    retryable: true
+                )
+            }
+        )
+        await sut.load()
+        sut.departureCity = "成都"
+        await sut.submit()
+
+        await sut.load()
+
+        XCTAssertTrue(sut.isVersionConflict)
+        XCTAssertNotNil(sut.errorMessage)
+    }
+
     func testCreateTripViewRefreshesOnReturnWithoutDuplicateInitialTask() throws {
         let testFileURL = URL(fileURLWithPath: #filePath)
         let sourceURL = testFileURL
