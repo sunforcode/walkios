@@ -9,13 +9,14 @@ struct ProfileCalendarDayPresentation: Equatable, Identifiable {
 
 struct ProfileCalendarPresentation: Equatable {
     let days: [ProfileCalendarDayPresentation]
-    let cellsAreInteractive = false
+    let hasTrips: Bool
 
     init(calendar: PersonalTripCalendar) {
         let counts = Dictionary(uniqueKeysWithValues: calendar.days.map { ($0.date, $0.tripCount) })
         guard let startDate = calendar.windowStartDate.dateAtStartOfDay,
               let endDate = calendar.windowEndDate.dateAtStartOfDay else {
             days = []
+            hasTrips = false
             return
         }
 
@@ -28,6 +29,30 @@ struct ProfileCalendarPresentation: Equatable {
             current = next
         }
         days = result
+        hasTrips = result.contains { $0.tripCount > 0 }
+    }
+
+    var tripCalendarCardProjection: TripCalendarCardProjection {
+        TripCalendarCardProjection(
+            days: days.map {
+                TripHeatmapDayProjection(
+                    businessDate: $0.date.description,
+                    level: Self.heatmapLevel(for: $0.tripCount)
+                )
+            },
+            emptyHint: days.count == TripBusinessComponents.HeatmapCalendar.requiredDayCount && !hasTrips
+                ? "过去 365 天还没有个人行程"
+                : nil
+        )
+    }
+
+    private static func heatmapLevel(for tripCount: Int) -> TripHeatmapLevel {
+        switch tripCount {
+        case ...0: .empty
+        case 1: .low
+        case 2: .medium
+        default: .high
+        }
     }
 }
 
@@ -37,9 +62,15 @@ final class ProfileViewModel: ObservableObject {
     @Published private(set) var tripCalendar: PersonalTripCalendar?
     @Published private(set) var equipmentSummary: PersonalEquipmentSummary?
     @Published private(set) var isLoading = false
+    @Published private(set) var isAccountLoading = false
+    @Published private(set) var isCalendarLoading = false
+    @Published private(set) var isEquipmentLoading = false
+    @Published private(set) var isLoggingOut = false
     @Published var errorMessage: String?
+    @Published private(set) var accountErrorMessage: String?
     @Published private(set) var calendarErrorMessage: String?
     @Published private(set) var equipmentErrorMessage: String?
+    @Published private(set) var logoutErrorMessage: String?
     @Published private(set) var isLoggedIn = false
 
     private let authSession: any AuthSession
@@ -87,52 +118,59 @@ final class ProfileViewModel: ObservableObject {
             tripCalendar = nil
             equipmentSummary = nil
             errorMessage = nil
+            accountErrorMessage = nil
             calendarErrorMessage = nil
             equipmentErrorMessage = nil
+            logoutErrorMessage = nil
             isLoading = false
+            isAccountLoading = false
+            isCalendarLoading = false
+            isEquipmentLoading = false
+            isLoggingOut = false
             return
         }
 
         isLoading = true
         errorMessage = nil
+        accountErrorMessage = nil
         calendarErrorMessage = nil
         equipmentErrorMessage = nil
-        defer { isLoading = false }
+        logoutErrorMessage = nil
+        isAccountLoading = true
+        isCalendarLoading = true
+        isEquipmentLoading = true
 
-        async let accountResult = capture(loadAccount)
-        async let calendarResult = capture(loadCalendar)
-        async let equipmentResult = capture(loadEquipment)
+        async let accountLoad: Void = loadAccountSection()
+        async let calendarLoad: Void = loadCalendarSection()
+        async let equipmentLoad: Void = loadEquipmentSection()
+        _ = await (accountLoad, calendarLoad, equipmentLoad)
 
-        let (accountResultValue, calendarResultValue, equipmentResultValue) = await (
-            accountResult,
-            calendarResult,
-            equipmentResult
-        )
+        isLoading = false
+    }
 
-        switch accountResultValue {
-        case .success(let account):
-            self.account = account
-        case .failure(let error):
-            errorMessage = Self.message(for: error)
-        }
+    func retryAccount() async {
+        isAccountLoading = true
+        errorMessage = nil
+        await loadAccountSection()
+    }
 
-        switch calendarResultValue {
-        case .success(let calendar):
-            tripCalendar = calendar
-        case .failure(let error):
-            calendarErrorMessage = Self.message(for: error)
-        }
+    func retryCalendar() async {
+        isCalendarLoading = true
+        await loadCalendarSection()
+    }
 
-        switch equipmentResultValue {
-        case .success(let equipment):
-            equipmentSummary = equipment.summary
-        case .failure(let error):
-            equipmentErrorMessage = Self.message(for: error)
-        }
+    func retryEquipment() async {
+        isEquipmentLoading = true
+        await loadEquipmentSection()
     }
 
     func logout() async {
+        guard !isLoggingOut else { return }
+        isLoggingOut = true
         errorMessage = nil
+        logoutErrorMessage = nil
+        defer { isLoggingOut = false }
+
         do {
             try await revokeSession()
             if authSession.isLoggedIn { authSession.logout() }
@@ -141,18 +179,45 @@ final class ProfileViewModel: ObservableObject {
             account = nil
             tripCalendar = nil
             equipmentSummary = nil
+            accountErrorMessage = nil
             calendarErrorMessage = nil
             equipmentErrorMessage = nil
         } catch {
-            errorMessage = Self.message(for: error)
+            let message = Self.message(for: error)
+            errorMessage = message
+            logoutErrorMessage = message
         }
     }
 
-    private func capture<T>(_ operation: @escaping () async throws -> T) async -> Result<T, Error> {
+    private func loadAccountSection() async {
+        accountErrorMessage = nil
+        defer { isAccountLoading = false }
         do {
-            return .success(try await operation())
+            account = try await loadAccount()
         } catch {
-            return .failure(error)
+            let message = Self.message(for: error)
+            accountErrorMessage = message
+            errorMessage = message
+        }
+    }
+
+    private func loadCalendarSection() async {
+        calendarErrorMessage = nil
+        defer { isCalendarLoading = false }
+        do {
+            tripCalendar = try await loadCalendar()
+        } catch {
+            calendarErrorMessage = Self.message(for: error)
+        }
+    }
+
+    private func loadEquipmentSection() async {
+        equipmentErrorMessage = nil
+        defer { isEquipmentLoading = false }
+        do {
+            equipmentSummary = try await loadEquipment().summary
+        } catch {
+            equipmentErrorMessage = Self.message(for: error)
         }
     }
 

@@ -1,12 +1,21 @@
 import SwiftUI
 import MapKit
 
+private enum RouteDetailLayout {
+    static let mapRevealHeight: CGFloat = 330
+    static let compactMapRevealHeight: CGFloat = 280
+    static let compactHeightThreshold: CGFloat = 760
+    static let toolbarTop: CGFloat = 54
+    static let bottomDetailMinimumHeight: CGFloat = 355
+}
+
 @MainActor
 struct RouteDetailView: View {
     let routeId: String
     @StateObject private var viewModel: RouteDetailViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var selectedMapDetail: RouteMapDetailPresentation?
+    @State private var selectedImage: RouteDetailImagePresentation?
     private let onGenerateTrip: (String) -> Void
 
     init(
@@ -33,340 +42,171 @@ struct RouteDetailView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let summaryHeight = min(max(330, geometry.size.height * 0.40), geometry.size.height * 0.48)
-            let topSpacerHeight = geometry.size.height - summaryHeight
+            let topSpacerHeight = geometry.size.height < RouteDetailLayout.compactHeightThreshold
+                ? RouteDetailLayout.compactMapRevealHeight
+                : RouteDetailLayout.mapRevealHeight
 
             ZStack(alignment: .bottom) {
-                mapLayer(in: geometry)
+                mapLayer(viewportHeight: geometry.size.height)
 
-                if viewModel.isLoading {
-                    detailStatus(message: "正在加载路线…", icon: "map")
-                } else if viewModel.errorMessage != nil {
-                    detailStatus(message: "加载失败，点击重试", icon: "arrow.clockwise.circle") {
-                        Task { await viewModel.retry() }
-                    }
-                } else if let presentation = viewModel.presentation {
-                    RouteDetailScrollOverlay(
-                        presentation: presentation,
-                        topSpacerHeight: topSpacerHeight,
-                        onSelectItem: handleSectionItemSelection
+                detailContent(topSpacerHeight: topSpacerHeight)
+
+                mapToolbar
+
+                if viewModel.hasUnavailableTrack {
+                    NoticeView(message: trackUnavailableText)
+                        .frame(maxWidth: 320)
+                        .position(x: geometry.size.width / 2, y: 124)
+                        .zIndex(9)
+                }
+
+                if let presentation = viewModel.presentation {
+                    RouteGenerationPrimaryAction(
+                        action: presentation.generationAction,
+                        onGenerateTrip: { onGenerateTrip(routeId) }
                     )
                 }
 
-                VStack {
-                    HStack {
-                        detailBackButton
-                        Spacer()
-                        if let presentation = viewModel.presentation {
-                            ShareLink(item: presentation.actionPolicy.shareText) {
-                                Image(systemName: "square.and.arrow.up")
-                                    .foregroundStyle(AppColors.textPrimary)
-                                    .frame(width: 40, height: 40)
-                                    .background(AppColors.shadowOverlay, in: Circle())
-                            }
-                            .accessibilityLabel("分享")
-                        }
+                if let selectedMapDetail {
+                    RoutePointBottomDetail(detail: selectedMapDetail) {
+                        self.selectedMapDetail = nil
                     }
-                    Spacer()
+                    .ignoresSafeArea()
+                    .zIndex(20)
                 }
-                .padding(.horizontal, Spacing.pageHorizontal)
-                .padding(.top, Spacing.sm)
 
-                if let presentation = viewModel.presentation {
-                    RouteGenerationPrimaryAction(action: presentation.generationAction) {
-                        onGenerateTrip(routeId)
+                if let selectedImage {
+                    RouteImageViewer(image: selectedImage) {
+                        self.selectedImage = nil
                     }
-                    .padding(.horizontal, Spacing.pageHorizontal)
-                    .padding(.bottom, max(geometry.safeAreaInsets.bottom, Spacing.md))
+                    .ignoresSafeArea()
+                    .zIndex(30)
                 }
             }
-            .ignoresSafeArea(edges: .bottom)
+            .background {
+                ImmersivePageContainer { AppColors.surfacePrimary.opacity(0) }
+            }
         }
+        .ignoresSafeArea(edges: [.top, .horizontal])
         .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
         .task { await viewModel.loadRoute(id: routeId) }
-        .sheet(item: $selectedMapDetail) { detail in
-            RouteMapDetailView(detail: detail)
-                .presentationDetents([.medium])
-        }
-    }
-
-    private func handleSectionItemSelection(_ section: RouteDetailSectionID, _ item: RouteDetailSectionItem) {
-        switch section {
-        case .segments:
-            viewModel.selectSegment(item.id)
-        case .keyPoints, .interestPoints, .campsites, .overnightPlaces, .waterSources, .supplyPoints:
-            viewModel.togglePointHighlight(for: item.id)
-        default:
-            break
-        }
     }
 
     @ViewBuilder
-    private func mapLayer(in geometry: GeometryProxy) -> some View {
-        ZStack {
-            RouteMapView(
-                coordinates: viewModel.mapCoordinates,
-                segments: viewModel.mapSegments,
-                selectedSegmentID: viewModel.selectedSegmentID,
-                poiAnnotations: viewModel.poiAnnotations,
-                trackPointAnnotations: viewModel.selectableTrackPoints,
-                waypointAnnotations: viewModel.waypointAnnotations,
-                highlightedAnnotationIDs: viewModel.highlightedAnnotationIDs,
-                cameraPitch: 45,
-                edgeInsets: RouteMapCamera.detailEdgeInsets(
-                    viewportHeight: geometry.size.height,
-                    safeAreaTop: geometry.safeAreaInsets.top,
-                    safeAreaBottom: geometry.safeAreaInsets.bottom
-                ),
-                onSelectSegment: { viewModel.selectSegment($0) },
-                onSelectMarker: { selectedMapDetail = RouteMapDetailPresentation(selection: $0) }
-            )
-            .ignoresSafeArea()
-
-            if viewModel.hasUnavailableTrack {
-                VStack(spacing: Spacing.sm) {
-                    Image(systemName: "map")
-                    Text(trackUnavailableText)
-                }
-                .font(.bodySmall)
-                .foregroundStyle(AppColors.textPrimary)
-                .padding(.horizontal, Spacing.md)
-                .padding(.vertical, Spacing.sm)
-                .background(AppColors.surfaceToast, in: Capsule())
-                .padding(.bottom, 300)
+    private func detailContent(topSpacerHeight: CGFloat) -> some View {
+        if viewModel.isLoading && viewModel.presentation == nil {
+            RouteDetailStateOverlay {
+                LoadingView(message: "正在加载路线完整资料", variant: .page)
             }
+        } else if let message = viewModel.errorMessage, viewModel.presentation == nil {
+            RouteDetailStateOverlay {
+                ErrorView(message: message, title: "暂时无法加载路线详情", variant: .page) {
+                    Task { await viewModel.retry() }
+                }
+            }
+        } else if let presentation = viewModel.presentation {
+            RouteDetailScrollOverlay(
+                presentation: presentation,
+                topSpacerHeight: topSpacerHeight,
+                selectedSegmentID: viewModel.selectedSegmentID,
+                highlightedPointIdentity: viewModel.highlightedPointIdentity,
+                onSelectSegment: viewModel.selectSegment,
+                onSelectItem: viewModel.togglePointHighlight,
+                onFocusPoint: viewModel.togglePointHighlight,
+                onOpenImage: { selectedImage = $0 }
+            )
+        }
+    }
+
+    private func mapLayer(viewportHeight: CGFloat) -> some View {
+        let mapRevealHeight = viewportHeight < RouteDetailLayout.compactHeightThreshold
+            ? RouteDetailLayout.compactMapRevealHeight
+            : RouteDetailLayout.mapRevealHeight
+        return RouteMapView(
+            coordinates: viewModel.mapCoordinates,
+            segments: viewModel.mapSegments,
+            selectedSegmentID: viewModel.selectedSegmentID,
+            poiAnnotations: viewModel.poiAnnotations,
+            trackPointAnnotations: viewModel.selectableTrackPoints,
+            waypointAnnotations: viewModel.waypointAnnotations,
+            highlightedAnnotationIDs: viewModel.highlightedAnnotationIDs,
+            startCoordinate: viewModel.mapStartCoordinate,
+            endCoordinate: viewModel.mapEndCoordinate,
+            cameraPitch: 45,
+            edgeInsets: RouteMapCamera.detailEdgeInsets(
+                viewportHeight: viewportHeight,
+                mapRevealHeight: mapRevealHeight
+            ),
+            onSelectSegment: { viewModel.selectSegment($0) },
+            onSelectMarker: { selection in
+                viewModel.highlightPoint(selection)
+                selectedMapDetail = RouteMapDetailPresentation(selection: selection)
+            }
+        )
+        .ignoresSafeArea()
+    }
+
+    private var mapToolbar: some View {
+        VStack(spacing: 0) {
+            HStack {
+                IconButton(
+                    systemName: "chevron.left",
+                    accessibilityLabel: "返回",
+                    variant: .overlay,
+                    action: { dismiss() }
+                )
+                Spacer()
+                if let presentation = viewModel.presentation {
+                    RouteShareButton(shareText: presentation.actionPolicy.shareText)
+                }
+            }
+            .padding(.horizontal, Spacing.pageHorizontal)
+            .padding(.top, RouteDetailLayout.toolbarTop)
+
+            Spacer()
         }
     }
 
     private var trackUnavailableText: String {
         switch viewModel.route?.currentVersion.mainTrackAvailability {
-        case .processing: "主轨迹处理中"
-        case .pendingReview: "主轨迹待审核"
-        case .invalidated: "主轨迹已失效"
-        case .missing: "暂无主轨迹"
-        case .valid, .none: "暂无主轨迹"
+        case .processing: "主轨迹正在处理，其他路线资料仍可查看。"
+        case .pendingReview: "主轨迹正在审核，暂不可生成个人行程。"
+        case .invalidated: "主轨迹已失效，暂不可生成个人行程。"
+        case .missing: "当前没有可用主轨迹，暂不可生成个人行程。"
+        case .valid, .none: "当前没有可用主轨迹。"
         }
-    }
-
-    private var detailBackButton: some View {
-        GlassIconButton(systemName: "chevron.left", size: 40, backgroundColor: AppColors.shadowOverlay) { dismiss() }
-            .frame(minWidth: 44, minHeight: 44)
-            .contentShape(Rectangle())
-            .accessibilityLabel("返回")
-    }
-
-    private func detailStatus(message: String, icon: String, action: (() -> Void)? = nil) -> some View {
-        Button { action?() } label: {
-            Label(message, systemImage: icon)
-                .font(.bodyLarge)
-                .foregroundStyle(AppColors.textSecondary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, Spacing.xxl)
-                .background(AppColors.surfacePrimary)
-                .clipShape(UnevenRoundedRectangle(topLeadingRadius: Radius.xl, topTrailingRadius: Radius.xl))
-        }
-        .buttonStyle(.plain)
-        .disabled(action == nil)
     }
 }
 
-private struct RouteDetailScrollOverlay: View {
-    let presentation: RouteDetailPresentation
-    let topSpacerHeight: CGFloat
-    let onSelectItem: (RouteDetailSectionID, RouteDetailSectionItem) -> Void
+private struct RouteShareButton: View {
+    let shareText: String
+    @State private var isPresented = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                AppColors.sheetBackground.opacity(0.001)
-                    .frame(height: topSpacerHeight)
-
-                VStack(alignment: .leading, spacing: Spacing.xl) {
-                    RouteDetailDrawerHandle()
-                    summary
-
-                    ForEach(presentation.sections) { section in
-                        RouteDetailSectionContainer {
-                            VStack(alignment: .leading, spacing: Spacing.md) {
-                                Text(section.title)
-                                    .font(.sectionTitle)
-                                    .foregroundStyle(AppColors.sheetTextPrimary)
-
-                                if section.id == .imagery {
-                                    imageStrip
-                                } else {
-                                    routeItems(section.id, section.items)
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, Spacing.heroHorizontal)
-                .padding(.top, Spacing.md)
-                .padding(.bottom, Spacing.hero + Spacing.xl)
-                .background(AppColors.sheetBackground)
-                .clipShape(UnevenRoundedRectangle(topLeadingRadius: Radius.xl, topTrailingRadius: Radius.xl))
-                .shadow(color: AppColors.sheetDragHandle, radius: 24, y: -4)
-            }
-        }
-        .coordinateSpace(name: "route-detail-scroll")
-    }
-
-    private var summary: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
-            Text(presentation.name)
-                .font(.system(size: 28, weight: .bold))
-                .foregroundStyle(AppColors.sheetTextPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if !presentation.summaryTags.isEmpty {
-                tags(presentation.summaryTags)
-            }
-
-            if !presentation.summaryMetrics.isEmpty {
-                RouteDetailMetricPanel(metrics: presentation.summaryMetrics)
-            }
-
-            if let generationMessage = presentation.generationMessage {
-                Label(generationMessage, systemImage: "exclamationmark.triangle")
-                    .font(.bodySmall)
-                    .foregroundStyle(AppColors.sheetTextSecondary)
-            }
-        }
-    }
-
-    private func routeItems(_ section: RouteDetailSectionID, _ items: [RouteDetailSectionItem]) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                Button {
-                    onSelectItem(section, item)
-                } label: {
-                    VStack(alignment: .leading, spacing: Spacing.xs) {
-                        Text(item.title)
-                            .font(.headline)
-                            .foregroundStyle(AppColors.sheetTextPrimary)
-                        if !item.value.isEmpty {
-                            Text(item.value)
-                                .font(.body)
-                                .foregroundStyle(AppColors.sheetTextSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                    .padding(.vertical, Spacing.sm)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.plain)
-
-                if index < items.count - 1 {
-                    Divider().overlay(AppColors.sheetDivider)
-                }
-            }
-        }
-    }
-
-    private var imageStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Spacing.md) {
-                ForEach(presentation.images) { image in
-                    AsyncImage(url: URL(string: image.source)) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        default:
-                            ZStack {
-                                AppColors.sheetSectionBackground
-                                Image(systemName: image.failurePlaceholderSystemImage)
-                                    .foregroundStyle(AppColors.sheetTextWeak)
-                            }
-                        }
-                    }
-                    .frame(width: 220, height: 140)
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-                    .accessibilityLabel(image.caption ?? "路线图片")
-                }
-            }
-        }
-    }
-
-    private func tags(_ values: [String]) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Spacing.sm) {
-                ForEach(Array(values.enumerated()), id: \.offset) { _, value in
-                    Text(value)
-                        .font(.label)
-                        .foregroundStyle(AppColors.sheetTextTag)
-                        .padding(.horizontal, Spacing.md)
-                        .padding(.vertical, Spacing.sm)
-                        .background(AppColors.sheetTagBackground, in: Capsule())
-                }
-            }
+        IconButton(
+            systemName: "square.and.arrow.up",
+            accessibilityLabel: "分享路线",
+            variant: .overlay,
+            action: { isPresented = true }
+        )
+        .sheet(isPresented: $isPresented) {
+            ShareSheet(items: [shareText])
         }
     }
 }
 
-private struct RouteDetailDrawerHandle: View {
-    var body: some View {
-        Capsule()
-            .fill(AppColors.sheetDragHandle)
-            .frame(width: 42, height: 5)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, Spacing.md)
-            .accessibilityHidden(true)
+private struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
-private struct RouteGenerationPrimaryAction: View {
-    let action: RouteGenerationActionPresentation
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            Text(action.title)
-                .font(.headline)
-                .foregroundStyle(action.isEnabled ? AppColors.pageBase : AppColors.textWeak)
-                .frame(maxWidth: .infinity, minHeight: RootNavigation.toolButtonHitSize)
-                .background(
-                    action.isEnabled ? AppColors.interactionPrimary : AppColors.surfaceElevated,
-                    in: RoundedRectangle(cornerRadius: Radius.md)
-                )
-        }
-        .buttonStyle(.plain)
-        .disabled(!action.isEnabled)
-        .accessibilityHint(action.unavailableMessage ?? "使用当前路线生成个人行程")
-    }
-}
-
-private struct RouteDetailMetricPanel: View {
-    let metrics: [RouteSummaryMetric]
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: Spacing.lg), count: 2)
-
-    var body: some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: Spacing.lg) {
-            ForEach(Array(metrics.enumerated()), id: \.offset) { _, metric in
-                HStack(alignment: .firstTextBaseline, spacing: Spacing.sm) {
-                    Image(systemName: metric.systemImage)
-                        .font(.bodyLarge)
-                        .foregroundStyle(AppColors.interactionPrimary)
-                        .frame(width: 22)
-
-                    Text(metric.value)
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                        .foregroundStyle(AppColors.textPrimary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                }
-                .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(metric.title) \(metric.value)")
-            }
-        }
-        .padding(Spacing.lg)
-        .background(AppColors.sheetSectionBackground)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
-    }
-}
-
-private struct RouteDetailSectionContainer<Content: View>: View {
+private struct RouteDetailStateOverlay<Content: View>: View {
     @ViewBuilder let content: Content
 
     init(@ViewBuilder content: () -> Content) {
@@ -375,10 +215,230 @@ private struct RouteDetailSectionContainer<Content: View>: View {
 
     var body: some View {
         content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, Spacing.xl)
+            .padding(.top, 100)
+            .padding(.bottom, 110)
+            .background(AppColors.pageBase.opacity(0.52))
+    }
+}
+
+private struct RouteGenerationPrimaryAction: View {
+    let action: RouteGenerationActionPresentation
+    let onGenerateTrip: () -> Void
+
+    var body: some View {
+        FixedActionArea {
+            PrimaryAction(
+                title: action.isEnabled ? action.title : "路线资料不足，暂不可生成",
+                isDisabled: !action.isEnabled,
+                fillsWidth: true,
+                action: onGenerateTrip
+            )
+            .disabled(!action.isEnabled)
+            .accessibilityHint(action.unavailableMessage ?? "使用当前路线生成个人行程")
+        }
+    }
+}
+
+private struct RouteDetailMetricPanel: View {
+    let metrics: [RouteSummaryMetric]
+
+    var body: some View {
+        if !metrics.isEmpty {
+            VStack(spacing: Spacing.md) {
+                ForEach(Array(metrics.enumerated()), id: \.offset) { _, metric in
+                    HStack(spacing: Spacing.sm) {
+                        Image(systemName: metric.systemImage)
+                            .font(.appCaption)
+                            .foregroundStyle(AppColors.interactionPrimary)
+                            .frame(width: 20)
+                        Text(metric.title)
+                            .font(.appCaption)
+                            .foregroundStyle(AppColors.textSecondary)
+                        Spacer()
+                        Text(metric.value)
+                            .font(.metricGridValue)
+                            .foregroundStyle(AppColors.textPrimary)
+                    }
+                }
+            }
+            .padding(Spacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(Spacing.lg)
             .background(AppColors.sheetSectionBackground)
-            .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
+            .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+        }
+    }
+}
+
+private struct RouteDetailScrollOverlay: View {
+    let presentation: RouteDetailPresentation
+    let topSpacerHeight: CGFloat
+    let selectedSegmentID: String?
+    let highlightedPointIdentity: String?
+    let onSelectSegment: (String) -> Void
+    let onSelectItem: (String) -> Void
+    let onFocusPoint: (String) -> Void
+    let onOpenImage: (RouteDetailImagePresentation) -> Void
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 0) {
+                AppColors.surfacePrimary.opacity(0)
+                    .frame(height: topSpacerHeight)
+                    .allowsHitTesting(false)
+
+                WalkPanel(variant: .edgeAttached) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        SheetHandle()
+                        VStack(alignment: .leading, spacing: Spacing.md) {
+                            RouteBusinessComponents.RouteSummary(
+                                projection: presentation.routeSummaryProjection
+                            )
+                            RouteDetailMetricPanel(metrics: presentation.summaryMetrics)
+                        }
+                        .padding(.bottom, Spacing.xl)
+
+                        if let generationMessage = presentation.generationMessage {
+                            NoticeView(
+                                message: generationMessage,
+                                title: "路线资料不足",
+                                icon: "exclamationmark.triangle",
+                                tone: .warning
+                            )
+                            .padding(.bottom, Spacing.xl)
+                        }
+
+                        VStack(alignment: .leading, spacing: Spacing.xl) {
+                            if let introduction = presentation.routeIntroductionProjection {
+                                RouteBusinessComponents.RouteIntroduction(projection: introduction)
+                            }
+
+                            if let elevationProfile = presentation.elevationProfileProjection {
+                                RouteBusinessComponents.ElevationProfile(projection: elevationProfile)
+                            }
+
+                            if !presentation.referenceDayProjections.isEmpty {
+                                RouteBusinessComponents.RouteReferenceDayList(
+                                    days: presentation.referenceDayProjections
+                                )
+                            }
+
+                            if let segments = presentation.routeSegmentListProjection {
+                                RouteBusinessComponents.RouteSegmentList(
+                                    projection: selectedSegments(segments),
+                                    onSelectSegment: onSelectSegment
+                                )
+                            }
+
+                            ForEach(Array(presentation.routePointSectionProjections.enumerated()), id: \.element.title) { _, section in
+                                RouteBusinessComponents.RoutePointSection(
+                                    projection: selectedPointSection(section),
+                                    onFocusPoint: onFocusPoint
+                                )
+                            }
+
+                            ForEach(Array(presentation.routeFactSectionProjections.enumerated()), id: \.element.title) { _, section in
+                                RouteBusinessComponents.RouteFactSection(projection: section)
+                            }
+
+                            if let imageSection = presentation.sections.first(where: { $0.id == .imagery }) {
+                                RouteDetailSectionContainer(onOpenImage: onOpenImage) {
+                                    Text(imageSection.title)
+                                        .font(.sectionTitle)
+                                        .foregroundStyle(AppColors.textPrimary)
+                                    RouteImageGrid(images: presentation.images, onOpenImage: onOpenImage)
+                                }
+                            }
+                        }
+
+                        AppColors.surfacePrimary.opacity(0)
+                            .frame(height: 104)
+                            .accessibilityHidden(true)
+                    }
+                    .frame(maxWidth: 600)
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+    }
+
+    private func selectedSegments(_ projection: RouteSegmentListProjection) -> RouteSegmentListProjection {
+        var projection = projection
+        projection.activeSegmentID = selectedSegmentID
+        return projection
+    }
+
+    private func selectedPointSection(_ projection: RoutePointSectionProjection) -> RoutePointSectionProjection {
+        var projection = projection
+        projection.activePointID = highlightedPointIdentity
+        return projection
+    }
+}
+
+private struct RouteDetailSectionContainer<Content: View>: View {
+    let onOpenImage: (RouteDetailImagePresentation) -> Void
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            content()
+        }
+        .padding(15)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppColors.sheetSectionBackground)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+    }
+}
+
+private struct RouteImageGrid: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let images: [RouteDetailImagePresentation]
+    let onOpenImage: (RouteDetailImagePresentation) -> Void
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 7) {
+            ForEach(images) { item in
+                Button {
+                    onOpenImage(item)
+                } label: {
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        AsyncImage(url: URL(string: item.source)) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable().scaledToFill()
+                            default:
+                                ZStack {
+                                    AppColors.surfaceElevated
+                                    Image(systemName: item.failurePlaceholderSystemImage)
+                                        .foregroundStyle(AppColors.textWeak)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 70)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+
+                        Text(item.caption ?? "路线图片")
+                            .font(.tag)
+                            .foregroundStyle(AppColors.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("查看图片：\(item.caption ?? "路线图片")")
+            }
+        }
+    }
+
+    private var columns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: 7),
+            count: dynamicTypeSize.isAccessibilitySize ? 2 : 3
+        )
     }
 }
 
@@ -411,15 +471,28 @@ private enum RouteMapDetailPresentation: Identifiable {
         }
     }
 
+    var category: String? {
+        switch self {
+        case .poi(let point): point.category
+        case .trackPoint(let point): point.type
+        case .waypoint(let waypoint): waypoint.type
+        }
+    }
+
     var rows: [(String, String)] {
         let values: [(String, String)]
         switch self {
         case .poi(let point):
-            values = [("类别", point.category), ("子类别", point.subCategory), ("描述", point.detail), ("海拔", point.elevation)]
+            values = [
+                ("类别", point.category),
+                ("子类别", point.subCategory),
+                ("描述", point.detail),
+                ("海拔", point.elevation),
+            ]
         case .trackPoint(let point):
             values = [("类型", point.type), ("描述", point.detail)]
         case .waypoint(let waypoint):
-            values = [("描述", waypoint.detail), ("海拔", waypoint.elevation), ("类型", waypoint.type)]
+            values = [("类型", waypoint.type), ("描述", waypoint.detail), ("海拔", waypoint.elevation)]
         }
         return values.filter { !$0.1.isEmpty }
     }
@@ -433,37 +506,178 @@ private enum RouteMapDetailPresentation: Identifiable {
     }
 }
 
-private struct RouteMapDetailView: View {
+private struct RoutePointBottomDetail: View {
     let detail: RouteMapDetailPresentation
+    let onClose: () -> Void
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.md) {
-                Text(detail.title)
-                    .font(.pageTitle)
-                    .foregroundStyle(AppColors.sheetTextPrimary)
-                ForEach(Array(detail.rows.enumerated()), id: \.offset) { _, row in
-                    LabeledContent(row.0, value: row.1)
-                        .foregroundStyle(AppColors.sheetTextPrimary)
-                }
-                if let imageURL = detail.imageURL {
-                    AsyncImage(url: imageURL) { phase in
-                        switch phase {
-                        case .success(let image): image.resizable().scaledToFit()
-                        default:
-                            ZStack {
-                                AppColors.sheetSectionBackground
-                                Image(systemName: "photo").foregroundStyle(AppColors.sheetTextWeak)
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 160)
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+        ZStack(alignment: .bottom) {
+            AppColors.surfaceOverlay
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onClose)
+
+            VStack(spacing: 0) {
+                SheetHandle()
+
+                ScrollView(.vertical, showsIndicators: false) {
+                    detailContent
                 }
             }
-            .padding(Spacing.xl)
+            .frame(maxHeight: UIScreen.main.bounds.height - 54)
+            .padding(.horizontal, Spacing.xl)
+            .padding(.top, Spacing.sm)
+            .padding(.bottom, Spacing.xl)
+            .background(AppColors.sceneForestMiddle)
+            .clipShape(RouteDetailTopRoundedShape(radius: Radius.xl))
+            .overlay(alignment: .top) {
+                RouteDetailTopRoundedShape(radius: Radius.xl)
+                    .stroke(AppColors.interactionPrimary.opacity(0.20), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.48), radius: 30, y: -12)
         }
-        .background(AppColors.sheetBackground)
+        .accessibilityAddTraits(.isModal)
+    }
+
+    private var detailContent: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            HStack(alignment: .top, spacing: Spacing.md) {
+                Text(detail.title)
+                    .font(.sectionTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                IconButton(
+                    systemName: "xmark",
+                    accessibilityLabel: "关闭详情",
+                    variant: .compactClose,
+                    action: onClose
+                )
+            }
+
+            if let category = detail.category, !category.isEmpty {
+                Text(category)
+                    .font(.appCaption)
+                    .foregroundStyle(AppColors.textSecondary)
+            }
+
+            if let imageURL = detail.imageURL {
+                AsyncImage(url: imageURL) { phase in
+                    switch phase {
+                    case .success(let image): image.resizable().scaledToFill()
+                    default:
+                        ZStack {
+                            AppColors.surfaceElevated
+                            Image(systemName: "photo")
+                                .foregroundStyle(AppColors.textWeak)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 220)
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+            }
+
+            VStack(spacing: 0) {
+                ForEach(Array(detail.rows.enumerated()), id: \.offset) { index, row in
+                    HStack(alignment: .top, spacing: Spacing.md) {
+                        Text(row.0)
+                            .font(.label)
+                            .foregroundStyle(AppColors.textWeak)
+                            .frame(width: 64, alignment: .leading)
+                        Text(row.1)
+                            .font(.appBody)
+                            .foregroundStyle(AppColors.textPrimary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.vertical, Spacing.md)
+
+                    if index < detail.rows.count - 1 {
+                        Rectangle()
+                            .fill(AppColors.surfaceDivider)
+                            .frame(height: 1)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct RouteDetailTopRoundedShape: Shape {
+    let radius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + radius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + radius, y: rect.minY),
+            control: CGPoint(x: rect.minX, y: rect.minY)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.minY + radius),
+            control: CGPoint(x: rect.maxX, y: rect.minY)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct RouteImageViewer: View {
+    let image: RouteDetailImagePresentation
+    let onClose: () -> Void
+
+    var body: some View {
+        ZStack {
+            AppColors.surfaceNavigation
+                .ignoresSafeArea()
+
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: Spacing.lg) {
+                    AsyncImage(url: URL(string: image.source)) { phase in
+                        switch phase {
+                        case .success(let loaded):
+                            loaded.resizable().scaledToFit()
+                        default:
+                            ZStack {
+                                AppColors.surfaceElevated
+                                Image(systemName: image.failurePlaceholderSystemImage)
+                                    .font(.ornament(42, weight: .light))
+                                    .foregroundStyle(AppColors.textWeak)
+                            }
+                            .aspectRatio(16 / 11, contentMode: .fit)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+
+                    Text(image.caption ?? "路线图片")
+                        .font(.sectionTitle)
+                        .foregroundStyle(AppColors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(Spacing.lg)
+                .padding(.top, 64)
+            }
+
+            VStack {
+                HStack {
+                    Spacer()
+                    IconButton(
+                        systemName: "xmark",
+                        accessibilityLabel: "关闭图片",
+                        variant: .overlay,
+                        action: onClose
+                    )
+                }
+                .padding(Spacing.lg)
+                Spacer()
+            }
+        }
+        .accessibilityAddTraits(.isModal)
     }
 }
 

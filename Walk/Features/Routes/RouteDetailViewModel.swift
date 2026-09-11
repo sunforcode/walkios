@@ -3,6 +3,7 @@ import CoreLocation
 
 struct RoutePOIAnnotation: Identifiable, Equatable {
     let id: String
+    let objectIdentity: String
     let title: String
     let category: String
     let subCategory: String
@@ -19,6 +20,7 @@ struct RoutePOIAnnotation: Identifiable, Equatable {
 
 struct RouteTrackPointMetadata: Identifiable, Equatable {
     let id: String
+    let objectIdentity: String
     let title: String
     let type: String
     let detail: String
@@ -33,6 +35,7 @@ struct RouteTrackPointMetadata: Identifiable, Equatable {
 
 struct RouteWaypointAnnotation: Identifiable, Equatable {
     let id: String
+    let objectIdentity: String
     let title: String
     let detail: String
     let elevation: String
@@ -61,9 +64,16 @@ struct RouteSelectableSegment: Identifiable {
 
 struct RouteElevationSample: Identifiable, Equatable {
     let sequenceNumber: Int
+    let distance: Double
     let elevation: Double
 
     var id: Int { sequenceNumber }
+}
+
+struct RouteElevationProfilePresentation: Equatable {
+    let minElevation: Double
+    let maxElevation: Double
+    let samples: [RouteElevationSample]
 }
 
 enum RouteMapSelection: Identifiable, Equatable {
@@ -78,6 +88,22 @@ enum RouteMapSelection: Identifiable, Equatable {
         case .waypoint(let point): "waypoint-\(point.id)"
         }
     }
+
+    var identity: String {
+        switch self {
+        case .poi(let point): point.objectIdentity
+        case .trackPoint(let point): point.objectIdentity
+        case .waypoint(let point): point.objectIdentity
+        }
+    }
+
+    var annotationID: String {
+        switch self {
+        case .poi(let point): point.id
+        case .trackPoint(let point): point.id
+        case .waypoint(let point): point.id
+        }
+    }
 }
 
 struct RouteSummaryMetric: Equatable {
@@ -88,8 +114,8 @@ struct RouteSummaryMetric: Equatable {
 
 enum RouteDetailSectionID: String, CaseIterable, Hashable {
     case overview
-    case elevation
     case professionalAnalysis
+    case elevation
     case referenceDays
     case segments
     case keyPoints
@@ -106,8 +132,16 @@ enum RouteDetailSectionID: String, CaseIterable, Hashable {
 
 struct RouteDetailSectionItem: Identifiable, Equatable {
     let id: String
+    let bookmark: String?
     let title: String
     let value: String
+
+    init(id: String, bookmark: String? = nil, title: String, value: String) {
+        self.id = id
+        self.bookmark = bookmark
+        self.title = title
+        self.value = value
+    }
 }
 
 struct RouteDetailSectionPresentation: Identifiable, Equatable {
@@ -134,6 +168,30 @@ struct RouteGenerationActionPresentation: Equatable {
     let unavailableMessage: String?
 }
 
+struct RouteGenerationEligibilityPresentation: Equatable {
+    let unavailableMessage: String?
+
+    init(eligibility: RouteGenerationEligibility) {
+        guard !eligibility.eligible else {
+            unavailableMessage = nil
+            return
+        }
+        let labels = (eligibility.missingReasons ?? []).map { reason in
+            switch reason {
+            case .name: "路线名称"
+            case .region: "所在地区"
+            case .estimatedDuration: "预计用时"
+            case .start: "起点"
+            case .end: "终点"
+            case .validMainTrack: "有效主轨迹"
+            }
+        }
+        unavailableMessage = labels.isEmpty
+            ? "当前路线资料不足，暂不能生成行程"
+            : "缺少：\(labels.joined(separator: "、"))"
+    }
+}
+
 struct RouteDetailPresentation: Equatable {
     let route: PublicRouteDetail
 
@@ -141,6 +199,22 @@ struct RouteDetailPresentation: Equatable {
     var summary: PublicRouteSummary { version.summary }
     var name: String { summary.name ?? "未命名路线" }
     var versionLabel: String? { version.versionLabel }
+    var elevationProfile: RouteElevationProfilePresentation? {
+        guard version.mainTrackAvailability == .valid,
+              let profile = version.elevationProfile,
+              !profile.samples.isEmpty else { return nil }
+        return RouteElevationProfilePresentation(
+            minElevation: profile.minElevation.meters,
+            maxElevation: profile.maxElevation.meters,
+            samples: profile.samples.enumerated().map { index, sample in
+                RouteElevationSample(
+                    sequenceNumber: index + 1,
+                    distance: sample.distance.meters,
+                    elevation: sample.elevation.meters
+                )
+            }
+        )
+    }
     var actionPolicy: RouteDetailActionPolicy { .init(shareText: name) }
     var generationAction: RouteGenerationActionPresentation {
         .init(
@@ -151,8 +225,11 @@ struct RouteDetailPresentation: Equatable {
     }
 
     var summaryTags: [String] {
-        ([summary.region, summary.difficulty, routeTypeText, summary.direction]
-            .compactMap(Self.nonEmpty) + (summary.tags ?? []))
+        ([version.versionLabel, routeTypeText, summary.region, summary.difficulty, summary.direction]
+            .compactMap(Self.nonEmpty) + (summary.tags ?? []) + [
+                summary.maxElevation.map { "最高海拔 \(Self.meters($0.meters))" },
+                summary.suggestedDays.map { "建议 \($0) 天" },
+            ].compactMap { $0 })
     }
 
     var routeTypeText: String {
@@ -170,32 +247,235 @@ struct RouteDetailPresentation: Equatable {
 
     var summaryMetrics: [RouteSummaryMetric] {
         var metrics: [RouteSummaryMetric] = []
-        if let value = summary.distance?.meters {
-            metrics.append(.init(title: "距离", value: Self.distance(value), systemImage: "point.topleft.down.curvedto.point.bottomright.up"))
+        if let distance = summary.distance {
+            metrics.append(.init(title: "距离", value: Self.distance(distance.meters), systemImage: "point.topleft.down.curvedto.point.bottomright.up"))
         }
-        if let value = summary.estimatedDuration?.seconds {
-            metrics.append(.init(title: "时长", value: Self.duration(value), systemImage: "clock"))
+        if let duration = summary.estimatedDuration {
+            metrics.append(.init(title: "预计用时", value: Self.duration(duration.seconds), systemImage: "clock"))
         }
-        if let value = summary.ascent?.meters {
-            metrics.append(.init(title: "爬升", value: Self.meters(value), systemImage: "arrow.up.right"))
+        if let ascent = summary.ascent {
+            metrics.append(.init(title: "累计爬升", value: Self.meters(ascent.meters), systemImage: "arrow.up.right"))
         }
-        if let value = summary.descent?.meters {
-            metrics.append(.init(title: "下降", value: Self.meters(value), systemImage: "arrow.down.right"))
-        }
-        if let value = summary.maxElevation?.meters {
-            metrics.append(.init(title: "最高海拔", value: Self.meters(value), systemImage: "mountain.2"))
-        }
-        if let value = summary.suggestedDays {
-            metrics.append(.init(title: "建议天数", value: "\(value) 天", systemImage: "calendar"))
+        if let descent = summary.descent {
+            metrics.append(.init(title: "累计下降", value: Self.meters(descent.meters), systemImage: "arrow.down.right"))
         }
         return metrics
     }
 
+    var routeSummaryProjection: RouteSummaryProjection {
+        RouteSummaryProjection(
+            name: Self.nonEmpty(summary.name),
+            start: Self.nonEmpty(summary.start?.name),
+            end: Self.nonEmpty(summary.end?.name),
+            tags: summaryTags,
+            metrics: summaryMetrics.map {
+                MetricItemModel(id: $0.title, value: $0.value, label: $0.title)
+            }
+        )
+    }
+
+    var routeIntroductionProjection: RouteIntroductionProjection? {
+        let values: [(String, String, String, QualifiedString?)] = [
+            ("fitness-requirement", "体", "体能要求", version.professionalAnalysis?.fitnessRequirement),
+            ("experience-requirement", "经", "经验要求", version.professionalAnalysis?.experienceRequirement),
+            ("main-terrain", "地", "主要地形", version.professionalAnalysis?.mainTerrain),
+            ("technical-difficulty", "技", "技术难点", version.professionalAnalysis?.technicalDifficulty),
+            ("high-altitude-impact", "高", "高海拔影响", version.professionalAnalysis?.highAltitudeImpact),
+            ("exposed-sections", "露", "暴露路段", version.professionalAnalysis?.exposedSections),
+            ("danger-areas", "险", "危险区域", version.professionalAnalysis?.dangerAreas),
+            ("signal-coverage", "信", "信号覆盖", version.professionalAnalysis?.signalCoverage),
+            ("evacuation-difficulty", "撤", "撤离难度", version.professionalAnalysis?.evacuationDifficulty),
+        ]
+        let analysisItems: [RouteAnalysisItemProjection] = values.compactMap { value in
+            guard let description = Self.nonEmpty(value.3?.value) else { return nil }
+            return RouteAnalysisItemProjection(
+                id: value.0,
+                mark: value.1,
+                title: value.2,
+                description: description,
+                confidence: value.3?.confidence
+            )
+        }
+        let introduction = Self.nonEmpty(summary.introduction)
+        guard introduction != nil || !analysisItems.isEmpty else { return nil }
+        return RouteIntroductionProjection(
+            introduction: introduction,
+            analysisItems: analysisItems
+        )
+    }
+
+    var elevationProfileProjection: ElevationProfileProjection? {
+        guard version.mainTrackAvailability == .valid,
+              let profile = version.elevationProfile,
+              !profile.samples.isEmpty else { return nil }
+        return ElevationProfileProjection(
+            minimumLabel: Self.meters(profile.minElevation.meters),
+            maximumLabel: Self.meters(profile.maxElevation.meters),
+            minimumElevation: profile.minElevation.meters,
+            maximumElevation: profile.maxElevation.meters,
+            samples: profile.samples.map {
+                RouteElevationSampleProjection(
+                    id: $0.identity,
+                    distance: $0.distance.meters,
+                    elevation: $0.elevation.meters
+                )
+            }
+        )
+    }
+
+    var referenceDayProjections: [RouteReferenceDayProjection] {
+        guard summary.routeType == .multiDay else { return [] }
+        return (version.referenceDays ?? []).map { day in
+            var metrics: [String] = []
+            if let endpoint = Self.endpoint(start: day.start?.name, end: day.end?.name) {
+                metrics.append(endpoint)
+            }
+            if let distance = day.distance?.meters { metrics.append(Self.distance(distance)) }
+            if let duration = day.estimatedDuration?.seconds { metrics.append(Self.duration(duration)) }
+            if let ascent = day.ascent?.meters { metrics.append("爬升 \(Self.meters(ascent))") }
+            if let descent = day.descent?.meters { metrics.append("下降 \(Self.meters(descent))") }
+            if let minimum = day.minElevation?.meters { metrics.append("最低 \(Self.meters(minimum))") }
+            if let maximum = day.maxElevation?.meters { metrics.append("最高 \(Self.meters(maximum))") }
+            return RouteReferenceDayProjection(
+                id: day.identity,
+                dayNumber: day.dayNumber,
+                title: Self.nonEmpty(day.title),
+                metrics: metrics,
+                description: Self.joined([day.accommodation, day.notes])
+            )
+        }
+    }
+
+    var routeSegmentListProjection: RouteSegmentListProjection? {
+        let segments = (version.segments ?? []).map { segment in
+            var metrics: [String] = []
+            if let distance = segment.distance?.meters { metrics.append(Self.distance(distance)) }
+            if let duration = segment.estimatedDuration?.seconds { metrics.append(Self.duration(duration)) }
+            if let ascent = segment.ascent?.meters { metrics.append("爬升 \(Self.meters(ascent))") }
+            if let descent = segment.descent?.meters { metrics.append("下降 \(Self.meters(descent))") }
+            [segment.difficulty, segment.terrainOrRoadType]
+                .compactMap(Self.nonEmpty)
+                .forEach { metrics.append($0) }
+            return RouteSegmentProjection(
+                id: segment.identity,
+                order: segment.order,
+                name: segment.name,
+                start: Self.nonEmpty(segment.start?.name),
+                end: Self.nonEmpty(segment.end?.name),
+                metrics: metrics,
+                description: Self.joined([segment.description, segment.notes])
+            )
+        }
+        guard !segments.isEmpty else { return nil }
+        return RouteSegmentListProjection(segments: segments)
+    }
+
+    var routePointSectionProjections: [RoutePointSectionProjection] {
+        let keyPoints = pointSection(
+            title: "关键点",
+            bookmark: "关",
+            points: version.keyPoints ?? []
+        )
+        let interestPoints = pointSection(
+            title: "兴趣点",
+            bookmark: "景",
+            points: version.interestPoints ?? []
+        )
+        let campsites = RoutePointSectionProjection(
+            title: "营地",
+            points: (version.campsites ?? []).map {
+                RoutePointRowProjection(
+                    id: $0.identity,
+                    bookmark: "营",
+                    name: $0.name,
+                    elevation: $0.elevation.map { Self.meters($0.meters) },
+                    type: Self.nonEmpty($0.status),
+                    location: nil,
+                    description: Self.nonEmpty($0.details)
+                )
+            }
+        )
+        let overnightPlaces = RoutePointSectionProjection(
+            title: "过夜点",
+            points: (version.overnightPlaces ?? []).map {
+                RoutePointRowProjection(
+                    id: $0.identity,
+                    bookmark: "宿",
+                    name: $0.name,
+                    elevation: $0.elevation.map { Self.meters($0.meters) },
+                    type: Self.nonEmpty($0.type),
+                    location: nil,
+                    description: Self.joined([
+                        $0.facilities?.compactMap(Self.nonEmpty).joined(separator: "、"),
+                        $0.details,
+                        $0.status,
+                    ])
+                )
+            }
+        )
+        let waterSources = RoutePointSectionProjection(
+            title: "水源",
+            points: (version.waterSources ?? []).map {
+                RoutePointRowProjection(
+                    id: $0.identity,
+                    bookmark: "水",
+                    name: $0.name,
+                    elevation: $0.elevation.map { Self.meters($0.meters) },
+                    type: Self.nonEmpty($0.sourceType),
+                    location: nil,
+                    description: Self.joined([
+                        $0.seasonalReliability,
+                        $0.treatmentRecommended.map { $0 ? "建议处理后饮用" : "未要求处理" },
+                        $0.treatmentAdvice,
+                        $0.description,
+                    ])
+                )
+            }
+        )
+        let supplyPoints = RoutePointSectionProjection(
+            title: "补给",
+            points: (version.supplyPoints ?? []).map {
+                RoutePointRowProjection(
+                    id: $0.identity,
+                    bookmark: "补",
+                    name: $0.name,
+                    elevation: nil,
+                    type: Self.nonEmpty($0.supplyType),
+                    location: nil,
+                    description: Self.joined([
+                        $0.availableItems?.compactMap(Self.nonEmpty).joined(separator: "、"),
+                        $0.description,
+                    ])
+                )
+            }
+        )
+        return [keyPoints, interestPoints, campsites, overnightPlaces, waterSources, supplyPoints]
+            .filter { !$0.points.isEmpty }
+    }
+
+    var routeFactSectionProjections: [RouteFactSectionProjection] {
+        [safetySection, seasonalWeatherSection, seasonalEquipmentSection]
+            .filter { !$0.items.isEmpty }
+            .map { section in
+                RouteFactSectionProjection(
+                    title: section.title,
+                    items: section.items.map {
+                        RouteFactItemProjection(
+                            id: $0.id,
+                            bookmark: $0.bookmark ?? "",
+                            title: $0.title,
+                            content: $0.value
+                        )
+                    }
+                )
+            }
+    }
+
     var sections: [RouteDetailSectionPresentation] {
-        [
-            overviewSection,
-            elevationSection,
+        var sections = [
+            introductionAndAnalysisSection,
             professionalAnalysisSection,
+            elevationSection,
             referenceDaysSection,
             segmentSection,
             namedPointSection(id: .keyPoints, title: "关键点", points: version.keyPoints ?? [], prefix: "关"),
@@ -208,9 +488,28 @@ struct RouteDetailPresentation: Equatable {
             seasonalWeatherSection,
             seasonalEquipmentSection,
             imageSection,
-        ].compactMap { section in
-            section.items.isEmpty ? nil : section
+        ].filter { !$0.items.isEmpty }
+
+        if let analysisIndex = sections.firstIndex(where: { $0.id == .professionalAnalysis }) {
+            let analysisItems = sections.remove(at: analysisIndex).items
+            if let overviewIndex = sections.firstIndex(where: { $0.id == .overview }) {
+                sections[overviewIndex] = RouteDetailSectionPresentation(
+                    id: .overview,
+                    title: "路线介绍与专业分析",
+                    items: sections[overviewIndex].items + analysisItems
+                )
+            } else {
+                sections.insert(
+                    RouteDetailSectionPresentation(
+                        id: .overview,
+                        title: "路线介绍与专业分析",
+                        items: analysisItems
+                    ),
+                    at: 0
+                )
+            }
         }
+        return sections
     }
 
     var images: [RouteDetailImagePresentation] {
@@ -220,55 +519,39 @@ struct RouteDetailPresentation: Equatable {
     }
 
     var generationMessage: String? {
-        guard !version.generationEligibility.eligible else { return nil }
-        let labels = (version.generationEligibility.missingReasons ?? []).map { reason in
-            switch reason {
-            case .name: "路线名称"
-            case .region: "所在地区"
-            case .estimatedDuration: "预计用时"
-            case .start: "起点"
-            case .end: "终点"
-            case .validMainTrack: "有效主轨迹"
-            }
-        }
-        return labels.isEmpty ? "当前路线资料不足，暂不能生成行程" : "缺少：\(labels.joined(separator: "、"))"
+        RouteGenerationEligibilityPresentation(
+            eligibility: version.generationEligibility
+        ).unavailableMessage
     }
 
-    private var overviewSection: RouteDetailSectionPresentation {
-        var items: [RouteDetailSectionItem] = []
-        if let versionLabel = Self.nonEmpty(version.versionLabel) {
-            items.append(.init(id: "version", title: "当前公开版本", value: versionLabel))
-        }
-        if let endpoints = endpointText {
-            items.append(.init(id: "endpoints", title: "起点到终点", value: endpoints))
-        }
-        if let introduction = Self.nonEmpty(summary.introduction) {
-            items.append(.init(id: "introduction", title: "路线介绍", value: introduction))
-        }
-        return .init(id: .overview, title: "路线概览", items: items)
+    private var introductionAndAnalysisSection: RouteDetailSectionPresentation {
+        let items = Self.nonEmpty(summary.introduction).map {
+            [RouteDetailSectionItem(id: "introduction", title: "路线介绍", value: $0)]
+        } ?? []
+        return .init(id: .overview, title: "路线介绍与专业分析", items: items)
     }
 
     private var elevationSection: RouteDetailSectionPresentation {
-        guard let profile = version.elevationProfile else {
-            return .init(id: .elevation, title: "海拔剖面", items: [])
+        guard let profile = elevationProfile else {
+            return .init(id: .elevation, title: "海拔曲线", items: [])
         }
-        let range = "\(Self.meters(profile.minElevation.meters)) - \(Self.meters(profile.maxElevation.meters))"
+        let range = "\(Self.meters(profile.minElevation)) - \(Self.meters(profile.maxElevation))"
         return .init(
             id: .elevation,
-            title: "海拔剖面",
-            items: [.init(id: "elevation-profile", title: range, value: "\(profile.samples.count) 个采样点")]
+            title: "海拔曲线",
+            items: [.init(id: "elevation-profile", title: range, value: "")]
         )
     }
 
     private var professionalAnalysisSection: RouteDetailSectionPresentation {
         guard let analysis = version.professionalAnalysis else {
-            return .init(id: .professionalAnalysis, title: "专业分析", items: [])
+            return .init(id: .professionalAnalysis, title: "路线介绍与专业分析", items: [])
         }
         let values: [(String, QualifiedString?)] = [
             ("体能要求", analysis.fitnessRequirement),
             ("经验要求", analysis.experienceRequirement),
             ("主要地形", analysis.mainTerrain),
-            ("技术难度", analysis.technicalDifficulty),
+            ("技术难点", analysis.technicalDifficulty),
             ("高海拔影响", analysis.highAltitudeImpact),
             ("暴露路段", analysis.exposedSections),
             ("危险区域", analysis.dangerAreas),
@@ -277,16 +560,19 @@ struct RouteDetailPresentation: Equatable {
         ]
         return .init(
             id: .professionalAnalysis,
-            title: "专业分析",
+            title: "路线介绍与专业分析",
             items: values.compactMap { title, qualified in
                 guard let value = Self.nonEmpty(qualified?.value) else { return nil }
-                return .init(id: title, title: title, value: value)
+                return .init(id: title, bookmark: "析", title: title, value: value)
             }
         )
     }
 
     private var referenceDaysSection: RouteDetailSectionPresentation {
-        .init(
+        guard summary.routeType == .multiDay else {
+            return .init(id: .referenceDays, title: "参考分日", items: [])
+        }
+        return .init(
             id: .referenceDays,
             title: "参考分日",
             items: (version.referenceDays ?? []).map { day in
@@ -297,7 +583,12 @@ struct RouteDetailPresentation: Equatable {
                 if let descent = day.descent?.meters { facts.append("下降 \(Self.meters(descent))") }
                 if let minimum = day.minElevation?.meters { facts.append("最低 \(Self.meters(minimum))") }
                 if let maximum = day.maxElevation?.meters { facts.append("最高 \(Self.meters(maximum))") }
-                return .init(id: day.identity, title: day.title ?? "D\(day.dayNumber)", value: facts.joined(separator: " · "))
+                return .init(
+                    id: day.identity,
+                    bookmark: "D\(day.dayNumber)",
+                    title: day.title ?? "第 \(day.dayNumber) 天",
+                    value: facts.joined(separator: " · ")
+                )
             }
         )
     }
@@ -317,7 +608,8 @@ struct RouteDetailPresentation: Equatable {
                 .forEach { facts.append($0) }
             return RouteDetailSectionItem(
                 id: segment.identity,
-                title: "S\(segment.order) · \(segment.name)",
+                bookmark: "S\(segment.order)",
+                title: segment.name,
                 value: facts.joined(separator: " · ")
             )
         }
@@ -388,11 +680,12 @@ struct RouteDetailPresentation: Equatable {
     private var safetySection: RouteDetailSectionPresentation {
         var items: [RouteDetailSectionItem] = []
         if let coverage = Self.nonEmpty(version.communicationAndSafety?.coverageSummary) {
-            items.append(.init(id: "coverage", title: "通信覆盖", value: coverage))
+            items.append(.init(id: "coverage", bookmark: "信", title: "通信覆盖", value: coverage))
         }
         items.append(contentsOf: (version.communicationAndSafety?.notices ?? []).map {
             RouteDetailSectionItem(
                 id: $0.identity,
+                bookmark: Self.safetyBookmark(for: $0.kind),
                 title: $0.title,
                 value: [$0.kind, $0.description].compactMap(Self.nonEmpty).joined(separator: " · ")
             )
@@ -406,11 +699,12 @@ struct RouteDetailPresentation: Equatable {
         }
         var items: [RouteDetailSectionItem] = []
         if let seasons = weather.bestSeasons, !seasons.isEmpty {
-            items.append(.init(id: "best-seasons", title: "适合季节", value: seasons.joined(separator: "、")))
+            items.append(.init(id: "best-seasons", bookmark: "季", title: "适合季节", value: seasons.joined(separator: "、")))
         }
         items.append(contentsOf: (weather.conditions ?? []).map {
             .init(
                 id: $0.identity,
+                bookmark: Self.seasonBookmark(for: $0.season),
                 title: $0.season,
                 value: [$0.typicalWeather, $0.environmentalRisks?.joined(separator: "、"), $0.notes]
                     .compactMap(Self.nonEmpty)
@@ -427,6 +721,7 @@ struct RouteDetailPresentation: Equatable {
             items: (version.seasonalEquipmentRecommendations ?? []).map {
                 .init(
                     id: $0.identity,
+                    bookmark: $0.level == .required ? "必" : "荐",
                     title: $0.name,
                     value: [$0.seasonOrCondition, $0.level == .required ? "必需" : "建议", $0.reason]
                         .compactMap(Self.nonEmpty)
@@ -442,6 +737,27 @@ struct RouteDetailPresentation: Equatable {
             title: "路线影像",
             items: images.map {
                 .init(id: $0.id, title: $0.caption ?? "路线图片", value: $0.source)
+            }
+        )
+    }
+
+    private func pointSection(
+        title: String,
+        bookmark: String,
+        points: [PublicRouteNamedPoint]
+    ) -> RoutePointSectionProjection {
+        RoutePointSectionProjection(
+            title: title,
+            points: points.map {
+                RoutePointRowProjection(
+                    id: $0.identity,
+                    bookmark: bookmark,
+                    name: $0.name,
+                    elevation: $0.elevation.map { Self.meters($0.meters) },
+                    type: Self.nonEmpty($0.category),
+                    location: nil,
+                    description: Self.nonEmpty($0.description)
+                )
             }
         )
     }
@@ -469,12 +785,35 @@ struct RouteDetailPresentation: Equatable {
     ) -> RouteDetailSectionItem {
         var facts = [category, detail].compactMap(Self.nonEmpty)
         if let elevation { facts.append(Self.meters(elevation)) }
-        return .init(id: id, title: "\(prefix) · \(name)", value: facts.joined(separator: " · "))
+        return .init(id: id, bookmark: prefix, title: name, value: facts.joined(separator: " · "))
+    }
+
+    private static func safetyBookmark(for value: String) -> String {
+        if value.contains("信") { return "信" }
+        if value.contains("撤") { return "撤" }
+        if value.contains("险") || value.contains("危") { return "险" }
+        return "安"
+    }
+
+    private static func seasonBookmark(for value: String) -> String {
+        nonEmpty(value).map { String($0.prefix(1)) } ?? "季"
     }
 
     private static func nonEmpty(_ value: String?) -> String? {
         guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
         return value
+    }
+
+    private static func joined(_ values: [String?]) -> String? {
+        let values = values.compactMap(nonEmpty)
+        return values.isEmpty ? nil : values.joined(separator: " · ")
+    }
+
+    private static func endpoint(start: String?, end: String?) -> String? {
+        let start = nonEmpty(start)
+        let end = nonEmpty(end)
+        if let start, let end { return "\(start) → \(end)" }
+        return start ?? end
     }
 
     private static func distance(_ meters: Double) -> String {
@@ -513,10 +852,10 @@ final class RouteDetailViewModel: ObservableObject {
 
     var highlightedAnnotationIDs: Set<String> {
         guard let identity = highlightedPointIdentity else { return [] }
-        let prefix = "\(identity)-"
         return Set(
-            (poiAnnotations.map(\.id) + selectableTrackPoints.map(\.id) + waypointAnnotations.map(\.id))
-                .filter { $0.hasPrefix(prefix) }
+            poiAnnotations.filter { $0.objectIdentity == identity }.map(\.id)
+                + selectableTrackPoints.filter { $0.objectIdentity == identity }.map(\.id)
+                + waypointAnnotations.filter { $0.objectIdentity == identity }.map(\.id)
         )
     }
 
@@ -524,6 +863,12 @@ final class RouteDetailViewModel: ObservableObject {
     var hasUnavailableTrack: Bool {
         guard let route else { return false }
         return route.currentVersion.mainTrackAvailability != .valid
+    }
+    var mapStartCoordinate: CLLocationCoordinate2D? {
+        validCoordinate(route?.currentVersion.summary.start?.position?.coordinate)
+    }
+    var mapEndCoordinate: CLLocationCoordinate2D? {
+        validCoordinate(route?.currentVersion.summary.end?.position?.coordinate)
     }
     var hasMissingTrack: Bool { hasUnavailableTrack }
     var selectableSegments: [RouteSelectableSegment] {
@@ -574,20 +919,35 @@ final class RouteDetailViewModel: ObservableObject {
         highlightedPointIdentity = highlightedPointIdentity == identity ? nil : identity
     }
 
+    func highlightPoint(_ selection: RouteMapSelection) {
+        highlightedPointIdentity = selection.identity
+    }
+
+    private func validCoordinate(_ coordinate: CLLocationCoordinate2D?) -> CLLocationCoordinate2D? {
+        guard let coordinate, CLLocationCoordinate2DIsValid(coordinate) else { return nil }
+        return coordinate
+    }
+
     private func projectMapData(from detail: PublicRouteDetail) {
         let version = detail.currentVersion
         highlightedPointIdentity = nil
+        selectedSegmentID = nil
+        projectPoints(from: version)
+
         guard version.mainTrackAvailability == .valid, let mainTrack = version.mainTrack else {
             mapCoordinates = []
             mapSegments = []
-            poiAnnotations = []
-            selectableTrackPoints = []
-            waypointAnnotations = []
             elevationSamples = []
-            selectedSegmentID = nil
             return
         }
 
+        elevationSamples = (version.elevationProfile?.samples ?? []).enumerated().map { index, sample in
+            RouteElevationSample(
+                sequenceNumber: index + 1,
+                distance: sample.distance.meters,
+                elevation: sample.elevation.meters
+            )
+        }
         mapCoordinates = mainTrack.path
             .map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
             .filter(CLLocationCoordinate2DIsValid)
@@ -603,20 +963,16 @@ final class RouteDetailViewModel: ObservableObject {
                 coordinates: coordinates
             )
         }
-        selectedSegmentID = nil
-        projectPoints(from: version)
     }
 
     private func projectPoints(from version: PublicRouteVersionDetail) {
         poiAnnotations = annotatedPoints(version.interestPoints ?? [], fallbackCategory: "兴趣点")
             + annotatedCampsites(version.campsites ?? [])
+            + annotatedOvernightPlaces(version.overnightPlaces ?? [])
             + annotatedWaterSources(version.waterSources ?? [])
             + annotatedSupplyPoints(version.supplyPoints ?? [])
         waypointAnnotations = annotatedWaypoints(version.keyPoints ?? [])
         selectableTrackPoints = []
-        elevationSamples = (version.elevationProfile?.samples ?? []).enumerated().map { index, sample in
-            RouteElevationSample(sequenceNumber: index + 1, elevation: sample.elevation.meters)
-        }
     }
 
     private func annotatedPoints(_ points: [PublicRouteNamedPoint], fallbackCategory: String) -> [RoutePOIAnnotation] {
@@ -625,6 +981,7 @@ final class RouteDetailViewModel: ObservableObject {
                 guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
                 return .init(
                     id: "\(point.identity)-\(position.latitude)-\(position.longitude)",
+                    objectIdentity: point.identity,
                     title: point.name,
                     category: point.category ?? fallbackCategory,
                     subCategory: "",
@@ -644,6 +1001,7 @@ final class RouteDetailViewModel: ObservableObject {
                 guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
                 return .init(
                     id: "\(point.identity)-\(position.latitude)-\(position.longitude)",
+                    objectIdentity: point.identity,
                     title: point.name,
                     detail: point.description ?? "",
                     elevation: point.elevation.map { Self.formatElevation($0.meters) } ?? "",
@@ -662,11 +1020,38 @@ final class RouteDetailViewModel: ObservableObject {
                 guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
                 return .init(
                     id: "\(campsite.identity)-\(position.latitude)-\(position.longitude)",
+                    objectIdentity: campsite.identity,
                     title: campsite.name,
                     category: "营地",
                     subCategory: campsite.status ?? "",
                     detail: campsite.details ?? "",
                     elevation: campsite.elevation.map { Self.formatElevation($0.meters) } ?? "",
+                    imageURL: nil,
+                    latitude: position.latitude,
+                    longitude: position.longitude
+                )
+            }
+        }
+    }
+
+    private func annotatedOvernightPlaces(_ places: [PublicRouteOvernightPlace]) -> [RoutePOIAnnotation] {
+        places.flatMap { place in
+            place.positions.compactMap { position in
+                guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
+                return .init(
+                    id: "\(place.identity)-\(position.latitude)-\(position.longitude)",
+                    objectIdentity: place.identity,
+                    title: place.name,
+                    category: "过夜点",
+                    subCategory: place.type ?? "",
+                    detail: [place.facilities?.joined(separator: "、"), place.details, place.status]
+                        .compactMap { value in
+                            guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                                  !value.isEmpty else { return nil }
+                            return value
+                        }
+                        .joined(separator: " · "),
+                    elevation: place.elevation.map { Self.formatElevation($0.meters) } ?? "",
                     imageURL: nil,
                     latitude: position.latitude,
                     longitude: position.longitude
@@ -681,6 +1066,7 @@ final class RouteDetailViewModel: ObservableObject {
                 guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
                 return .init(
                     id: "\(source.identity)-\(position.latitude)-\(position.longitude)",
+                    objectIdentity: source.identity,
                     title: source.name,
                     category: "水源",
                     subCategory: source.sourceType ?? "",
@@ -700,6 +1086,7 @@ final class RouteDetailViewModel: ObservableObject {
                 guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
                 return .init(
                     id: "\(point.identity)-\(position.latitude)-\(position.longitude)",
+                    objectIdentity: point.identity,
                     title: point.name,
                     category: "补给",
                     subCategory: point.supplyType ?? "",

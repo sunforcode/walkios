@@ -101,6 +101,53 @@ final class EquipmentServiceTests: XCTestCase {
         XCTAssertEqual(result.summary.knownTotalWeight.grams, 1_500)
     }
 
+    func testDefaultMockFixturesSupportTypedEquipmentMutations() async throws {
+        let client = MockAPIClient(fixtures: DefaultMockFixtures.equipmentFixtures())
+        let service = EquipmentService(apiClient: client)
+
+        let created = try await service.createPersonalEquipment(
+            name: "帐篷",
+            ownedQuantity: 1,
+            unitWeightGrams: nil
+        )
+        let detail = try await service.getPersonalEquipment(id: "equipment-1")
+        let updated = try await service.updatePersonalEquipment(
+            id: "equipment-1",
+            update: PersonalEquipmentUpdate(
+                name: "双人帐篷",
+                ownedQuantity: 2,
+                unitWeight: .value(EquipmentWeight(grams: 1_800))
+            )
+        )
+        let impact = try await service.getDeletionImpact(id: "equipment-1")
+        let createdList = try await service.createEquipmentList(name: "周末露营")
+        let listDetail = try await service.getEquipmentList(id: "list-1")
+        let renamedList = try await service.renameEquipmentList(id: "list-1", name: "高山露营")
+        let memberList = try await service.putListMember(
+            equipmentListID: "list-1",
+            personalEquipmentID: "equipment-1",
+            quantity: 2
+        )
+        let memberRemoved = try await service.removeListMember(
+            equipmentListID: "list-1",
+            personalEquipmentID: "equipment-1"
+        )
+        let deletedList = try await service.deleteEquipmentList(id: "list-1")
+        let deleted = try await service.deletePersonalEquipment(id: "equipment-1")
+
+        XCTAssertEqual(created.item.identity, "equipment-1")
+        XCTAssertEqual(detail.identity, "equipment-1")
+        XCTAssertEqual(updated.item.name, "双人帐篷")
+        XCTAssertEqual(impact.personalEquipmentId, "equipment-1")
+        XCTAssertEqual(createdList.equipmentList.identity, "list-1")
+        XCTAssertEqual(listDetail.identity, "list-1")
+        XCTAssertEqual(renamedList.equipmentList.name, "高山露营")
+        XCTAssertEqual(memberList.equipmentList.members.first?.quantity, 2)
+        XCTAssertTrue(memberRemoved.equipmentList.members.isEmpty)
+        XCTAssertEqual(deletedList.deletedEquipmentListId, "list-1")
+        XCTAssertEqual(deleted.deletedPersonalEquipmentId, "equipment-1")
+    }
+
     func testMutationServiceMethodsUseAllTypedRequests() async throws {
         let createEquipment = try PersonalEquipmentAPI.Create(name: "帐篷", ownedQuantity: 1, unitWeightGrams: nil)
         let updateEquipment = try PersonalEquipmentAPI.Update(

@@ -15,8 +15,7 @@ settings:
 
 packages:
   Alamofire:
-    url: https://github.com/Alamofire/Alamofire.git
-    exactVersion: 5.9.1
+    path: .swiftpm-packages/checkouts/Alamofire
 
 targets:
   Walk:
@@ -27,6 +26,16 @@ targets:
       - path: Walk
         excludes:
           - "Tests/**/*"
+          - "DesignSystem/BusinessComponents/AccountEquipment/**/*"
+          - "DesignSystem/BusinessComponents/Route/**/*"
+          - "DesignSystem/Components/Foundation/**/*"
+          - "Preview Content/BusinessComponentPreviewFixtures.swift"
+          - "Preview Content/ComponentPreviewFixtures.swift"
+      - path: Walk/DesignSystem/BusinessComponents/AccountEquipment
+      - path: Walk/DesignSystem/BusinessComponents/Route
+      - path: Walk/DesignSystem/Components/Foundation
+      - path: Walk/Preview Content/BusinessComponentPreviewFixtures.swift
+      - path: Walk/Preview Content/ComponentPreviewFixtures.swift
     dependencies:
       - package: Alamofire
     info:
@@ -76,6 +85,62 @@ targets:
         TEST_TARGET_NAME: Walk
         GENERATE_INFOPLIST_FILE: YES
 
+  WalkBaselineUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: WalkBaselineUITests
+    dependencies:
+      - target: Walk
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.walk.app.baseline-ui-tests
+        TEST_TARGET_NAME: Walk
+        GENERATE_INFOPLIST_FILE: YES
+
+  WalkBaselineTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: WalkBaselineTests
+    dependencies:
+      - target: Walk
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.walk.app.baseline-tests
+        TEST_TARGET_NAME: Walk
+        GENERATE_INFOPLIST_FILE: YES
+
+  WalkComponentTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: WalkComponentTests
+    dependencies:
+      - target: Walk
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.walk.app.component-tests
+        TEST_TARGET_NAME: Walk
+        GENERATE_INFOPLIST_FILE: YES
+
+  WalkComponentUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: WalkComponentUITests
+    dependencies:
+      - target: Walk
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.walk.app.component-ui-tests
+        TEST_TARGET_NAME: Walk
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   Walk:
     build:
@@ -102,3 +167,31 @@ schemes:
       config: Debug
     archive:
       config: Release
+
+  WalkBaseline:
+    build:
+      targets:
+        Walk: all
+        WalkBaselineTests: [test]
+        WalkBaselineUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - WalkBaselineTests
+        - WalkBaselineUITests
+
+  WalkComponents:
+    build:
+      targets:
+        Walk: all
+        WalkComponentTests: [test]
+        WalkComponentUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - WalkComponentTests
+        - WalkComponentUITests

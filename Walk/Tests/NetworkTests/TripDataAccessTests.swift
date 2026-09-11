@@ -40,6 +40,90 @@ final class TripDataAccessTests: XCTestCase {
         XCTAssertNotNil(fixtures[TripAPI.List(status: .cancelled).identifier])
     }
 
+    func testDefaultMockFixturesProvideOneCompleteConsistentThreeDayTrip() async throws {
+        let client = MockAPIClient(fixtures: DefaultMockFixtures.all(bundle: Bundle(for: TripDataAccessTests.self)))
+
+        let detail = try await client.execute(PersonalTripAPI.Detail(tripID: "trip-1"))
+        let days = try await client.execute(PersonalTripAPI.Days(tripID: "trip-1"))
+        let weather = try await client.execute(PersonalTripAPI.Weather(tripID: "trip-1"))
+        let equipment = try await client.execute(TripEquipmentAPI.Current(tripID: "trip-1"))
+
+        XCTAssertEqual(detail.revision, "revision-1")
+        XCTAssertEqual(days.revision, detail.revision)
+        XCTAssertEqual(weather.revision, detail.revision)
+        XCTAssertEqual(equipment.revision, detail.revision)
+        XCTAssertEqual(detail.trip.totalDayCount, 3)
+        XCTAssertEqual(detail.trip.hikingDayCount, 2)
+        XCTAssertEqual(detail.days.count, 3)
+        XCTAssertEqual(days.days.count, 3)
+        XCTAssertEqual(weather.days.count, 3)
+        XCTAssertEqual(
+            days.days.map(\.identity),
+            weather.days.map(\.tripDayID)
+        )
+        XCTAssertEqual(weather.days.map { $0.weatherAssociations.count }, [1, 1, 1])
+        XCTAssertEqual(weather.days[0].weatherAssociations[0].scope, .day)
+        XCTAssertEqual(weather.days[1].weatherAssociations[0].scope, .hikeAction)
+        XCTAssertNotNil(weather.days[1].weatherAssociations[0].forecast)
+        XCTAssertEqual(detail.days.map(\.identity), days.days.map(\.identity))
+        XCTAssertTrue(days.days.allSatisfy { !$0.actions.isEmpty })
+        XCTAssertTrue(days.days.flatMap(\.actions).contains { $0.actionType == "long_distance_transport" })
+        XCTAssertTrue(days.days.flatMap(\.actions).contains { $0.actionType == "route_transfer" })
+        XCTAssertEqual(days.days.flatMap(\.actions).filter { $0.actionType == "hike" }.count, 2)
+        XCTAssertGreaterThanOrEqual(days.days.flatMap { $0.points ?? [] }.count, 6)
+        XCTAssertEqual(detail.trip.importantNotices?.count, 3)
+        XCTAssertEqual(detail.equipmentSnapshot.summary.itemCount, 8)
+        XCTAssertEqual(equipment.snapshot.items.count, 8)
+        XCTAssertEqual(equipment.snapshot.summary, detail.equipmentSnapshot.summary)
+        XCTAssertEqual(equipment.snapshot.summary.knownTotalWeight.grams, 7_200)
+        XCTAssertEqual(equipment.snapshot.summary.missingWeightItemCount, 1)
+    }
+
+    func testTripWeatherResponseDecodesCompleteAssociationAndForecastShape() async throws {
+        let payload = Data(
+            #"{"data":{"tripId":"trip-1","revision":"revision-1","days":[{"tripDayId":"day-1","dayNumber":1,"date":"2026-08-25","weatherAssociations":[{"associationIdentity":"weather-1","sequence":1,"scope":"hike_action","hikeActionIdentity":"action-1","targetLocation":{"position":{"latitude":29.6,"longitude":101.8,"referenceSystem":"WGS84"},"name":"老榆林"},"targetPeriodStart":"2026-08-24T16:00:00Z","targetPeriodEnd":"2026-08-25T16:00:00Z","forecastConfidence":{"status":"stale","category":"dynamic_external_information"},"forecast":{"identity":"forecast-1","location":{"position":{"latitude":29.6,"longitude":101.8,"referenceSystem":"WGS84"},"name":"老榆林"},"source":"气象服务","publishedAt":"2026-08-24T08:00:00Z","periods":[{"periodStart":"2026-08-24T16:00:00Z","periodEnd":"2026-08-25T04:00:00Z","condition":{"value":{"description":"多云"}},"temperatureRange":{"value":{"low":8,"high":16}},"precipitation":{"value":{"description":"午后阵雨","probability":0.4,"amount":{"millimeters":2.5}},"confidence":{"status":"pending_verification","category":"dynamic_external_information"}},"wind":{"value":{"description":"山脊风力较强","averageSpeed":{"metersPerSecond":6},"gustSpeed":{"metersPerSecond":10},"direction":"西南风"}}}]}}]}]}}"#.utf8
+        )
+        let client = MockAPIClient(fixtures: [
+            PersonalTripAPI.Weather(tripID: "trip-1").identifier: payload,
+        ])
+
+        let weather = try await client.execute(PersonalTripAPI.Weather(tripID: "trip-1"))
+        let association = try XCTUnwrap(weather.days.first?.weatherAssociations.first)
+        let forecast = try XCTUnwrap(association.forecast)
+        let period = try XCTUnwrap(forecast.periods.first)
+
+        XCTAssertEqual(weather.tripID, "trip-1")
+        XCTAssertEqual(association.scope, .hikeAction)
+        XCTAssertEqual(association.hikeActionIdentity, "action-1")
+        XCTAssertEqual(association.forecastConfidence?.status, "stale")
+        XCTAssertEqual(forecast.identity, "forecast-1")
+        XCTAssertEqual(forecast.source, "气象服务")
+        XCTAssertEqual(period.condition?.value?.description, "多云")
+        XCTAssertEqual(period.temperatureRange?.value?.low, 8)
+        XCTAssertEqual(period.precipitation?.value?.probability, 0.4)
+        XCTAssertEqual(period.precipitation?.value?.amount?.millimeters, 2.5)
+        XCTAssertEqual(period.wind?.value?.averageSpeed?.metersPerSecond, 6)
+        XCTAssertEqual(period.wind?.value?.direction, "西南风")
+    }
+
+    func testLegacyTripWeatherResponseDoesNotDecodeAsCurrentContract() async {
+        let payload = Data(
+            #"{"data":{"tripId":"trip-1","revision":"revision-1","routeName":"贡嘎环线","startDate":"2026-08-25","endDate":"2026-08-25","days":[{"tripDayId":"day-1","dayNumber":1,"date":"2026-08-25","primaryStage":"徒步日 1","weather":{"condition":{"value":"多云"}}}]}}"#.utf8
+        )
+        let client = MockAPIClient(fixtures: [
+            PersonalTripAPI.Weather(tripID: "trip-1").identifier: payload,
+        ])
+
+        do {
+            _ = try await client.execute(PersonalTripAPI.Weather(tripID: "trip-1"))
+            XCTFail("legacy weather response must not decode")
+        } catch {
+            guard case APIClientError.decoding = error else {
+                return XCTFail("expected decoding error, got \(error)")
+            }
+        }
+    }
+
     func testLegacyTripRequestsUseRelocatedControllerPathAndStoragePolicy() throws {
         let list = TripAPI.List(
             keyword: "山",
@@ -315,7 +399,7 @@ final class TripDataAccessTests: XCTestCase {
         )
     }
 
-    func testGenerateResultDecodesTransportSelectionRequired() throws {
+    func testGenerateResultDecodesTransportSelectionRequiredWithTwoOptions() throws {
         let data = Data(
             """
             {
@@ -323,13 +407,22 @@ final class TripDataAccessTests: XCTestCase {
                 "resultType": "transport_selection_required",
                 "selection": {
                   "selectionId": "selection-1",
-                  "options": [{
-                    "transportOptionId": "option-1",
-                    "transferCount": {"value": 1},
-                    "estimatedArrivalAt": {"value": "2026-08-25T08:00:00Z"},
-                    "estimatedDuration": {"value": {"seconds": 7200}},
-                    "verificationItems": ["确认班次"]
-                  }]
+                  "options": [
+                    {
+                      "transportOptionId": "option-1",
+                      "transferCount": {"value": 1},
+                      "estimatedArrivalAt": {"value": "2026-08-25T08:00:00Z"},
+                      "estimatedDuration": {"value": {"seconds": 7200}},
+                      "verificationItems": ["确认班次"]
+                    },
+                    {
+                      "transportOptionId": "option-2",
+                      "transferCount": {"value": 0},
+                      "estimatedArrivalAt": {"value": "2026-08-25T09:00:00Z"},
+                      "estimatedDuration": {"value": {"seconds": 9000}},
+                      "verificationItems": []
+                    }
+                  ]
                 }
               }
             }
@@ -346,7 +439,7 @@ final class TripDataAccessTests: XCTestCase {
             return XCTFail("Expected transportSelection_required")
         }
         XCTAssertEqual(selection.selectionID, "selection-1")
-        XCTAssertEqual(selection.options.first?.transportOptionID, "option-1")
+        XCTAssertEqual(selection.options.map(\.transportOptionID), ["option-1", "option-2"])
     }
 
     func testGenerateResultDecodesTripCreatedWithFrozenTrack() throws {
@@ -362,6 +455,23 @@ final class TripDataAccessTests: XCTestCase {
         XCTAssertEqual(detail.trip.identity, "trip-1")
         XCTAssertEqual(detail.trip.startDate, LocalDate(year: 2026, month: 8, day: 25))
         XCTAssertEqual(detail.trip.frozenRouteBasis.mainTrackPath.count, 2)
+    }
+
+    func testStructuredTemperatureRangeDecodesLowAndHighNumbers() throws {
+        let data = Data(
+            """
+            {
+              "value": {"low": 8, "high": 16},
+              "confidence": {"status": "pending_verification", "category": "dynamic_external_information"}
+            }
+            """.utf8
+        )
+
+        let value = try APIJSONDecoder.make().decode(QualifiedTemperatureRange.self, from: data)
+
+        XCTAssertEqual(value.value?.low, 8)
+        XCTAssertEqual(value.value?.high, 16)
+        XCTAssertEqual(value.confidence?.status, "pending_verification")
     }
 
     func testPersonalTripServiceLoadsFocusAndServerGroupedCollection() async throws {

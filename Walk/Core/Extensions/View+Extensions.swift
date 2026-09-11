@@ -26,6 +26,6 @@ extension View {
     /// 内容边距
     func contentPadding() -> some View {
         self.padding(.horizontal, Spacing.pageHorizontal)
-            .padding(.vertical, Spacing.s12)
+            .padding(.vertical, Spacing.md)
     }
 }

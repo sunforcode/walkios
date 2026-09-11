@@ -37,6 +37,7 @@ playground.xcworkspace
 .build/
 Packages/
 Package.resolved
+.swiftpm-packages/
 
 # CocoaPods
 Pods/
@@ -59,3 +60,7 @@ iOSInjectionProject/
 
 # macOS
 .DS_Store
+
+# Python
+__pycache__/
+*.pyc

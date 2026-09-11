@@ -5,6 +5,7 @@ struct RootView: View {
     @State private var shell = AppShellState()
     @State private var pendingAuthIntent: PendingAuthIntent?
     @State private var pendingAuthTab: AppTab?
+    @State private var routeListShowsBackButton = false
     @State private var authenticationGeneration = 0
 
     var body: some View {
@@ -21,14 +22,28 @@ struct RootView: View {
                 .tabItem { Label(AppTab.profile.title, systemImage: AppTab.profile.systemImage) }
                 .tag(AppTab.profile)
         }
-        .tint(AppColors.interactionPrimary)
-        .toolbarColorScheme(.dark, for: .tabBar)
+        .toolbar(.hidden, for: .tabBar)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if shell.path(for: shell.selectedTab).isEmpty {
+                PrimaryTabBar(
+                    selectedTab: shell.selectedTab,
+                    onSelect: { shell.selectTab($0) }
+                )
+                .padding(.horizontal, Spacing.lg)
+                .padding(.top, Spacing.sm)
+                .padding(.bottom, Spacing.sm)
+            }
+        }
         .preferredColorScheme(.dark)
         .onReceive(NotificationCenter.default.publisher(for: .walkAuthenticationRequired)) { _ in
             requestAuthentication(.reauthenticate, in: shell.selectedTab, force: true)
         }
         .onReceive(NotificationCenter.default.publisher(for: .walkAuthenticationDidChange)) { _ in
             authenticationGeneration += 1
+        }
+        .onChange(of: shell.selectedTab) { tab in
+            guard tab == .routes, shell.path(for: .routes).isEmpty else { return }
+            routeListShowsBackButton = false
         }
     }
 
@@ -47,13 +62,17 @@ struct RootView: View {
         NavigationStack(path: pathBinding(for: tab)) {
             root().navigationDestination(for: AppDestination.self, destination: destinationView)
         }
+        .toolbar(.hidden, for: .tabBar)
     }
 
     private var homeRoot: some View {
         HomeView(
             onAuthenticate: { requestAuthentication($0, in: .home) },
             onNavigate: { navigate($0, in: .home) },
-            onNoFocus: { shell.showRouteList() },
+            onNoFocus: {
+                routeListShowsBackButton = false
+                shell.showRouteList()
+            },
             service: appEnvironment.personalTripService
         )
         .id(authenticationGeneration)
@@ -62,7 +81,10 @@ struct RootView: View {
     private var routesRoot: some View {
         RouteDiscoveryView(
             routeService: appEnvironment.routeService,
-            onNavigate: { navigate($0, in: .routes) }
+            onNavigate: { destination in
+                if destination == .routeList { routeListShowsBackButton = true }
+                navigate(destination, in: .routes)
+            }
         )
         .toolbar(.hidden, for: .navigationBar)
     }
@@ -118,6 +140,7 @@ struct RootView: View {
                         shell.setPath([], for: .home)
                         shell.selectTab(.home)
                     } else {
+                        routeListShowsBackButton = false
                         shell.showRouteList()
                     }
                 } catch {
@@ -149,7 +172,8 @@ struct RootView: View {
             case .login:
                 LoginView(
                     accountService: appEnvironment.accountService,
-                    onAuthenticated: { _ in completeAuthentication() },
+                    intent: pendingAuthIntent,
+                    onAuthenticated: completeAuthentication,
                     onCancel: {
                         pendingAuthIntent = nil
                         pendingAuthTab = nil
@@ -158,6 +182,7 @@ struct RootView: View {
             case .routeList:
                 RouteCollectionView(
                     routeService: appEnvironment.routeService,
+                    showsBackButton: routeListShowsBackButton,
                     onNavigate: { navigate($0, in: shell.selectedTab) }
                 )
             case .routeSearch:
@@ -181,7 +206,10 @@ struct RootView: View {
                 TripListView(
                     service: appEnvironment.personalTripService,
                     onNavigate: { navigate($0, in: shell.selectedTab) },
-                    onFindRoute: { shell.showRouteList() }
+                    onFindRoute: {
+                        routeListShowsBackButton = false
+                        shell.showRouteList()
+                    }
                 )
             case let .tripDetail(tripID):
                 TripDetailView(
@@ -247,6 +275,7 @@ struct RootView: View {
                 )
             }
         }
+        // 系统 tab bar 始终隐藏；一级根页面由 RootView 的 PrimaryTabBar 承载。
         .toolbar(.hidden, for: .tabBar)
     }
 }

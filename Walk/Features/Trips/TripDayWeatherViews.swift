@@ -1,9 +1,100 @@
 import SwiftUI
 
-struct TripDayPointGroup: Equatable {
-    let category: String
-    let title: String
-    let points: [PersonalTripPoint]
+struct TripContentNotice: Equatable, Identifiable {
+    let field: String
+    let status: String
+
+    var id: String { "\(field):\(status)" }
+    var message: String { "\(field)：\(Self.statusTitle(status))" }
+
+    private static func statusTitle(_ status: String) -> String {
+        switch status {
+        case "unknown": "信息未知"
+        case "missing": "信息缺失"
+        case "pending_verification": "待核验"
+        case "stale": "信息已过期"
+        case "unavailable": "信息不可用"
+        default: "状态未知"
+        }
+    }
+}
+
+struct TripActionPresentation: Equatable, Identifiable {
+    let action: PersonalTripAction
+
+    var id: Int { action.sequence }
+    var sequence: Int { action.sequence }
+    var isDailyRouteSummary: Bool { action.actionType == "hike" }
+    var details: [String] {
+        var result: [String] = []
+        if let start = action.start?.value?.name ?? action.origin?.value?.name {
+            result.append("起点 \(start)")
+        }
+        if let end = action.end?.value?.name ?? action.destination?.value?.name {
+            result.append("终点 \(end)")
+        }
+        if let mode = action.mode?.value { result.append(mode) }
+        if let times = action.keyTimes?.value, !times.isEmpty { result.append(times.joined(separator: " · ")) }
+        if let meters = action.distance?.value?.meters { result.append("距离 \(formatDistance(meters))") }
+        if let meters = action.ascent?.value?.meters { result.append("爬升 \(Int(meters.rounded())) m") }
+        if let seconds = action.estimatedDuration?.value?.seconds { result.append("预计 \(formatDuration(seconds))") }
+        if let notes = action.transferNotes?.value, !notes.isEmpty { result.append(notes.joined(separator: " · ")) }
+        return result
+    }
+    var statusNotices: [TripContentNotice] {
+        switch action.actionType {
+        case "long_distance_transport", "route_transfer":
+            return Self.notices([
+                ("起点", action.origin?.confidence),
+                ("终点", action.destination?.confidence),
+                ("交通方式", action.mode?.confidence),
+                ("关键时间", action.keyTimes?.confidence),
+                ("预计耗时", action.estimatedDuration?.confidence),
+                ("换乘说明", action.transferNotes?.confidence),
+            ])
+        case "hike":
+            return Self.notices([
+                ("起点", action.start?.confidence),
+                ("终点", action.end?.confidence),
+                ("距离", action.distance?.confidence),
+                ("爬升", action.ascent?.confidence),
+                ("预计耗时", action.estimatedDuration?.confidence),
+            ])
+        default:
+            return []
+        }
+    }
+
+    private static func notices(_ fields: [(String, InformationConfidence?)]) -> [TripContentNotice] {
+        fields.compactMap { field, confidence in
+            guard let status = confidence?.status,
+                  ["unknown", "missing", "pending_verification", "stale", "unavailable"].contains(status) else {
+                return nil
+            }
+            return TripContentNotice(field: field, status: status)
+        }
+    }
+}
+
+struct TripPointPresentation: Equatable, Identifiable {
+    let point: PersonalTripPoint
+
+    var id: Int { point.sequence }
+    var sequence: Int { point.sequence }
+    var statusNotices: [TripContentNotice] {
+        let fields: [(String, InformationConfidence?)] = [
+            ("距离", point.distance?.confidence),
+            ("位置", point.location?.confidence),
+            ("详情", point.details?.confidence),
+        ]
+        return fields.compactMap { field, confidence in
+            guard let status = confidence?.status,
+                  ["unknown", "missing", "pending_verification", "stale", "unavailable"].contains(status) else {
+                return nil
+            }
+            return TripContentNotice(field: field, status: status)
+        }
+    }
 }
 
 struct TripDayPresentation: Equatable {
@@ -11,36 +102,38 @@ struct TripDayPresentation: Equatable {
 
     var primaryStage: String { day.primaryStage }
     var dayLabel: String { "D\(day.dayNumber)" }
-    var actionSequence: [Int] { day.actions.map(\.sequence) }
-    var pointSequence: [Int]? { day.points?.map(\.sequence) }
-    var actions: [PersonalTripAction] { day.actions }
-    var points: [PersonalTripPoint] { day.points ?? [] }
-
-    var dailyRouteActions: [PersonalTripAction] {
-        day.actions.filter { $0.actionType == "hike" }
+    var actionSequence: [Int] { presentationItems.map(\.sequence) }
+    var pointSequence: [Int]? { pointItems.isEmpty ? nil : pointItems.map(\.sequence) }
+    var actions: [PersonalTripAction] { presentationItems.map(\.action) }
+    var points: [PersonalTripPoint] { pointItems.map(\.point) }
+    // 后端 sequence 原序：行动与点位都按后端 sequence 字段升序展示，客户端不按业务类别重排。
+    var presentationItems: [TripActionPresentation] {
+        day.actions
+            .map(TripActionPresentation.init)
+            .sorted { $0.sequence < $1.sequence }
     }
-
-    var transportActions: [PersonalTripAction] {
-        day.actions.filter { $0.actionType != "hike" }
+    var pointItems: [TripPointPresentation] {
+        (day.points ?? [])
+            .map(TripPointPresentation.init)
+            .sorted { $0.sequence < $1.sequence }
     }
-
-    var groupedPoints: [TripDayPointGroup] {
-        let order: [(category: String, title: String)] = [
-            ("campsite", "营地"),
-            ("overnight_place", "过夜点"),
-            ("water_source", "水源"),
-            ("supply", "补给"),
-            ("other", "其他点位"),
-        ]
-        return order.compactMap { category, title in
-            let items = points.filter { $0.category == category }
-            guard !items.isEmpty else { return nil }
-            return TripDayPointGroup(category: category, title: title, points: items)
-        }
+    var weatherPresentation: TripDayWeatherPresentation {
+        TripDayWeatherPresentation(weather: day.weather)
     }
 
     var hasDayContent: Bool {
-        !day.actions.isEmpty || !points.isEmpty
+        !presentationItems.isEmpty
+            || !pointItems.isEmpty
+            || !weatherLine(day.weather).isEmpty
+            || !weatherPresentation.statusNotices.isEmpty
+    }
+
+    var dailyRouteSummary: TripActionPresentation? {
+        presentationItems.first(where: \.isDailyRouteSummary)
+    }
+
+    var detailActionItems: [TripActionPresentation] {
+        presentationItems
     }
 }
 
@@ -55,43 +148,105 @@ enum TripDayFocusPolicy {
     }
 }
 
-struct TripWeatherPresentation: Equatable {
-    let weather: PersonalTripWeather
+struct TripDayWeatherPresentation: Equatable {
+    let weather: PersonalTripDayWeather
 
-    var overview: String? { nonEmpty(weather.weatherOverview?.value) }
-    var days: [PersonalTripWeatherDay] { weather.days }
-    var importantImpacts: [String] {
-        unique(days.flatMap { day -> [String] in
-            let weather = day.weather
-            return [weather.precipitation, weather.wind]
-                .compactMap { qualified -> String? in
-                    guard needsAttention(qualified.confidence) else { return nil }
-                    return qualified.value?.text
-                }
-        })
+    var statusNotices: [TripContentNotice] {
+        let fields: [(String, InformationConfidence?)] = [
+            ("天气状况", weather.condition.confidence),
+            ("温度", weather.temperatureRange.confidence),
+            ("降水", weather.precipitation.confidence),
+            ("风力", weather.wind.confidence),
+        ]
+        return fields.compactMap { field, confidence in
+            guard let status = confidence?.status,
+                  ["unknown", "missing", "pending_verification", "stale", "unavailable"].contains(status) else {
+                return nil
+            }
+            return TripContentNotice(field: field, status: status)
+        }
     }
-    var sources: [String] {
-        unique(days.compactMap { nonEmpty($0.weather.source?.value) })
-    }
-    var updatedTimes: [String] {
-        unique(days.compactMap { nonEmpty($0.weather.updatedAt?.value) })
+}
+
+struct TripTemperatureRangePresentation: Equatable {
+    let low: Double?
+    let high: Double?
+    let text: String?
+
+    init(qualified: QualifiedTemperatureRange) {
+        low = qualified.value?.low
+        high = qualified.value?.high
+        switch (low, high) {
+        case let (low?, high?):
+            text = "\(Self.temperature(low))–\(Self.temperature(high))°C"
+        case let (low?, nil):
+            text = "最低 \(Self.temperature(low))°C"
+        case let (nil, high?):
+            text = "最高 \(Self.temperature(high))°C"
+        case (nil, nil):
+            text = nil
+        }
     }
 
-    private func needsAttention(_ confidence: InformationConfidence?) -> Bool {
-        guard let status = confidence?.status else { return false }
-        return status != "verified" && status != "available"
+    private static func temperature(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(0...1)))
+    }
+}
+
+struct TripWeatherFieldPresentation: Equatable {
+    let text: String?
+    let status: String?
+
+    init(qualified: QualifiedString) {
+        text = Self.nonEmpty(qualified.value)
+        status = qualified.confidence?.status
     }
 
-    private func nonEmpty(_ value: String?) -> String? {
+    init(temperatureRange qualified: QualifiedTemperatureRange) {
+        text = TripTemperatureRangePresentation(qualified: qualified).text
+        status = qualified.confidence?.status
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
         guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
             return nil
         }
         return value
     }
+}
 
-    private func unique(_ values: [String]) -> [String] {
-        var seen = Set<String>()
-        return values.filter { seen.insert($0).inserted }
+struct TripWeatherDayComponentPresentation: Equatable {
+    let projection: TripWeatherDayProjection
+
+    init(day: PersonalTripWeatherDay) {
+        projection = TripWeatherDayProjection(
+            id: day.tripDayID,
+            dayNumber: day.dayNumber,
+            date: day.date.description,
+            primaryStage: day.primaryStage,
+            hikingDayNumber: day.hikingDayNumber,
+            weather: TripWeatherProjection(
+                condition: Self.value(TripWeatherFieldPresentation(qualified: day.weather.condition)),
+                temperature: Self.value(TripWeatherFieldPresentation(temperatureRange: day.weather.temperatureRange)),
+                precipitation: Self.value(TripWeatherFieldPresentation(qualified: day.weather.precipitation)),
+                wind: Self.value(TripWeatherFieldPresentation(qualified: day.weather.wind))
+            )
+        )
+    }
+
+    private static func value(_ field: TripWeatherFieldPresentation) -> TripWeatherValueProjection {
+        TripWeatherValueProjection(value: field.text, state: informationState(field.status))
+    }
+
+    private static func informationState(_ status: String?) -> TripInformationState? {
+        switch status {
+        case "unknown": .unknown
+        case "missing": .missing
+        case "pending_verification": .pendingVerification
+        case "stale": .stale
+        case "unavailable": .unavailable
+        default: nil
+        }
     }
 }
 
@@ -145,6 +300,7 @@ final class TripDayViewModel: ObservableObject {
 }
 
 struct TripDayView: View {
+    @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: TripDayViewModel
     @State private var days: [PersonalTripDay] = []
     @State private var focusedIndex: Int = 0
@@ -159,20 +315,34 @@ struct TripDayView: View {
 
     var body: some View {
         UtilityPageContainer {
-            Group {
-                if viewModel.isLoading && viewModel.result == nil {
-                    LoadingView()
-                } else if let error = viewModel.errorMessage, viewModel.result == nil {
-                    ErrorView(message: error) { Task { await viewModel.load() } }
-                } else if !days.isEmpty {
-                    dayPages
-                } else {
-                    EmptyStateView(title: "逐日安排暂不可用", icon: "calendar")
+            VStack(spacing: 0) {
+                dayHeader
+
+                Group {
+                    if viewModel.isLoading && viewModel.result == nil {
+                        LoadingView(message: "正在加载自然日安排", variant: .page)
+                    } else if viewModel.errorMessage != nil, viewModel.result == nil {
+                        ErrorView(
+                            message: "完整自然日投影缺失或冲突，不生成空 Pager。",
+                            title: "无法显示自然日安排",
+                            variant: .page,
+                            retry: { Task { await viewModel.load() } }
+                        )
+                    } else if !days.isEmpty {
+                        dayPages
+                    } else {
+                        ErrorView(
+                            message: "完整自然日投影缺失或冲突，不生成空 Pager。",
+                            title: "无法显示自然日安排",
+                            variant: .page,
+                            retry: { Task { await viewModel.load() } }
+                        )
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .navigationTitle(focusedPrimaryStage)
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .task {
             await viewModel.load()
             if let result = viewModel.result {
@@ -189,27 +359,45 @@ struct TripDayView: View {
         days.indices.contains(focusedIndex) ? days[focusedIndex].primaryStage : "逐日详情"
     }
 
-    private var dayPages: some View {
-        GeometryReader { geometry in
-            TabView(selection: $focusedIndex) {
-                ForEach(Array(days.enumerated()), id: \.element.identity) { index, day in
-                    TripDayPage(
-                        presentation: TripDayPresentation(day: day),
-                        canMovePrevious: index > 0,
-                        canMoveNext: index < days.count - 1,
-                        onPrevious: { moveFocus(by: -1) },
-                        onNext: { moveFocus(by: 1) }
-                    )
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .rotationEffect(.degrees(-90))
-                    .tag(index)
-                }
-            }
-            .frame(width: geometry.size.height, height: geometry.size.width)
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .rotationEffect(.degrees(90), anchor: .topLeading)
-            .offset(x: geometry.size.width)
+    private var dayHeader: some View {
+        HStack(spacing: Spacing.sm) {
+            IconButton(
+                systemName: "chevron.left",
+                accessibilityLabel: "返回个人行程",
+                variant: .overlay,
+                action: { dismiss() }
+            )
+
+            Text(focusedPrimaryStage)
+                .font(.ornament(13, weight: .bold))
+                .foregroundStyle(AppColors.interactionPrimary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+
+            AppColors.surfacePrimary.opacity(0)
+                .frame(width: 44, height: 44)
+                .accessibilityHidden(true)
         }
+        .frame(height: 56)
+        .padding(.horizontal, Spacing.pageHorizontal)
+        .background(AppColors.pageBase.opacity(0.94))
+    }
+
+    @ViewBuilder
+    private var dayPages: some View {
+        TabView(selection: $focusedIndex) {
+            ForEach(Array(days.enumerated()), id: \.element.identity) { index, day in
+                TripDayPage(
+                    presentation: TripDayPresentation(day: day),
+                    canMovePrevious: index > 0,
+                    canMoveNext: index < days.count - 1,
+                    onPrevious: { moveFocus(by: -1) },
+                    onNext: { moveFocus(by: 1) }
+                )
+                .tag(index)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
     }
 
     private func moveFocus(by offset: Int) {
@@ -227,53 +415,154 @@ private struct TripDayPage: View {
     @State private var innerScrollOffset: CGFloat = 0
     @State private var innerContentHeight: CGFloat = 0
     @State private var innerViewportHeight: CGFloat = 0
+    @State private var boundaryDirection: Int?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.lg) {
-            PageHeroHeader(title: presentation.dayLabel, subtitle: presentation.day.date.description)
+        VStack(alignment: .leading, spacing: 14) {
+            dayIdentityRow
 
-            if presentation.hasDayContent {
-                WalkPanel {
-                    VStack(alignment: .leading, spacing: Spacing.lg) {
-                        if !presentation.dailyRouteActions.isEmpty {
-                            VStack(alignment: .leading, spacing: Spacing.md) {
-                                Text("每日路程")
-                                    .font(.sectionTitle)
-                                ForEach(presentation.dailyRouteActions) { action in
-                                    dailyRouteRow(action)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
+            WalkPanel(variant: .default) {
+                if presentation.hasDayContent {
+                    VStack(spacing: 0) {
+                        ForEach(presentation.presentationItems) { item in
+                            dailyRouteSummaryRow(for: item)
                         }
 
                         internalScrollArea
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                }
-            } else {
-                WalkPanel {
-                    Text("当天安排暂不可用")
-                        .foregroundStyle(AppColors.textWeak)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    UnavailableStateView(
+                        title: "当天安排暂不可用",
+                        message: "不会使用其他自然日或默认模板补齐。",
+                        icon: "calendar.badge.exclamationmark",
+                        variant: .section
+                    )
                 }
             }
+            .frame(maxWidth: .infinity, minHeight: 420, maxHeight: .infinity, alignment: .top)
         }
         .padding(.horizontal, Spacing.pageHorizontal)
-        .padding(.vertical, Spacing.xl)
+        .padding(.top, 10)
+        .padding(.bottom, Spacing.xl)
+    }
+
+    private var dayIdentityRow: some View {
+        HStack(spacing: 10) {
+            Text(presentation.dayLabel)
+                .font(.sequence)
+                .foregroundStyle(AppColors.interactionPrimary)
+                .padding(.trailing, 10)
+                .overlay(alignment: .trailing) {
+                    Rectangle()
+                        .fill(AppColors.surfaceDivider)
+                        .frame(width: 1)
+                }
+            Text(presentation.day.date.description)
+                .font(.dayDate)
+                .foregroundStyle(AppColors.textPrimary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func dailyRouteSummaryRow(for item: TripActionPresentation) -> some View {
+        if item.isDailyRouteSummary {
+            dailyRouteSummary(item)
+            Divider().overlay(AppColors.surfaceDivider)
+                .padding(.vertical, Spacing.md)
+        }
+    }
+
+    private func dailyRouteSummary(_ item: TripActionPresentation) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            Text("每日路程")
+                .font(.tag)
+                .foregroundStyle(AppColors.textWeak)
+
+            Text(item.action.routeSectionSnapshot?.name ?? "当天徒步路线")
+                .font(.action)
+                .foregroundStyle(AppColors.textPrimary)
+
+            if let start = item.action.start?.value?.name,
+               let end = item.action.end?.value?.name {
+                Text("\(start) → \(end)")
+                    .font(.appCaption)
+                    .foregroundStyle(AppColors.textSecondary)
+            }
+
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: Spacing.sm), count: 3),
+                spacing: Spacing.sm
+            ) {
+                routeMetric(
+                    value: item.action.distance?.value.map { formatDistance($0.meters) } ?? "--",
+                    label: "距离"
+                )
+                routeMetric(
+                    value: item.action.ascent?.value.map { "\(Int($0.meters.rounded())) m" } ?? "--",
+                    label: "爬升"
+                )
+                routeMetric(
+                    value: item.action.estimatedDuration?.value.map { formatDuration($0.seconds) } ?? "--",
+                    label: "预计用时"
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func routeMetric(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text(value)
+                .font(.metricGridValue)
+                .foregroundStyle(AppColors.textPrimary)
+            Text(label)
+                .font(.metricGridLabel)
+                .foregroundStyle(AppColors.textWeak)
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppColors.surfaceSubtle, in: RoundedRectangle(cornerRadius: Radius.md))
     }
 
     private var internalScrollArea: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.lg) {
-                ForEach(presentation.transportActions) { action in
-                    actionRow(action)
+            VStack(alignment: .leading, spacing: Spacing.xl) {
+                if !presentation.presentationItems.isEmpty {
+                    VStack(alignment: .leading, spacing: Spacing.md) {
+                        Text("当天行动")
+                            .font(.action)
+                            .foregroundStyle(AppColors.textPrimary)
+                        ForEach(presentation.presentationItems) { item in
+                            actionRow(item)
+                        }
+                    }
+                    .padding(.vertical, Spacing.md)
                 }
-                ForEach(presentation.groupedPoints, id: \.category) { group in
-                    pointGroupSection(group)
+
+                if !presentation.pointItems.isEmpty {
+                    VStack(alignment: .leading, spacing: Spacing.md) {
+                        Text("沿途点位")
+                            .font(.action)
+                            .foregroundStyle(AppColors.textPrimary)
+                        ForEach(presentation.pointItems) { item in
+                            pointRow(item)
+                        }
+                    }
                 }
-                if hasWeatherContent {
-                    contentRow(title: "当日天气", detail: weatherLine(presentation.day.weather))
-                }
+
+                weatherSummary
+
+                Text(boundaryText)
+                    .font(.ornament(10, weight: .regular))
+                    .foregroundStyle(AppColors.textWeak)
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, Spacing.sm)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
@@ -302,18 +591,24 @@ private struct TripDayPage: View {
             innerContentHeight = metrics.contentHeight
         }
         .onPreferenceChange(TripDayInnerViewportHeightKey.self) { innerViewportHeight = $0 }
-        .simultaneousGesture(DragGesture(minimumDistance: 10).onEnded { value in
-            scrollBoundaryHandoff(predictedTranslation: value.predictedEndTranslation.height)
-        })
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 10)
+                .onChanged { value in
+                    scrollBoundaryHandoff(translation: value.translation.height)
+                }
+                .onEnded { _ in boundaryDirection = nil }
+        )
     }
 
-    private func scrollBoundaryHandoff(predictedTranslation: CGFloat) {
+    private func scrollBoundaryHandoff(translation: CGFloat) {
         let maxOffset = max(0, innerContentHeight - innerViewportHeight)
         let atTop = innerScrollOffset >= -24
         let atBottom = -innerScrollOffset >= maxOffset - 24
-        if predictedTranslation < -60 && atBottom && canMoveNext {
+        if translation < -60, atBottom, canMoveNext, boundaryDirection != 1 {
+            boundaryDirection = 1
             onNext()
-        } else if predictedTranslation > 60 && atTop && canMovePrevious {
+        } else if translation > 60, atTop, canMovePrevious, boundaryDirection != -1 {
+            boundaryDirection = -1
             onPrevious()
         }
     }
@@ -322,99 +617,138 @@ private struct TripDayPage: View {
         !weatherLine(presentation.day.weather).isEmpty
     }
 
-    private func pointGroupSection(_ group: TripDayPointGroup) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text(group.title).font(.sectionTitle)
-            ForEach(group.points) { point in
-                pointRow(point)
-            }
-        }
-    }
-
-    private func dailyRouteRow(_ action: PersonalTripAction) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
-            if let sectionName = action.routeSectionSnapshot?.name, !sectionName.isEmpty {
-                Text(sectionName).font(.headline)
-            }
-            ForEach(dailyRouteDetails(action), id: \.self) { detail in
+    private func actionRow(_ item: TripActionPresentation) -> some View {
+        let action = item.action
+        return VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text(actionTitle(action))
+                .font(.listTitle)
+                .foregroundStyle(AppColors.textPrimary)
+            ForEach(item.details, id: \.self) { detail in
                 Text(detail)
-                    .font(.body)
+                    .font(.appCaption)
                     .foregroundStyle(AppColors.textSecondary)
             }
-        }
-    }
-
-    private func dailyRouteDetails(_ action: PersonalTripAction) -> [String] {
-        var result: [String] = []
-        let start = action.start?.value?.name ?? action.origin?.value?.name
-        let end = action.end?.value?.name ?? action.destination?.value?.name
-        if let start, let end { result.append("\(start) → \(end)") }
-        if let meters = action.distance?.value?.meters { result.append("距离 \(formatDistance(meters))") }
-        if let meters = action.ascent?.value?.meters { result.append("爬升 \(Int(meters.rounded())) m") }
-        if let seconds = action.estimatedDuration?.value?.seconds { result.append("预计 \(formatDuration(seconds))") }
-        return result
-    }
-
-    private func actionRow(_ action: PersonalTripAction) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
-            Text(actionTitle(action)).font(.headline)
-            ForEach(actionDetails(action), id: \.self) { detail in
-                Text(detail)
-                    .font(.body)
-                    .foregroundStyle(AppColors.textSecondary)
+            ForEach(item.statusNotices) { notice in
+                NoticeView(message: notice.message, tone: .warning)
             }
         }
     }
 
-    private func pointRow(_ point: PersonalTripPoint) -> some View {
+    private func pointRow(_ item: TripPointPresentation) -> some View {
+        let point = item.point
         var details: [String] = []
         if let distance = point.distance?.value?.meters {
             details.append("距离 \(formatDistance(distance))")
         }
+        if let location = point.location?.value {
+            let latitude = location.latitude.formatted(.number.precision(.fractionLength(4)))
+            let longitude = location.longitude.formatted(.number.precision(.fractionLength(4)))
+            details.append("位置 \(latitude), \(longitude)")
+        }
         if let value = point.details?.value, !value.isEmpty { details.append(value) }
-        let detail = details.isEmpty ? point.type : "\(point.type) · \(details.joined(separator: " · "))"
-        return contentRow(title: point.name ?? point.type, detail: detail)
-    }
-
-    private func contentRow(title: String, detail: String) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
-            Text(title).font(.headline)
-            if !detail.isEmpty {
-                Text(detail)
-                    .font(.body)
-                    .foregroundStyle(AppColors.textSecondary)
+        return ListRow(variant: .grouped, showsDivider: true) {
+            HStack(alignment: .top, spacing: Spacing.md) {
+                Text(point.type)
+                    .font(.micro)
+                    .foregroundStyle(AppColors.textWeak)
+                    .frame(width: 54, alignment: .leading)
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Text(point.name ?? point.type)
+                        .font(.listTitle)
+                        .foregroundStyle(AppColors.textPrimary)
+                    if !details.isEmpty {
+                        Text(details.joined(separator: " · "))
+                            .font(.appCaption)
+                            .foregroundStyle(AppColors.textSecondary)
+                    }
+                    ForEach(item.statusNotices) { notice in
+                        Text(notice.message)
+                            .font(.appCaption)
+                            .foregroundStyle(AppColors.warning)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+    }
+
+    private var weatherSummary: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            Text("当天行程天气")
+                .font(.action)
+                .foregroundStyle(AppColors.textPrimary)
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: Spacing.md), count: 2),
+                spacing: Spacing.md
+            ) {
+                dayWeatherField("天气状况", TripWeatherFieldPresentation(qualified: presentation.day.weather.condition))
+                dayWeatherField("温度", TripWeatherFieldPresentation(temperatureRange: presentation.day.weather.temperatureRange))
+                dayWeatherField("降水", TripWeatherFieldPresentation(qualified: presentation.day.weather.precipitation))
+                dayWeatherField("风力", TripWeatherFieldPresentation(qualified: presentation.day.weather.wind))
+            }
+        }
+    }
+
+    private func dayWeatherField(
+        _ label: String,
+        _ field: TripWeatherFieldPresentation
+    ) -> some View {
+        return VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text(label)
+                .font(.appCaption.weight(.semibold))
+                .foregroundStyle(AppColors.textPrimary)
+            Text(field.text ?? tripWeatherConfidenceTitle(field.status ?? "unavailable"))
+                .font(.appCaption)
+                .foregroundStyle(field.text == nil ? AppColors.textWeak : AppColors.textSecondary)
+            if let status = field.status, statusNeedsNotice(status) {
+                if status == "stale" {
+                    NoticeView(
+                        message: "该状态只作用于当前天气字段。",
+                        title: "\(label)可能过期",
+                        tone: .warning
+                    )
+                } else if field.text != nil {
+                    Text(tripWeatherConfidenceTitle(status))
+                        .font(.appCaption)
+                        .foregroundStyle(AppColors.textSecondary)
+                }
+            }
+        }
+        .padding(Spacing.md)
+        .frame(maxWidth: .infinity, minHeight: 76, alignment: .topLeading)
+        .background(AppColors.surfaceSoft, in: RoundedRectangle(cornerRadius: Radius.sm))
+    }
+
+    private var boundaryText: String {
+        if !canMovePrevious && !canMoveNext { return "本次行程只有一天" }
+        if canMoveNext { return "滚动到边界后继续同方向滑动，切换相邻日期" }
+        return "已到行程最后一天"
+    }
+
+    private func actionTime(_ item: TripActionPresentation) -> String {
+        item.action.keyTimes?.value?.first ?? "--"
     }
 
     private func actionTitle(_ action: PersonalTripAction) -> String {
         switch action.actionType {
         case "long_distance_transport": "大交通"
         case "route_transfer": "路线接驳"
-        case "hike": action.routeSectionSnapshot?.name ?? "每日路程"
+        case "hike": action.routeSectionSnapshot?.name ?? "徒步"
         default: action.actionType
         }
     }
 
-    private func actionDetails(_ action: PersonalTripAction) -> [String] {
-        var result: [String] = []
-        let start = action.start?.value?.name ?? action.origin?.value?.name
-        let end = action.end?.value?.name ?? action.destination?.value?.name
-        if let start, let end { result.append("\(start) → \(end)") }
-        if let mode = action.mode?.value { result.append(mode) }
-        if let times = action.keyTimes?.value, !times.isEmpty { result.append(times.joined(separator: " · ")) }
-        if let meters = action.distance?.value?.meters { result.append("距离 \(formatDistance(meters))") }
-        if let meters = action.ascent?.value?.meters { result.append("爬升 \(Int(meters.rounded())) m") }
-        if let seconds = action.estimatedDuration?.value?.seconds { result.append("预计 \(formatDuration(seconds))") }
-        if let notes = action.transferNotes?.value, !notes.isEmpty { result.append(notes.joined(separator: " · ")) }
-        return result
+    private func statusNeedsNotice(_ status: String) -> Bool {
+        status != "known" && status != "verified" && status != "available"
     }
+
 }
 
 @MainActor
 final class TripWeatherViewModel: ObservableObject {
     @Published private(set) var weather: PersonalTripWeather?
     @Published private(set) var isLoading = false
+    @Published private(set) var isUnavailable = false
     @Published var errorMessage: String?
 
     private let tripID: String
@@ -439,24 +773,37 @@ final class TripWeatherViewModel: ObservableObject {
 
     func load() async {
         isLoading = true
+        isUnavailable = false
         errorMessage = nil
         defer { isLoading = false }
         do {
-            async let loadedWeather = loadWeather(tripID)
-            async let currentRevision = loadCurrentRevision(tripID)
-            let (weather, revision) = try await (loadedWeather, currentRevision)
-            guard weather.tripID == tripID, weather.revision == revision else {
+            let weather = try await loadWeather(tripID)
+            let revision = try await loadCurrentRevision(tripID)
+            guard PersonalTripWeatherValidator.isValid(
+                weather,
+                tripID: tripID,
+                revision: revision
+            ) else {
                 throw APIClientError.invalidResponse
             }
             self.weather = weather
+        } catch let error where Self.isProjectionUnavailable(error) {
+            weather = nil
+            isUnavailable = true
         } catch {
             weather = nil
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
+
+    private static func isProjectionUnavailable(_ error: Error) -> Bool {
+        guard case APIClientError.api(let code, _, _, _) = error else { return false }
+        return code == "trip_weather_projection_unavailable"
+    }
 }
 
 struct TripWeatherView: View {
+    @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: TripWeatherViewModel
 
     init(tripID: String, service: any PersonalTripServicing) {
@@ -465,91 +812,80 @@ struct TripWeatherView: View {
 
     var body: some View {
         UtilityPageContainer {
-            Group {
-                if viewModel.isLoading && viewModel.weather == nil {
-                    LoadingView()
-                } else if let error = viewModel.errorMessage, viewModel.weather == nil {
-                    ErrorView(message: error) { Task { await viewModel.load() } }
-                } else if let weather = viewModel.weather {
-                    weatherContent(TripWeatherPresentation(weather: weather))
+            VStack(spacing: 0) {
+                UtilityNavigationHeader(
+                    title: "行程天气",
+                    leading: IconButtonConfiguration(
+                        systemName: "chevron.left",
+                        accessibilityLabel: "返回个人行程",
+                        action: { dismiss() }
+                    )
+                )
+
+                Group {
+                    if viewModel.isLoading && viewModel.weather == nil {
+                        LoadingView(message: "正在加载行程天气", variant: .page)
+                    } else if viewModel.isUnavailable {
+                        ErrorView(
+                            message: "行程天气关联尚未形成完整投影。",
+                            title: "行程天气暂不可用",
+                            variant: .page,
+                            retry: { Task { await viewModel.load() } }
+                        )
+                    } else if viewModel.errorMessage != nil, viewModel.weather == nil {
+                        ErrorView(
+                            message: "逐日天气投影缺失或顺序冲突。",
+                            title: "无法显示行程天气",
+                            variant: .page,
+                            retry: { Task { await viewModel.load() } }
+                        )
+                    } else if viewModel.weather != nil {
+                        EmptyStateView(
+                            title: "行程天气已加载",
+                            message: "天气关联已读取，逐日天气卡片待开放。",
+                            icon: "cloud.sun",
+                            variant: .default
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        ErrorView(
+                            message: "逐日天气投影缺失或顺序冲突。",
+                            title: "无法显示行程天气",
+                            variant: .page,
+                            retry: { Task { await viewModel.load() } }
+                        )
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .navigationTitle("行程天气")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.load() }
     }
 
-    private func weatherContent(_ presentation: TripWeatherPresentation) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.xl) {
-                PageHeroHeader(
-                    title: presentation.weather.routeName,
-                    subtitle: dateRange(presentation.weather.startDate, presentation.weather.endDate)
-                )
+}
 
-                if let overview = presentation.overview {
-                    weatherPanel(title: "天气概况", values: [overview])
-                }
-                if !presentation.importantImpacts.isEmpty {
-                    weatherPanel(title: "重要提醒", values: presentation.importantImpacts)
-                }
-
-                ForEach(presentation.days) { day in
-                    WalkPanel {
-                        VStack(alignment: .leading, spacing: Spacing.sm) {
-                            Text("D\(day.dayNumber) · \(day.date.description)").font(.headline)
-                            Text(day.primaryStage).foregroundStyle(AppColors.textSecondary)
-                            Text(weatherLine(day.weather)).foregroundStyle(AppColors.textSecondary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-
-                if !presentation.sources.isEmpty || !presentation.updatedTimes.isEmpty {
-                    weatherPanel(
-                        title: "来源与时效",
-                        values: presentation.sources.map { "来源：\($0)" }
-                            + presentation.updatedTimes.map { "更新：\($0)" }
-                    )
-                }
-            }
-            .padding(.horizontal, Spacing.pageHorizontal)
-            .padding(.vertical, Spacing.xl)
-        }
-    }
-
-    private func weatherPanel(title: String, values: [String]) -> some View {
-        WalkPanel {
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                Text(title).font(.sectionTitle)
-                ForEach(values, id: \.self) { value in
-                    Text(value).foregroundStyle(AppColors.textSecondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private func dateRange(_ start: LocalDate, _ end: LocalDate) -> String {
-        start == end ? start.description : "\(start) - \(end)"
+private func tripWeatherConfidenceTitle(_ status: String) -> String {
+    switch status {
+    case "unknown": "未知"
+    case "missing": "缺失"
+    case "pending_verification": "待核验"
+    case "stale": "可能过期"
+    case "unavailable": "不可用"
+    default: status
     }
 }
 
 func weatherLine(_ weather: PersonalTripDayWeather) -> String {
-    [
-        weather.condition.value?.text,
-        weather.temperatureRange.value?.text,
-        weather.precipitation.value?.text,
-        weather.wind.value?.text,
+    let fields = [
+        TripWeatherFieldPresentation(qualified: weather.condition),
+        TripWeatherFieldPresentation(temperatureRange: weather.temperatureRange),
+        TripWeatherFieldPresentation(qualified: weather.precipitation),
+        TripWeatherFieldPresentation(qualified: weather.wind),
     ]
-    .compactMap { value in
-        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
-            return nil
-        }
-        return value
-    }
-    .joined(separator: " · ")
+    let values = fields.compactMap(\.text)
+    if !values.isEmpty { return values.joined(separator: " · ") }
+    return fields.contains(where: { $0.status == "unavailable" }) ? "暂不可用" : ""
 }
 
 private struct TripDayInnerMetrics: Equatable {

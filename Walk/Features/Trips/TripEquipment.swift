@@ -340,9 +340,13 @@ final class TripEquipmentViewModel: ObservableObject {
 }
 
 struct TripEquipmentView: View {
+    @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: TripEquipmentViewModel
-    @State private var isAddingItem = false
-    @State private var editingItem: TripEquipmentItem?
+    @State private var editorMode: TripEquipmentEditorMode?
+    @State private var editorName = ""
+    @State private var editorQuantity = 1
+    @State private var editorUnitWeight = ""
+    @State private var editorNote = ""
     @State private var deletingItem: TripEquipmentItem?
     private let onManagePersonalEquipment: () -> Void
     private let onRevisionChange: (String) -> Void
@@ -363,73 +367,34 @@ struct TripEquipmentView: View {
 
     var body: some View {
         UtilityPageContainer {
-            Group {
-                if viewModel.isLoading && viewModel.projection == nil {
-                    LoadingView()
-                } else if let error = viewModel.errorMessage, viewModel.projection == nil {
-                    ErrorView(message: error) {
-                        Task { await viewModel.load() }
-                    }
-                } else if let projection = viewModel.projection {
-                    content(projection)
-                }
-            }
-        }
-        .navigationTitle("本次装备")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if viewModel.isEditable {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button("添加装备", systemImage: "plus") {
-                            isAddingItem = true
-                        }
-                        Button("重新核对拥有状态", systemImage: "arrow.triangle.2.circlepath") {
-                            Task { await viewModel.recheckOwnership() }
-                        }
-                        Button("管理我的装备", systemImage: "backpack") {
-                            viewModel.prepareForPersonalEquipment()
-                            onManagePersonalEquipment()
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .frame(
-                                width: RootNavigation.toolButtonHitSize,
-                                height: RootNavigation.toolButtonHitSize
-                            )
-                    }
-                    .disabled(viewModel.isMutating)
-                    .accessibilityLabel("管理本次装备")
-                }
-            }
-        }
-        .sheet(isPresented: $isAddingItem) {
-            TripEquipmentEditor(title: "添加本次装备") { input in
-                await viewModel.addItem(
-                    name: input.name,
-                    quantity: input.quantity,
-                    unitWeightGrams: input.unitWeightGrams,
-                    note: input.note
-                )
-                return viewModel.errorMessage == nil
-            }
-        }
-        .sheet(item: $editingItem) { item in
-            TripEquipmentEditor(title: "编辑本次装备", item: item) { input in
-                await viewModel.updateItem(
-                    itemID: item.identity,
-                    update: TripEquipmentItemUpdate(
-                        name: input.name,
-                        quantity: input.quantity,
-                        unitWeight: input.unitWeightGrams.map {
-                            .value(EquipmentWeight(grams: $0))
-                        } ?? .clear,
-                        note: input.note.map(TripEquipmentUpdateField.value) ?? .clear
+            VStack(spacing: 0) {
+                UtilityNavigationHeader(
+                    title: "行程装备",
+                    leading: IconButtonConfiguration(
+                        systemName: "chevron.left",
+                        accessibilityLabel: "返回个人行程",
+                        action: { dismiss() }
                     )
                 )
-                return viewModel.errorMessage == nil
+
+                Group {
+                    if viewModel.isLoading && viewModel.projection == nil {
+                        LoadingView(message: "正在加载行程装备", variant: .page)
+                    } else if viewModel.errorMessage != nil, viewModel.projection == nil {
+                        ErrorView(
+                            message: "当前装备快照不可用或汇总不一致。",
+                            title: "无法显示行程装备",
+                            variant: .page,
+                            retry: { Task { await viewModel.load() } }
+                        )
+                    } else if let projection = viewModel.projection {
+                        content(projection)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .toolbar(.hidden, for: .navigationBar)
         .confirmationDialog(
             "删除这件本次装备？",
             isPresented: Binding(
@@ -455,200 +420,301 @@ struct TripEquipmentView: View {
     }
 
     private func content(_ projection: TripEquipmentProjection) -> some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Spacing.lg) {
-                summaryPanel(projection.snapshot.summary)
+        VStack(spacing: 0) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: Spacing.xl) {
+                    contextRow(projection.trip)
+                    TripBusinessComponents.TripEquipmentOverview(
+                        projection: TripEquipmentOverviewProjection(
+                            itemCount: projection.snapshot.summary.itemCount,
+                            knownTotalWeightGrams: projection.snapshot.summary.knownTotalWeight.grams,
+                            missingWeightItemCount: projection.snapshot.summary.missingWeightItemCount,
+                            ownedItemCount: projection.snapshot.summary.ownedItemCount,
+                            unconfirmedOwnedItemCount: projection.snapshot.summary.unconfirmedOwnedItemCount
+                        )
+                    )
 
-                if !projection.editable {
-                    Label("该行程已进入\(projection.trip.status.title)，装备快照仅供查看。", systemImage: "lock")
-                        .font(.caption)
-                        .foregroundStyle(AppColors.textSecondary)
-                        .padding(Spacing.md)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(AppColors.surfacePrimary, in: RoundedRectangle(cornerRadius: Radius.md))
-                }
-
-                if projection.snapshot.items.isEmpty {
-                    Text("暂无本次装备")
-                        .foregroundStyle(AppColors.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(Spacing.lg)
-                        .background(AppColors.surfacePrimary, in: RoundedRectangle(cornerRadius: Radius.md))
-                } else {
-                    ForEach(projection.snapshot.items) { item in
-                        itemRow(item, editable: projection.editable)
+                    if projection.snapshot.summary.missingWeightItemCount > 0 {
+                        NoticeView(
+                            message: "\(projection.snapshot.summary.missingWeightItemCount) 项缺少单件重量。",
+                            title: "部分重量未计入",
+                            tone: .info
+                        )
                     }
-                }
 
-                if let error = viewModel.errorMessage {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(AppColors.statusCancelled)
-                }
-            }
-            .padding(.horizontal, Spacing.pageHorizontal)
-            .padding(.vertical, Spacing.lg)
-        }
-        .refreshable { await viewModel.load() }
-    }
-
-    private func summaryPanel(_ summary: PersonalTripEquipmentSummary) -> some View {
-        WalkPanel {
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                Text("装备总览")
-                    .font(.headline)
-                Text("\(summary.itemCount) 类 · 已知总重量 \(tripEquipmentWeightText(summary.knownTotalWeight.grams))")
-                    .foregroundStyle(AppColors.textSecondary)
-                Text("已有 \(summary.ownedItemCount) 类 · 未确认已有 \(summary.unconfirmedOwnedItemCount) 类 · \(summary.missingWeightItemCount) 类重量未知")
-                    .font(.caption)
-                    .foregroundStyle(AppColors.textWeak)
-            }
-        }
-    }
-
-    private func itemRow(_ item: TripEquipmentItem, editable: Bool) -> some View {
-        WalkPanel {
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(item.name)
-                        .font(.headline)
-                    Spacer()
-                    Text("× \(item.quantity)")
-                        .foregroundStyle(AppColors.textSecondary)
-                }
-                Text(item.unitWeight.map { unitWeight in
-                    let totalWeight = item.totalWeight ?? unitWeight
-                    return "单件 \(tripEquipmentWeightText(unitWeight.grams)) · 合计 \(tripEquipmentWeightText(totalWeight.grams))"
-                } ?? "单件重量未知")
-                    .font(.caption)
-                    .foregroundStyle(AppColors.textSecondary)
-                HStack {
-                    Text(item.source.title)
-                    Text(item.ownershipStatus.title)
-                }
-                .font(.caption)
-                .foregroundStyle(AppColors.textWeak)
-                if let note = item.note {
-                    Text(note)
-                        .font(.caption)
-                        .foregroundStyle(AppColors.textSecondary)
-                }
-                if editable {
-                    HStack {
-                        Button("编辑") { editingItem = item }
-                            .buttonStyle(.bordered)
-                        Button("删除", role: .destructive) { deletingItem = item }
-                            .buttonStyle(.bordered)
+                    if !projection.editable {
+                        NoticeView(
+                            message: "装备快照继续保留，但不显示管理操作。",
+                            title: "当前行程为只读",
+                            icon: "lock",
+                            tone: .readonly
+                        )
                     }
-                    .disabled(viewModel.isMutating)
+
+                    if projection.editable, editorMode != nil {
+                        AccountEquipmentBusinessComponents.InlineEquipmentEditor(
+                            projection: InlineEquipmentEditorProjection(
+                                title: editorMode?.title ?? "本次装备",
+                                name: editorName,
+                                quantity: editorQuantity,
+                                unitWeight: editorUnitWeight,
+                                note: editorNote,
+                                nameError: editorNameError,
+                                unitWeightError: editorUnitWeightError,
+                                noteError: nil,
+                                saveError: viewModel.errorMessage,
+                                isLoading: viewModel.isMutating
+                            ),
+                            onChangeField: updateEditorField,
+                            onChangeQuantity: { editorQuantity = $0 },
+                            onCancel: cancelEditing
+                        )
+                    }
+
+                    ContentSection(title: "装备清单") {
+                        if projection.snapshot.items.isEmpty {
+                            EmptyStateView(
+                                title: "本次装备清单为空",
+                                message: "当前快照确认没有可见条目。",
+                                icon: "backpack",
+                                variant: .section
+                            )
+                        } else {
+                            VStack(alignment: .leading, spacing: 0) {
+                                ForEach(Array(projection.snapshot.items.enumerated()), id: \.element.id) { index, item in
+                                    TripBusinessComponents.TripEquipmentItemRow(
+                                        projection: equipmentItemProjection(item, editable: projection.editable && editorMode == nil),
+                                        onRequestEdit: { _ in beginEditing(item) },
+                                        onRequestDelete: { _ in deletingItem = item }
+                                    )
+                                    if index < projection.snapshot.items.count - 1 {
+                                        Rectangle()
+                                            .fill(AppColors.surfaceDivider)
+                                            .frame(height: 1)
+                                            .accessibilityHidden(true)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if projection.editable, editorMode == nil {
+                        secondaryActions
+                    }
+
+                    if let error = viewModel.errorMessage, viewModel.projection != nil, editorMode == nil {
+                        ErrorView(
+                            message: error,
+                            title: "操作未完成",
+                            variant: .section,
+                            retry: nil
+                        )
+                    }
+
+                    independentCopyNote
+                }
+                .frame(maxWidth: 600, alignment: .topLeading)
+                .frame(maxWidth: .infinity, alignment: .top)
+                .padding(.horizontal, Spacing.pageHorizontal)
+                .padding(.top, Spacing.md)
+                .padding(.bottom, projection.editable ? 108 : Spacing.xl)
+            }
+            .refreshable { await viewModel.load() }
+
+            if projection.editable {
+                FixedActionArea {
+                    PrimaryAction(
+                        title: editorMode == nil ? "新增本次装备" : "保存本次装备",
+                        isLoading: viewModel.isMutating && editorMode != nil,
+                        isDisabled: viewModel.isMutating || (editorMode != nil && !editorInputIsValid),
+                        fillsWidth: true,
+                        action: {
+                            if editorMode == nil {
+                                beginAdding()
+                            } else {
+                                saveEditor()
+                            }
+                        }
+                    )
                 }
             }
         }
     }
-}
 
-private extension TripEquipmentItemSource {
-    var title: String {
-        switch self {
-        case .systemSuggestion: "系统建议"
-        case .userAdjusted: "已调整建议"
-        case .userAdded: "用户添加"
+    private func contextRow(_ trip: TripEquipmentTrip) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text(trip.routeName)
+                .font(.pageTitle)
+                .foregroundStyle(AppColors.textPrimary)
+            Text(dateRange(trip))
+                .font(.appCaption)
+                .foregroundStyle(AppColors.textSecondary)
         }
-    }
-}
-
-private extension TripEquipmentOwnershipStatus {
-    var title: String {
-        switch self {
-        case .owned: "已有"
-        case .unconfirmedOwned: "未确认已有"
-        }
-    }
-}
-
-private struct TripEquipmentEditorInput {
-    let name: String
-    let quantity: Int
-    let unitWeightGrams: Int?
-    let note: String?
-}
-
-private struct TripEquipmentEditor: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var name: String
-    @State private var quantity: Int
-    @State private var unitWeightText: String
-    @State private var note: String
-    @State private var isSaving = false
-
-    let title: String
-    let onSave: (TripEquipmentEditorInput) async -> Bool
-
-    init(
-        title: String,
-        item: TripEquipmentItem? = nil,
-        onSave: @escaping (TripEquipmentEditorInput) async -> Bool
-    ) {
-        self.title = title
-        self.onSave = onSave
-        _name = State(initialValue: item?.name ?? "")
-        _quantity = State(initialValue: item?.quantity ?? 1)
-        _unitWeightText = State(initialValue: item?.unitWeight.map { String($0.grams) } ?? "")
-        _note = State(initialValue: item?.note ?? "")
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    var body: some View {
-        NavigationStack {
-            Form {
-                TextField("装备名称", text: $name)
-                Stepper("数量：\(quantity)", value: $quantity, in: 1...999)
-                TextField("单件克重（可选）", text: $unitWeightText)
-                    .keyboardType(.numberPad)
-                TextField("备注（可选）", text: $note, axis: .vertical)
+    private var secondaryActions: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: Spacing.sm) {
+                SecondaryAction(
+                    title: "重新核对已有状态",
+                    systemImage: "arrow.triangle.2.circlepath",
+                    isLoading: viewModel.isMutating,
+                    fillsWidth: true,
+                    action: { Task { await viewModel.recheckOwnership() } }
+                )
+                SecondaryAction(
+                    title: "管理我的装备",
+                    isDisabled: viewModel.isMutating,
+                    fillsWidth: true,
+                    action: managePersonalEquipment
+                )
             }
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { save() }
-                        .disabled(!isValid || isSaving)
-                }
+            VStack(spacing: Spacing.sm) {
+                SecondaryAction(
+                    title: "重新核对已有状态",
+                    systemImage: "arrow.triangle.2.circlepath",
+                    isLoading: viewModel.isMutating,
+                    fillsWidth: true,
+                    action: { Task { await viewModel.recheckOwnership() } }
+                )
+                SecondaryAction(
+                    title: "管理我的装备",
+                    isDisabled: viewModel.isMutating,
+                    fillsWidth: true,
+                    action: managePersonalEquipment
+                )
             }
         }
     }
 
-    private var isValid: Bool {
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedWeight = unitWeightText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmedName.isEmpty
-            && quantity > 0
-            && (trimmedWeight.isEmpty || (Int(trimmedWeight) ?? 0) > 0)
+    private func managePersonalEquipment() {
+        viewModel.prepareForPersonalEquipment()
+        onManagePersonalEquipment()
     }
 
-    private func save() {
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedWeight = unitWeightText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        let input = TripEquipmentEditorInput(
-            name: trimmedName,
-            quantity: quantity,
-            unitWeightGrams: trimmedWeight.isEmpty ? nil : Int(trimmedWeight),
-            note: trimmedNote.isEmpty ? nil : trimmedNote
+    private var independentCopyNote: some View {
+        NoticeView(
+            message: "本页修改只作用于当前行程装备，不自动修改长期个人装备。",
+            title: "独立行程快照",
+            icon: "backpack",
+            tone: .info
         )
-        isSaving = true
-        Task {
-            let succeeded = await onSave(input)
-            isSaving = false
-            if succeeded { dismiss() }
+    }
+
+    private var editorNameError: String? {
+        editorName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "请输入装备名称"
+            : nil
+    }
+
+    private var editorUnitWeightError: String? {
+        let weight = editorUnitWeight.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !weight.isEmpty else { return nil }
+        return (Int(weight) ?? 0) > 0 ? nil : "请输入大于零的克重"
+    }
+
+    private var editorInputIsValid: Bool {
+        editorNameError == nil && editorQuantity > 0 && editorUnitWeightError == nil
+    }
+
+    private func updateEditorField(_ field: InlineEquipmentEditorField, _ value: String) {
+        switch field {
+        case .name:
+            editorName = value
+        case .unitWeight:
+            editorUnitWeight = value
+        case .note:
+            editorNote = value
         }
+    }
+
+    private func beginAdding() {
+        editorMode = .adding
+        editorName = ""
+        editorQuantity = 1
+        editorUnitWeight = ""
+        editorNote = ""
+        viewModel.errorMessage = nil
+    }
+
+    private func beginEditing(_ item: TripEquipmentItem) {
+        editorMode = .editing(item)
+        editorName = item.name
+        editorQuantity = item.quantity
+        editorUnitWeight = item.unitWeight.map { String($0.grams) } ?? ""
+        editorNote = item.note ?? ""
+        viewModel.errorMessage = nil
+    }
+
+    private func cancelEditing() {
+        editorMode = nil
+        viewModel.errorMessage = nil
+    }
+
+    private func saveEditor() {
+        guard let mode = editorMode, editorInputIsValid else { return }
+        let name = editorName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let weightText = editorUnitWeight.trimmingCharacters(in: .whitespacesAndNewlines)
+        let noteText = editorNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        let weight = weightText.isEmpty ? nil : Int(weightText)
+        let note = noteText.isEmpty ? nil : noteText
+
+        Task {
+            switch mode {
+            case .adding:
+                await viewModel.addItem(
+                    name: name,
+                    quantity: editorQuantity,
+                    unitWeightGrams: weight,
+                    note: note
+                )
+            case .editing(let item):
+                await viewModel.updateItem(
+                    itemID: item.identity,
+                    update: TripEquipmentItemUpdate(
+                        name: name,
+                        quantity: editorQuantity,
+                        unitWeight: weight.map { .value(EquipmentWeight(grams: $0)) } ?? .clear,
+                        note: note.map(TripEquipmentUpdateField.value) ?? .clear
+                    )
+                )
+            }
+            if viewModel.errorMessage == nil { editorMode = nil }
+        }
+    }
+
+    private func dateRange(_ trip: TripEquipmentTrip) -> String {
+        trip.startDate == trip.endDate
+            ? trip.startDate.description
+            : "\(trip.startDate.description)–\(trip.endDate.description)"
     }
 }
 
-private func tripEquipmentWeightText(_ grams: Int) -> String {
-    grams >= 1_000
-        ? "\((Double(grams) / 1_000).formatted(.number.precision(.fractionLength(0...2)))) kg"
-        : "\(grams) g"
+private func equipmentItemProjection(
+    _ item: TripEquipmentItem,
+    editable: Bool
+) -> TripEquipmentItemRowProjection {
+    TripEquipmentItemRowProjection(
+        identity: item.identity,
+        name: item.name,
+        quantity: item.quantity,
+        unitWeightGrams: item.unitWeight?.grams,
+        note: item.note,
+        source: TripEquipmentItemSourceProjection(rawValue: item.source.rawValue) ?? .systemSuggestion,
+        ownershipStatus: TripEquipmentOwnershipStatusProjection(rawValue: item.ownershipStatus.rawValue) ?? .owned,
+        editable: editable
+    )
+}
+
+private enum TripEquipmentEditorMode {
+    case adding
+    case editing(TripEquipmentItem)
+
+    var title: String {
+        switch self {
+        case .adding: "新增本次装备"
+        case .editing: "修改本次装备"
+        }
+    }
 }

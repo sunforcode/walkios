@@ -62,15 +62,21 @@ struct RouteMapOverlayPlan {
     let usesWholeRoute: Bool
 
     init(coordinates: [CLLocationCoordinate2D], segments: [RouteMapSegment]) {
-        if segments.isEmpty {
+        let mappedSegments = segments.compactMap { segment -> Overlay? in
+            guard segment.coordinates.count >= 2 else { return nil }
+            return .init(
+                segmentID: segment.id,
+                colorHex: segment.colorHex,
+                coordinates: segment.coordinates
+            )
+        }
+        if mappedSegments.isEmpty {
             overlays = coordinates.count >= 2
                 ? [.init(segmentID: nil, colorHex: nil, coordinates: coordinates)]
                 : []
             usesWholeRoute = true
         } else {
-            overlays = segments.map {
-                .init(segmentID: $0.id, colorHex: $0.colorHex, coordinates: $0.coordinates)
-            }
+            overlays = mappedSegments
             usesWholeRoute = false
         }
     }
@@ -81,10 +87,10 @@ struct RouteMapOverlayStyle: Equatable {
     let alpha: CGFloat
 
     static func resolve(segmentID: String?, selectedSegmentID: String?) -> Self {
-        guard let selectedSegmentID else { return .init(lineWidth: 4, alpha: 0.8) }
+        guard let selectedSegmentID else { return .init(lineWidth: 5, alpha: 1) }
         return segmentID == selectedSegmentID
-            ? .init(lineWidth: 7, alpha: 1)
-            : .init(lineWidth: 4, alpha: 0.3)
+            ? .init(lineWidth: 5, alpha: 1)
+            : .init(lineWidth: 5, alpha: 0.2)
     }
 }
 
@@ -102,7 +108,8 @@ struct RouteMapCameraFit {
 
 enum RouteMapCamera {
     static let standardEdgeInsets = UIEdgeInsets(top: 24, left: 24, bottom: 24, right: 24)
-    static let detailDrawerHeightRatio = 0.58
+    static let detailDrawerHeightRatio: CGFloat = 0.58
+    static let detailMapRevealHeight: CGFloat = 330
 
     static func fit(coordinates: [CLLocationCoordinate2D], edgeInsets: UIEdgeInsets) -> RouteMapCameraFit? {
         guard coordinates.count >= 2 else { return nil }
@@ -112,14 +119,24 @@ enum RouteMapCamera {
 
     static func detailEdgeInsets(
         viewportHeight: CGFloat,
-        safeAreaTop: CGFloat,
-        safeAreaBottom: CGFloat,
         drawerHeightRatio: CGFloat = detailDrawerHeightRatio
     ) -> UIEdgeInsets {
         .init(
-            top: safeAreaTop + standardEdgeInsets.top,
+            top: standardEdgeInsets.top,
             left: standardEdgeInsets.left,
-            bottom: viewportHeight * drawerHeightRatio + safeAreaBottom + standardEdgeInsets.bottom,
+            bottom: viewportHeight * drawerHeightRatio + standardEdgeInsets.bottom,
+            right: standardEdgeInsets.right
+        )
+    }
+
+    static func detailEdgeInsets(
+        viewportHeight: CGFloat,
+        mapRevealHeight: CGFloat
+    ) -> UIEdgeInsets {
+        .init(
+            top: standardEdgeInsets.top,
+            left: standardEdgeInsets.left,
+            bottom: max(standardEdgeInsets.bottom, viewportHeight - mapRevealHeight + standardEdgeInsets.bottom),
             right: standardEdgeInsets.right
         )
     }
@@ -141,6 +158,8 @@ struct RouteMapView: UIViewRepresentable {
     let trackPointAnnotations: [RouteTrackPointMetadata]
     let waypointAnnotations: [RouteWaypointAnnotation]
     let highlightedAnnotationIDs: Set<String>
+    let startCoordinate: CLLocationCoordinate2D?
+    let endCoordinate: CLLocationCoordinate2D?
     let showsUserLocation: Bool
     let mapType: MKMapType
     let zoomEnabled: Bool
@@ -158,6 +177,8 @@ struct RouteMapView: UIViewRepresentable {
         trackPointAnnotations: [RouteTrackPointMetadata] = [],
         waypointAnnotations: [RouteWaypointAnnotation] = [],
         highlightedAnnotationIDs: Set<String> = [],
+        startCoordinate: CLLocationCoordinate2D? = nil,
+        endCoordinate: CLLocationCoordinate2D? = nil,
         showsUserLocation: Bool = true,
         mapType: MKMapType = .standard,
         zoomEnabled: Bool = true,
@@ -174,6 +195,8 @@ struct RouteMapView: UIViewRepresentable {
         self.trackPointAnnotations = trackPointAnnotations
         self.waypointAnnotations = waypointAnnotations
         self.highlightedAnnotationIDs = highlightedAnnotationIDs
+        self.startCoordinate = startCoordinate
+        self.endCoordinate = endCoordinate
         self.showsUserLocation = showsUserLocation
         self.mapType = mapType
         self.zoomEnabled = zoomEnabled
@@ -206,16 +229,22 @@ struct RouteMapView: UIViewRepresentable {
             trackPoints: trackPointAnnotations,
             waypoints: waypointAnnotations
         )
-        let overlayFingerprint = segments.map { segment in
-            let points = segment.coordinates.map { "\($0.latitude),\($0.longitude)" }.joined(separator: ";")
-            return "\(segment.id)-\(segment.colorHex ?? "")-\(points)"
+        let terminalFingerprint = [startCoordinate, endCoordinate].compactMap {
+            $0.map { "\($0.latitude),\($0.longitude)" }
         }
+        let overlayFingerprint = (segments.isEmpty
+            ? coordinates.map { "\($0.latitude),\($0.longitude)" }
+            : segments.map { segment in
+                let points = segment.coordinates.map { "\($0.latitude),\($0.longitude)" }.joined(separator: ";")
+                return "\(segment.id)-\(segment.colorHex ?? "")-\(points)"
+            }) + terminalFingerprint
         let annotationsChanged = annotationFingerprint != context.coordinator.annotationFingerprint
         let overlaysChanged = overlayFingerprint != context.coordinator.overlayFingerprint
         let selectionChanged = selectedSegmentID != context.coordinator.selectedSegmentID
         let insetsFingerprint = RouteMapInsetsFingerprint(edgeInsets)
         let insetsChanged = insetsFingerprint != context.coordinator.insetsFingerprint
-        let highlightChanged = highlightedAnnotationIDs != context.coordinator.highlightedAnnotationIDs
+        let previousHighlightedAnnotationIDs = context.coordinator.highlightedAnnotationIDs
+        let highlightChanged = highlightedAnnotationIDs != previousHighlightedAnnotationIDs
         guard decision.shouldUpdateRoute || annotationsChanged || overlaysChanged || selectionChanged || insetsChanged || highlightChanged else { return }
 
         let previousSelection = context.coordinator.selectedSegmentID
@@ -229,19 +258,21 @@ struct RouteMapView: UIViewRepresentable {
 
         let overlayPlan = RouteMapOverlayPlan(coordinates: coordinates, segments: segments)
         overlayPlan.overlays.forEach {
+            mapView.addOverlay(RouteSegmentOutlinePolyline(
+                coordinates: $0.coordinates,
+                segmentID: $0.segmentID
+            ))
             mapView.addOverlay(RouteSegmentPolyline(
                 coordinates: $0.coordinates,
                 segmentID: $0.segmentID,
                 colorHex: $0.colorHex
             ))
         }
-        if coordinates.count >= 2 {
-            if let start = coordinates.first {
-                mapView.addAnnotation(RoutePointAnnotation(coordinate: start, title: "起点", subtitle: nil, type: .start))
-            }
-            if let end = coordinates.last {
-                mapView.addAnnotation(RoutePointAnnotation(coordinate: end, title: "终点", subtitle: nil, type: .end))
-            }
+        if let start = startCoordinate ?? coordinates.first {
+            mapView.addAnnotation(RoutePointAnnotation(coordinate: start, title: "起点", subtitle: nil, type: .start))
+        }
+        if let end = endCoordinate ?? coordinates.last {
+            mapView.addAnnotation(RoutePointAnnotation(coordinate: end, title: "终点", subtitle: nil, type: .end))
         }
 
         poiAnnotations.forEach {
@@ -249,7 +280,7 @@ struct RouteMapView: UIViewRepresentable {
                 coordinate: $0.coordinate,
                 title: $0.title,
                 subtitle: "类别：\($0.category) · 子类别：\($0.subCategory)\n描述：\($0.detail) · 海拔：\($0.elevation)",
-                type: .poi,
+                type: pointType(for: $0.category),
                 selection: .poi($0)
             ))
         }
@@ -279,16 +310,22 @@ struct RouteMapView: UIViewRepresentable {
         } else if (decision.shouldFitCamera || insetsChanged) && !context.coordinator.userHasInteracted,
                   let fit = RouteMapCamera.fit(coordinates: coordinates, edgeInsets: edgeInsets) {
             mapView.setVisibleMapRect(fit.mapRect, edgePadding: fit.edgeInsets, animated: insetsChanged)
-        } else if RouteMapCamera.shouldFocusMarker(
-            hasCoordinates: !coordinates.isEmpty,
-            userHasInteracted: context.coordinator.userHasInteracted
-        ), let first = (poiAnnotations.first?.coordinate ?? trackPointAnnotations.first?.coordinate ?? waypointAnnotations.first?.coordinate) {
-            mapView.setRegion(.init(center: first, latitudinalMeters: 5_000, longitudinalMeters: 5_000), animated: false)
+        } else if coordinates.isEmpty,
+                  !context.coordinator.userHasInteracted {
+            let fallbackCoordinates = [startCoordinate, endCoordinate].compactMap { $0 }
+                + poiAnnotations.map(\.coordinate)
+                + trackPointAnnotations.map(\.coordinate)
+                + waypointAnnotations.map(\.coordinate)
+            if let fit = RouteMapCamera.fit(coordinates: fallbackCoordinates, edgeInsets: edgeInsets) {
+                mapView.setVisibleMapRect(fit.mapRect, edgePadding: fit.edgeInsets, animated: false)
+            } else if let first = fallbackCoordinates.first {
+                mapView.setRegion(.init(center: first, latitudinalMeters: 5_000, longitudinalMeters: 5_000), animated: false)
+            }
         }
 
-        if highlightChanged {
-            context.coordinator.highlightedAnnotationIDs = highlightedAnnotationIDs
-            context.coordinator.refreshHighlightStates(mapView: mapView)
+        context.coordinator.highlightedAnnotationIDs = highlightedAnnotationIDs
+        context.coordinator.refreshHighlightStates(mapView: mapView)
+        if highlightChanged && !highlightedAnnotationIDs.isEmpty {
             context.coordinator.focusHighlightedAnnotations(
                 mapView: mapView,
                 edgeInsets: edgeInsets,
@@ -296,6 +333,11 @@ struct RouteMapView: UIViewRepresentable {
                 trackPoints: trackPointAnnotations,
                 waypoints: waypointAnnotations
             )
+        } else if highlightChanged,
+                  !previousHighlightedAnnotationIDs.isEmpty,
+                  !context.coordinator.userHasInteracted,
+                  let fit = RouteMapCamera.fit(coordinates: coordinates, edgeInsets: edgeInsets) {
+            mapView.setVisibleMapRect(fit.mapRect, edgePadding: fit.edgeInsets, animated: true)
         }
     }
 
@@ -305,11 +347,24 @@ struct RouteMapView: UIViewRepresentable {
 
     private func configure(_ mapView: MKMapView) {
         mapView.mapType = mapType
+        mapView.overrideUserInterfaceStyle = .dark
+        mapView.pointOfInterestFilter = .excludingAll
+        mapView.showsCompass = false
+        mapView.showsScale = false
         mapView.showsUserLocation = showsUserLocation
         mapView.isZoomEnabled = zoomEnabled
         mapView.isRotateEnabled = rotateEnabled
         mapView.isScrollEnabled = true
         mapView.isPitchEnabled = cameraPitch > 0
+    }
+
+    private func pointType(for category: String) -> RoutePointType {
+        if category.contains("营地") { return .camp }
+        if category.contains("过夜") || category.contains("住宿") { return .overnight }
+        if category.contains("水") { return .water }
+        if category.contains("补给") { return .supply }
+        if category.contains("兴趣") || category.contains("景") { return .interest }
+        return .poi
     }
 
     final class Coordinator: NSObject, MKMapViewDelegate {
@@ -341,6 +396,17 @@ struct RouteMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let outline = overlay as? RouteSegmentOutlinePolyline {
+                let renderer = MKPolylineRenderer(polyline: outline)
+                let style = RouteMapOverlayStyle.resolve(
+                    segmentID: outline.segmentID,
+                    selectedSegmentID: selectedSegmentID
+                )
+                renderer.strokeColor = UIColor(AppColors.pageBase)
+                renderer.lineWidth = 11
+                renderer.alpha = style.alpha
+                return renderer
+            }
             guard let polyline = overlay as? RouteSegmentPolyline else { return MKOverlayRenderer(overlay: overlay) }
             let renderer = MKPolylineRenderer(polyline: polyline)
             let style = RouteMapOverlayStyle.resolve(segmentID: polyline.segmentID, selectedSegmentID: selectedSegmentID)
@@ -357,10 +423,10 @@ struct RouteMapView: UIViewRepresentable {
                 ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
             view.annotation = annotation
             view.canShowCallout = false
-            view.glyphText = point.type.glyph
-            view.markerTintColor = markerColor(
-                for: point.type,
-                isHighlighted: point.selection.map { highlightedAnnotationIDs.contains($0.id) } == true
+            applyMarkerStyle(
+                to: view,
+                point: point,
+                isHighlighted: point.selection.map { highlightedAnnotationIDs.contains($0.annotationID) } == true
             )
             return view
         }
@@ -370,11 +436,28 @@ struct RouteMapView: UIViewRepresentable {
                 guard let point = annotation as? RoutePointAnnotation,
                       let selection = point.selection,
                       let view = mapView.view(for: annotation) as? MKMarkerAnnotationView else { continue }
-                view.markerTintColor = markerColor(
-                    for: point.type,
-                    isHighlighted: highlightedAnnotationIDs.contains(selection.id)
+                applyMarkerStyle(
+                    to: view,
+                    point: point,
+                    isHighlighted: highlightedAnnotationIDs.contains(selection.annotationID)
                 )
             }
+        }
+
+        private func applyMarkerStyle(
+            to view: MKMarkerAnnotationView,
+            point: RoutePointAnnotation,
+            isHighlighted: Bool
+        ) {
+            view.glyphText = point.type.glyph
+            view.glyphTintColor = isHighlighted ? UIColor(AppColors.pageBase) : .white
+            view.markerTintColor = markerColor(for: point.type, isHighlighted: isHighlighted)
+            view.displayPriority = isHighlighted ? .required : .defaultHigh
+            view.transform = isHighlighted ? CGAffineTransform(scaleX: 1.34, y: 1.34) : .identity
+            view.layer.shadowColor = UIColor.black.cgColor
+            view.layer.shadowOpacity = isHighlighted ? 0.48 : 0.32
+            view.layer.shadowRadius = isHighlighted ? 11 : 7
+            view.layer.shadowOffset = CGSize(width: 0, height: isHighlighted ? 8 : 5)
         }
 
         func focusHighlightedAnnotations(
@@ -408,7 +491,12 @@ struct RouteMapView: UIViewRepresentable {
             switch type {
             case .start: return UIColor(AppColors.mapStart)
             case .end: return UIColor(AppColors.mapEnd)
-            case .waypoint: return UIColor(AppColors.mapWaypoint)
+            case .waypoint: return UIColor(red: 161 / 255, green: 98 / 255, blue: 7 / 255, alpha: 1)
+            case .interest: return UIColor(red: 37 / 255, green: 99 / 255, blue: 235 / 255, alpha: 1)
+            case .camp: return UIColor(red: 124 / 255, green: 58 / 255, blue: 237 / 255, alpha: 1)
+            case .overnight: return UIColor(red: 109 / 255, green: 40 / 255, blue: 217 / 255, alpha: 1)
+            case .water: return UIColor(red: 8 / 255, green: 145 / 255, blue: 178 / 255, alpha: 1)
+            case .supply: return UIColor(red: 194 / 255, green: 65 / 255, blue: 12 / 255, alpha: 1)
             case .poi: return UIColor(AppColors.mapPOI)
             case .trackPoint: return UIColor(AppColors.mapRoute)
             }
@@ -417,6 +505,15 @@ struct RouteMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
             guard let point = view.annotation as? RoutePointAnnotation,
                   let selection = point.selection else { return }
+            highlightedAnnotationIDs = Set(
+                mapView.annotations.compactMap { annotation in
+                    guard let candidate = annotation as? RoutePointAnnotation,
+                          let candidateSelection = candidate.selection,
+                          candidateSelection.identity == selection.identity else { return nil }
+                    return candidateSelection.annotationID
+                }
+            )
+            refreshHighlightStates(mapView: mapView)
             onSelectMarker?(selection)
         }
 
@@ -441,15 +538,20 @@ struct RouteMapView: UIViewRepresentable {
 }
 
 enum RoutePointType {
-    case start, end, waypoint, poi, trackPoint
+    case start, end, waypoint, interest, camp, overnight, water, supply, poi, trackPoint
 
     var glyph: String {
         switch self {
-        case .start: "S"
-        case .end: "E"
-        case .waypoint: "●"
-        case .poi: "P"
-        case .trackPoint: "•"
+        case .start: "起"
+        case .end: "终"
+        case .waypoint: "关"
+        case .interest: "景"
+        case .camp: "营"
+        case .overnight: "宿"
+        case .water: "水"
+        case .supply: "补"
+        case .poi: "点"
+        case .trackPoint: "点"
         }
     }
 }
@@ -474,6 +576,15 @@ final class RoutePointAnnotation: NSObject, MKAnnotation {
         self.type = type
         self.selection = selection
         super.init()
+    }
+}
+
+final class RouteSegmentOutlinePolyline: MKPolyline {
+    private(set) var segmentID: String?
+
+    convenience init(coordinates: [CLLocationCoordinate2D], segmentID: String?) {
+        self.init(coordinates: coordinates, count: coordinates.count)
+        self.segmentID = segmentID
     }
 }
 

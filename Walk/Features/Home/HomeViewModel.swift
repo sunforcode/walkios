@@ -1,13 +1,13 @@
 import Foundation
 
 struct HomeWeatherSummary: Equatable {
-    let text: String?
+    let conclusion: String
+    let impact: String
 }
 
 enum HomeState: Equatable {
     case guest
     case loading
-    case empty
     case error(String)
     case ready
 }
@@ -21,7 +21,6 @@ final class HomeViewModel: ObservableObject {
 
     private let isLoggedIn: () -> Bool
     private let loadFocus: () async throws -> PersonalTripFocus
-    private let loadWeather: (String) async throws -> PersonalTripWeather
     private let onNoFocus: () -> Void
 
     init(
@@ -31,25 +30,40 @@ final class HomeViewModel: ObservableObject {
     ) {
         self.isLoggedIn = { authSession.isLoggedIn }
         self.loadFocus = { try await service.focus() }
-        self.loadWeather = { try await service.weather(tripID: $0) }
         self.onNoFocus = onNoFocus
     }
 
     init(
         isLoggedIn: @escaping () -> Bool = { true },
         loadFocus: @escaping () async throws -> PersonalTripFocus,
-        loadWeather: @escaping (String) async throws -> PersonalTripWeather = {
-            throw APIClientError.mockNotFound("GET /trips/\($0)/weather")
-        },
         onNoFocus: @escaping () -> Void = {}
     ) {
         self.isLoggedIn = isLoggedIn
         self.loadFocus = loadFocus
-        self.loadWeather = loadWeather
         self.onNoFocus = onNoFocus
     }
 
+    init(
+        staticState: HomeState,
+        focusedTrip: PersonalTripSummary? = nil,
+        weatherSummary: HomeWeatherSummary? = nil,
+        refreshError: String? = nil
+    ) {
+        self.state = staticState
+        self.focusedTrip = focusedTrip
+        self.weatherSummary = weatherSummary
+        self.refreshError = refreshError
+        self.isLoggedIn = { staticState != .guest }
+        self.loadFocus = { PersonalTripFocus(trip: focusedTrip) }
+        self.onNoFocus = {}
+        self.isStatic = true
+    }
+
+    private var isStatic = false
+
     func load() async {
+        guard !isStatic else { return }
+
         guard isLoggedIn() else {
             focusedTrip = nil
             weatherSummary = nil
@@ -66,13 +80,13 @@ final class HomeViewModel: ObservableObject {
             guard let trip = try await loadFocus().trip else {
                 focusedTrip = nil
                 weatherSummary = nil
-                state = .empty
+                state = .loading
                 onNoFocus()
                 return
             }
 
             focusedTrip = trip
-            weatherSummary = await weatherSummary(for: trip)
+            weatherSummary = nil
             state = .ready
         } catch {
             if hadFocus {
@@ -85,13 +99,4 @@ final class HomeViewModel: ObservableObject {
     }
 
     func retry() async { await load() }
-
-    private func weatherSummary(for trip: PersonalTripSummary) async -> HomeWeatherSummary? {
-        guard let weather = try? await loadWeather(trip.tripID),
-              weather.tripID == trip.tripID,
-              weather.revision == trip.revision else {
-            return nil
-        }
-        return HomeWeatherSummary(text: weather.weatherOverview?.value)
-    }
 }

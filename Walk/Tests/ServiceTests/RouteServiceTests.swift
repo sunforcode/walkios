@@ -45,16 +45,12 @@ final class RouteMapViewTests: XCTestCase {
         XCTAssertEqual(fit.edgeInsets, .zero)
     }
 
-    func testDetailPaddingReservesDrawerAndSafeArea() {
-        let padding = RouteMapCamera.detailEdgeInsets(
-            viewportHeight: 800,
-            safeAreaTop: 47,
-            safeAreaBottom: 34
-        )
-        XCTAssertEqual(padding.top, 71)
-        XCTAssertEqual(padding.left, 24)
-        XCTAssertEqual(padding.right, 24)
-        XCTAssertEqual(padding.bottom, 522)
+    func testDetailPaddingReservesVisibleDrawerWithoutSystemInsetInputs() {
+        let padding = RouteMapCamera.detailEdgeInsets(viewportHeight: 800)
+        XCTAssertEqual(padding.top, 24, accuracy: 0.001)
+        XCTAssertEqual(padding.left, 24, accuracy: 0.001)
+        XCTAssertEqual(padding.right, 24, accuracy: 0.001)
+        XCTAssertEqual(padding.bottom, 488, accuracy: 0.001)
     }
 
     func testOverlayPlanUsesWholeDeclaredMainTrack() {

@@ -8,13 +8,30 @@ final class TripListViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     private let fetchTrips: () async throws -> PersonalTripCollection
+    let automaticallyLoads: Bool
 
     init(service: any PersonalTripServicing) {
         self.fetchTrips = { try await service.list() }
+        self.automaticallyLoads = true
     }
 
     init(loadTrips: @escaping () async throws -> PersonalTripCollection) {
         self.fetchTrips = loadTrips
+        self.automaticallyLoads = true
+    }
+
+    init(baselineState: TripListBaselineState) {
+        self.fetchTrips = { PersonalTripCollection(currentTrips: [], historicalTrips: []) }
+        self.automaticallyLoads = false
+        switch baselineState {
+        case .loading:
+            self.isLoading = true
+        case .loaded(let collection):
+            self.currentTrips = collection.currentTrips
+            self.historicalTrips = collection.historicalTrips
+        case .error(let message):
+            self.errorMessage = message
+        }
     }
 
     var isEmpty: Bool {

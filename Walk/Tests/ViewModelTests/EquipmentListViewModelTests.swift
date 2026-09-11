@@ -166,6 +166,126 @@ final class EquipmentListViewModelTests: XCTestCase {
         XCTAssertEqual(sut.selectedEquipmentList, populatedDetail)
         XCTAssertEqual(sut.selectedEquipmentList?.members[0].quantity, 1)
     }
+
+    func testListNameEditorsRemainActiveUntilSaveSucceeds() throws {
+        let source = try productionSource(at: "Features/Equipment/EquipmentListView.swift")
+
+        XCTAssertTrue(source.contains("await viewModel.renameEquipmentList"))
+        XCTAssertTrue(source.contains("await viewModel.createEquipmentList"))
+        XCTAssertTrue(source.contains("if viewModel.lastMutationSucceeded"))
+        XCTAssertFalse(source.contains("renamingListID = nil\n                    Task"))
+        XCTAssertFalse(source.contains("showingCreateList = false\n        Task"))
+    }
+
+    func testMyEquipmentPageComposesApprovedBusinessComponentsWithoutPrivateDuplicates() throws {
+        let source = try productionSource(at: "Features/Equipment/EquipmentListView.swift")
+
+        XCTAssertTrue(source.contains("EquipmentListRow("))
+        XCTAssertTrue(source.contains("projection: .personalAsset("))
+        XCTAssertTrue(source.contains("InlineListNameEditor("))
+        XCTAssertTrue(source.contains("ChecklistPanel("))
+        XCTAssertTrue(source.contains("ChecklistItemRowProjection("))
+        XCTAssertTrue(source.contains("if isEditingListName { return \"保存清单\" }"))
+        XCTAssertFalse(source.contains("tripSnapshot"))
+        XCTAssertFalse(source.contains("private struct PersonalEquipmentRow"))
+        XCTAssertFalse(source.contains("private struct EquipmentListMemberRow"))
+        XCTAssertFalse(source.contains("private var listNameEditor"))
+        XCTAssertFalse(source.contains("private func checklistPanel"))
+        XCTAssertFalse(source.contains("private func checklistSummaryText"))
+    }
+
+    func testEquipmentEditPageComposesApprovedBusinessComponentsWithoutPrivateFormUI() throws {
+        let source = try productionSource(at: "Features/Equipment/AddEquipmentView.swift")
+
+        XCTAssertTrue(source.contains("PersonalEquipmentForm("))
+        XCTAssertTrue(source.contains("PersonalEquipmentFormProjection("))
+        XCTAssertTrue(source.contains("EquipmentDeletionImpact("))
+        XCTAssertTrue(source.contains("viewModel.deletionImpact"))
+        XCTAssertFalse(source.contains("private var equipmentForm"))
+        XCTAssertFalse(source.contains("\n            FormField("))
+        XCTAssertFalse(source.contains("TextField("))
+        XCTAssertFalse(source.contains("NoticeView("))
+    }
+
+    func testEquipmentEditModeIsDeterminedOnlyByEquipmentID() {
+        XCTAssertEqual(EquipmentEditMode(equipmentID: nil), .create)
+        XCTAssertEqual(EquipmentEditMode(equipmentID: "equipment-1"), .edit(equipmentID: "equipment-1"))
+    }
+
+    func testEditLoadFailureExposesFailedStateAndNeverFallsBackToCreate() async {
+        let service = EquipmentServiceStub(error: APIClientError.api(
+            code: "personal_equipment_unavailable",
+            message: "装备加载失败",
+            retryable: true
+        ))
+        let sut = EquipmentListViewModel(service: service)
+
+        await sut.loadEquipment(id: "equipment-1")
+        await sut.saveEquipment(
+            equipmentID: "equipment-1",
+            name: "帐篷",
+            ownedQuantity: 1,
+            unitWeightGrams: nil
+        )
+
+        XCTAssertEqual(sut.editLoadState, .failed)
+        XCTAssertNil(sut.editingEquipment)
+        XCTAssertEqual(service.createCallCount, 0)
+        XCTAssertEqual(service.updateCallCount, 0)
+        XCTAssertFalse(sut.lastMutationSucceeded)
+    }
+
+    func testEquipmentNameConflictKeepsTypedCodeForFieldPresentation() async {
+        let service = EquipmentServiceStub(error: APIClientError.api(
+            code: "equipment_name_conflict",
+            message: "已存在同名装备",
+            retryable: false
+        ))
+        let sut = EquipmentListViewModel(service: service)
+
+        await sut.saveEquipment(
+            equipmentID: nil,
+            name: "帐篷",
+            ownedQuantity: 1,
+            unitWeightGrams: nil
+        )
+
+        XCTAssertEqual(sut.errorCode, "equipment_name_conflict")
+        XCTAssertEqual(sut.nameErrorMessage, "已存在同名装备")
+        XCTAssertFalse(sut.lastMutationSucceeded)
+    }
+
+    func testEquipmentEditFormDirtyStateComparesAgainstLoadedSnapshot() {
+        let original = EquipmentEditFormValues(name: "帐篷", ownedQuantity: 1, unitWeightGrams: "1500")
+
+        XCTAssertFalse(EquipmentEditPresentation.isDirty(current: original, initial: original))
+        XCTAssertTrue(EquipmentEditPresentation.isDirty(
+            current: EquipmentEditFormValues(name: "双人帐篷", ownedQuantity: 1, unitWeightGrams: "1500"),
+            initial: original
+        ))
+    }
+
+    func testEquipmentEditSourceGuardsLoadingFailureSaveAndDiscard() throws {
+        let source = try productionSource(at: "Features/Equipment/AddEquipmentView.swift")
+
+        XCTAssertTrue(source.contains("case .idle, .loading:"))
+        XCTAssertTrue(source.contains("case .failed"))
+        XCTAssertTrue(source.contains("ErrorView"))
+        XCTAssertTrue(source.contains("loadEquipmentIfNeeded()"))
+        XCTAssertTrue(source.contains("navigationBarBackButtonHidden(true)"))
+        XCTAssertTrue(source.contains("interactiveDismissDisabled(isDirty)"))
+        XCTAssertTrue(source.contains("放弃未保存的修改？"))
+        XCTAssertFalse(source.contains("保存成功"))
+    }
+
+    private func productionSource(at relativePath: String) throws -> String {
+        let testFileURL = URL(fileURLWithPath: #filePath)
+        let walkRoot = testFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        return try String(contentsOf: walkRoot.appendingPathComponent(relativePath), encoding: .utf8)
+    }
 }
 
 private final class EquipmentServiceStub: EquipmentServicing {
@@ -176,6 +296,8 @@ private final class EquipmentServiceStub: EquipmentServicing {
     var listMutation: EquipmentListMutation
     var error: Error?
     private(set) var loadedEquipmentIDs: [String] = []
+    private(set) var createCallCount = 0
+    private(set) var updateCallCount = 0
 
     init(
         equipmentCollection: PersonalEquipmentCollection = PersonalEquipmentCollection(
@@ -214,6 +336,7 @@ private final class EquipmentServiceStub: EquipmentServicing {
     }
 
     func createPersonalEquipment(name: String, ownedQuantity: Int, unitWeightGrams: Int?) async throws -> PersonalEquipmentMutation {
+        createCallCount += 1
         if let error { throw error }
         return createResult
     }
@@ -225,6 +348,7 @@ private final class EquipmentServiceStub: EquipmentServicing {
     }
 
     func updatePersonalEquipment(id: String, update: PersonalEquipmentUpdate) async throws -> PersonalEquipmentMutation {
+        updateCallCount += 1
         if let error { throw error }
         return createResult
     }
@@ -391,6 +515,39 @@ final class TripEquipmentViewModelTests: XCTestCase {
         )
 
         XCTAssertEqual(item.totalWeight?.grams, 1_500)
+    }
+
+    func testTripEquipmentPageUsesProductionInlineEditorWithoutCrossBoundaryRows() throws {
+        let source = try productionSource(at: "Features/Trips/TripEquipment.swift")
+
+        XCTAssertTrue(source.contains("AccountEquipmentBusinessComponents.InlineEquipmentEditor("))
+        XCTAssertTrue(source.contains("InlineEquipmentEditorProjection("))
+        XCTAssertTrue(source.contains("name: editorName"))
+        XCTAssertTrue(source.contains("quantity: editorQuantity"))
+        XCTAssertTrue(source.contains("unitWeight: editorUnitWeight"))
+        XCTAssertTrue(source.contains("note: editorNote"))
+        XCTAssertTrue(source.contains("saveError: viewModel.errorMessage"))
+        XCTAssertTrue(source.contains("onChangeField:"))
+        XCTAssertTrue(source.contains("onChangeQuantity:"))
+        XCTAssertTrue(source.contains("onCancel: cancelEditing"))
+        XCTAssertFalse(source.contains("private struct InlineEquipmentEditor: View"))
+        XCTAssertFalse(source.contains("AccountEquipmentBusinessComponents.EquipmentListRow("))
+        XCTAssertFalse(source.contains("projection: .tripSnapshot("))
+        XCTAssertTrue(source.contains("TripBusinessComponents.TripEquipmentOverview("), "使用生产 TripEquipmentOverview")
+        XCTAssertTrue(source.contains("TripEquipmentOverviewProjection("), "构造 TripEquipmentOverviewProjection")
+        XCTAssertTrue(source.contains("TripBusinessComponents.TripEquipmentItemRow("), "使用生产 TripEquipmentItemRow")
+        XCTAssertTrue(source.contains("equipmentItemProjection("), "页面构造条目投影")
+        XCTAssertFalse(source.contains("TripEquipmentMetricGrid("), "不再保留私有 TripEquipmentMetricGrid")
+        XCTAssertFalse(source.contains("TripSnapshotEquipmentListRow("), "不再保留私有 TripSnapshotEquipmentListRow")
+    }
+
+    private func productionSource(at relativePath: String) throws -> String {
+        let testFileURL = URL(fileURLWithPath: #filePath)
+        let walkRoot = testFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        return try String(contentsOf: walkRoot.appendingPathComponent(relativePath), encoding: .utf8)
     }
 }
 

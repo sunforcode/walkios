@@ -3,26 +3,57 @@ import SwiftUI
 struct CreateTripRouteSummaryPresentation: Equatable {
     let title: String
     let facts: [String]
+    let generationUnavailableMessage: String?
+    let componentProjection: GenerationRouteSummaryProjection
 
     init(route: PersonalTripGenerationRoute) {
+        let routeType = route.routeType == "one_day" ? "一日路线" : "多日路线"
+        let distance = route.distance.map { meters in
+            meters.meters >= 1_000
+                ? "\((meters.meters / 1_000).formatted(.number.precision(.fractionLength(0...1)))) km"
+                : "\(Int(meters.meters.rounded())) m"
+        }
+        let estimatedDuration = route.estimatedDuration.map {
+            "\(($0.seconds / 3_600).formatted(.number.precision(.fractionLength(0...1)))) 小时"
+        }
+        let generationUnavailableMessage = RouteGenerationEligibilityPresentation(
+            eligibility: route.generationEligibility
+        ).unavailableMessage
+
         title = route.name ?? "已选路线"
-        var values: [String] = []
-        if let version = route.versionLabel { values.append(version) }
-        values.append(route.routeType == "one_day" ? "一日路线" : "多日路线")
-        if let region = route.region { values.append(region) }
-        if let difficulty = route.difficulty { values.append(difficulty) }
-        if let start = route.start?.name, let end = route.end?.name {
-            values.append("\(start) → \(end)")
-        }
-        if let meters = route.distance?.meters {
-            values.append(meters >= 1_000
-                          ? "\((meters / 1_000).formatted(.number.precision(.fractionLength(0...1)))) km"
-                          : "\(Int(meters.rounded())) m")
-        }
-        if let seconds = route.estimatedDuration?.seconds {
-            values.append("\((seconds / 3_600).formatted(.number.precision(.fractionLength(0...1)))) 小时")
-        }
-        facts = values
+        facts = [
+            route.versionLabel,
+            routeType,
+            route.region,
+            route.difficulty,
+            route.start.flatMap { start in route.end.map { "\(start.name) → \($0.name)" } },
+            distance,
+            estimatedDuration,
+        ].compactMap { $0 }
+        self.generationUnavailableMessage = generationUnavailableMessage
+        componentProjection = GenerationRouteSummaryProjection(
+            routeType: routeType,
+            generationEligibility: generationUnavailableMessage == nil
+                ? .eligible(label: "可生成")
+                : .ineligible(label: "资料不足"),
+            name: route.name,
+            versionLabel: route.versionLabel,
+            region: route.region,
+            start: route.start?.name,
+            end: route.end?.name,
+            difficulty: route.difficulty,
+            distance: distance,
+            estimatedDuration: estimatedDuration
+        )
+    }
+}
+
+struct CreateTripEquipmentListPresentation: Equatable {
+    let text: String
+
+    init(option: PersonalTripGenerationEquipmentListOption) {
+        let summary = option.summary
+        text = "\(option.name) · \(summary.itemCount) 类 · 已知总重量 \(summary.knownTotalWeight.grams) 克 · \(summary.missingWeightItemCount) 类未计入重量"
     }
 }
 
@@ -155,6 +186,11 @@ final class CreateTripViewModel: ObservableObject {
         do {
             switch try await createTrip(request, key) {
             case .transportSelectionRequired(let selection):
+                guard selection.options.count >= 2 else {
+                    transportSelection = nil
+                    selectedTransportOptionID = nil
+                    throw APIClientError.invalidResponse
+                }
                 transportSelection = selection
                 selectedTransportOptionID = nil
                 lastRequest = nil
@@ -172,7 +208,9 @@ final class CreateTripViewModel: ObservableObject {
 }
 
 struct CreateTripView: View {
+    @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: CreateTripViewModel
+    @FocusState private var isDepartureCityFocused: Bool
     private let onManagePersonalEquipment: () -> Void
     private let onTripCreated: (String) -> Void
 
@@ -201,176 +239,272 @@ struct CreateTripView: View {
     }
 
     var body: some View {
-        UtilityPageContainer {
-            Group {
-                if viewModel.isLoading && viewModel.context == nil {
-                    LoadingView()
-                } else if let error = viewModel.errorMessage, viewModel.context == nil {
-                    ErrorView(message: error) { Task { await viewModel.load() } }
-                } else if let context = viewModel.context {
-                    form(context: context)
+        Group {
+            if viewModel.isSubmitting && viewModel.createdTripID == nil {
+                generatingView
+            } else if let context = viewModel.context {
+                if context.route.generationEligibility.eligible {
+                    inputPage(context: context)
+                } else {
+                    ineligiblePage(context: context)
                 }
+            } else {
+                initialStatePage
             }
         }
-        .navigationTitle("生成行程")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .onAppear { Task { await viewModel.handleAppearance() } }
         .onChange(of: viewModel.createdTripID) { tripID in
             if let tripID { onTripCreated(tripID) }
         }
     }
 
-    private func form(context: PersonalTripGenerationContext) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.xl) {
-                routeSummary(context.route)
-                inputPanel(context)
+    private var generatingView: some View {
+        UtilityPageContainer {
+            RouteBusinessComponents.GenerationWaitingView(
+                projection: GenerationWaitingProjection(
+                    title: "正在组织你的出行信息",
+                    description: "请稍候，完成后将直接进入个人行程。"
+                )
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
 
-                if let selection = viewModel.transportSelection {
-                    transportPanel(selection)
+    private var initialStatePage: some View {
+        UtilityPageContainer {
+            VStack(spacing: 0) {
+                navigationHeader
+                Group {
+                    if viewModel.isLoading {
+                        LoadingView(message: "正在准备生成上下文", variant: .page)
+                    } else if viewModel.errorMessage != nil {
+                        ErrorView(
+                            message: "没有把失败当作空装备或不可生成路线。",
+                            title: "暂时无法准备生成",
+                            variant: .page,
+                            retry: { Task { await viewModel.load() } }
+                        )
+                    }
                 }
+                .frame(maxWidth: 600, maxHeight: .infinity)
+                .padding(.horizontal, Spacing.pageHorizontal)
+            }
+        }
+    }
 
-                if let error = viewModel.errorMessage {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(AppColors.statusCancelled)
-                }
-
-                Button {
-                    Task { await viewModel.submit() }
-                } label: {
-                    Group {
-                        if viewModel.isSubmitting {
-                            ProgressView().tint(AppColors.pageBase)
-                        } else {
-                            Text(viewModel.transportSelection == nil ? "生成我的行程" : "继续生成")
+    private func ineligiblePage(context: PersonalTripGenerationContext) -> some View {
+        UtilityPageContainer {
+            VStack(spacing: 0) {
+                navigationHeader
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Spacing.md) {
+                        RouteBusinessComponents.GenerationRouteSummaryCard(
+                            projection: CreateTripRouteSummaryPresentation(route: context.route).componentProjection
+                        )
+                        ForEach(Array((context.route.generationEligibility.missingReasons ?? []).enumerated()), id: \.offset) { _, reason in
+                            NoticeView(
+                                message: generationMissingReasonText(reason),
+                                title: "路线暂不可生成",
+                                tone: .warning
+                            )
                         }
                     }
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, minHeight: RootNavigation.toolButtonHitSize)
-                    .foregroundStyle(viewModel.canSubmit ? AppColors.pageBase : AppColors.textWeak)
-                    .background(
-                        viewModel.canSubmit ? AppColors.interactionPrimary : AppColors.surfaceElevated,
-                        in: RoundedRectangle(cornerRadius: Radius.md)
+                    .frame(maxWidth: 600, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .padding(Spacing.xl)
+                }
+            }
+        }
+    }
+
+    private func inputPage(context: PersonalTripGenerationContext) -> some View {
+        UtilityPageContainer {
+            VStack(spacing: 0) {
+                navigationHeader
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Spacing.xl) {
+                        RouteBusinessComponents.GenerationRouteSummaryCard(
+                            projection: CreateTripRouteSummaryPresentation(route: context.route).componentProjection
+                        )
+                        requiredInputs(routeType: context.route.routeType)
+                        equipmentSection(context)
+
+                        if let selection = viewModel.transportSelection {
+                            transportSection(selection)
+                        }
+
+                        if let error = viewModel.errorMessage {
+                            ErrorView(
+                                message: "\(error)\n已保留本次填写内容。",
+                                title: "生成未完成",
+                                variant: .form,
+                                retry: { Task { await viewModel.submit() } }
+                            )
+                        }
+                    }
+                    .frame(maxWidth: 600, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .padding(.horizontal, Spacing.pageHorizontal)
+                    .padding(.top, Spacing.lg)
+                    .padding(.bottom, 108)
+                }
+
+                FixedActionArea {
+                    PrimaryAction(
+                        title: submitTitle,
+                        isDisabled: !viewModel.canSubmit,
+                        fillsWidth: true,
+                        action: { Task { await viewModel.submit() } }
                     )
                 }
-                .buttonStyle(.plain)
-                .disabled(!viewModel.canSubmit || viewModel.isSubmitting)
             }
-            .padding(.horizontal, Spacing.pageHorizontal)
-            .padding(.vertical, Spacing.xl)
         }
     }
 
-    private func routeSummary(_ route: PersonalTripGenerationRoute) -> some View {
-        let presentation = CreateTripRouteSummaryPresentation(route: route)
-        return WalkPanel {
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                Text(presentation.title)
-                    .font(.sectionTitle)
-                    .foregroundStyle(AppColors.textPrimary)
-                ForEach(presentation.facts, id: \.self) { fact in
-                    Text(fact)
-                        .font(.body)
-                        .foregroundStyle(AppColors.textSecondary)
-                }
-                if !route.generationEligibility.eligible {
-                    Text("当前路线资料不足，暂时无法生成行程")
-                        .font(.caption)
-                        .foregroundStyle(AppColors.statusCancelled)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
+    private var navigationHeader: some View {
+        UtilityNavigationHeader(
+            title: "生成个人行程",
+            leading: IconButtonConfiguration(
+                systemName: "chevron.left",
+                accessibilityLabel: "返回路线详情",
+                action: { dismiss() }
+            )
+        )
     }
 
-    private func inputPanel(_ context: PersonalTripGenerationContext) -> some View {
-        WalkPanel {
-            VStack(alignment: .leading, spacing: Spacing.lg) {
-                EntryTextField(title: EntryPageContract.tripFields[0], text: $viewModel.departureCity)
+    private func requiredInputs(routeType: String) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            SectionHeader(title: "必要信息")
 
+            FormField(
+                label: "出发城市",
+                requirement: .required,
+                error: departureCityError,
+                isFocused: isDepartureCityFocused
+            ) {
+                TextField("输入出发城市", text: $viewModel.departureCity)
+                    .textInputAutocapitalization(.words)
+                    .submitLabel(.done)
+                    .focused($isDepartureCityFocused)
+                    .tint(AppColors.interactionPrimary)
+            }
+
+            FormField(label: "从出发城市启程的日期", requirement: .required) {
                 DatePicker(
-                    EntryPageContract.tripFields[1],
+                    "从出发城市启程的日期",
                     selection: $viewModel.startDate,
-                    in: BusinessCalendar.startOfToday()...,
                     displayedComponents: .date
                 )
+                .labelsHidden()
                 .environment(\.calendar, .business)
                 .environment(\.timeZone, BusinessCalendar.timeZone)
                 .tint(AppColors.interactionPrimary)
-                .foregroundStyle(AppColors.textPrimary)
-
-                VStack(alignment: .leading, spacing: Spacing.sm) {
-                    Text(EntryPageContract.tripFields[2])
-                        .font(.caption)
-                        .foregroundStyle(AppColors.textSecondary)
-                    Picker("装备清单（可选）", selection: $viewModel.selectedEquipmentListID) {
-                        Text("不选择").tag(String?.none)
-                        ForEach(context.equipmentLists) { list in
-                            Text("\(list.name) · \(list.summary.itemCount) 类")
-                                .tag(Optional(list.equipmentListID))
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .tint(AppColors.textPrimary)
-                    Button("管理我的装备") {
-                        viewModel.prepareForPersonalEquipment()
-                        onManagePersonalEquipment()
-                    }
-                    .buttonStyle(.bordered)
-                }
-
-                Text(equipmentSummary(context.personalEquipmentSummary))
-                    .font(.caption)
-                    .foregroundStyle(AppColors.textWeak)
             }
+
+            NoticeView(
+                message: routeType == "one_day"
+                    ? "一日路线只形成 D1，去程、徒步和返程都在同一自然日。"
+                    : "多日路线的自然日和结束日期由完整生成结果返回。",
+                title: "完整日期由生成结果确定",
+                tone: .info
+            )
         }
     }
 
-    private func transportPanel(_ selection: PersonalTripTransportSelection) -> some View {
-        WalkPanel {
-            VStack(alignment: .leading, spacing: Spacing.md) {
-                Text("选择交通方案")
-                    .font(.sectionTitle)
-                    .foregroundStyle(AppColors.textPrimary)
-                ForEach(selection.options) { option in
-                    Button {
-                        viewModel.selectedTransportOptionID = option.transportOptionID
-                    } label: {
-                        HStack(alignment: .top, spacing: Spacing.md) {
-                            Image(systemName: viewModel.selectedTransportOptionID == option.id
-                                  ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(AppColors.interactionPrimary)
-                            VStack(alignment: .leading, spacing: Spacing.xs) {
-                                Text("方案 \(option.id)")
-                                    .foregroundStyle(AppColors.textPrimary)
-                                Text(transportDescription(option))
-                                    .font(.caption)
-                                    .foregroundStyle(AppColors.textSecondary)
-                            }
-                            Spacer()
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
+    private func equipmentSection(_ context: PersonalTripGenerationContext) -> some View {
+        let summary = context.personalEquipmentSummary
+        return RouteBusinessComponents.GenerationEquipmentSelection(
+            projection: GenerationEquipmentSelectionProjection(
+                equipmentItemCount: summary.equipmentItemCount,
+                equipmentListCount: summary.equipmentListCount,
+                knownTotalWeightGrams: summary.knownTotalWeight.grams,
+                missingWeightItemCount: summary.missingWeightItemCount,
+                equipmentLists: context.equipmentLists.map { list in
+                    GenerationEquipmentListOptionProjection(
+                        equipmentListID: list.equipmentListID,
+                        name: list.name,
+                        itemCount: list.summary.itemCount,
+                        knownTotalWeightGrams: list.summary.knownTotalWeight.grams,
+                        missingWeightItemCount: list.summary.missingWeightItemCount
+                    )
+                },
+                selectedEquipmentListID: viewModel.selectedEquipmentListID
+            ),
+            onManageEquipment: {
+                viewModel.prepareForPersonalEquipment()
+                onManagePersonalEquipment()
+            },
+            onSelectEquipmentList: { viewModel.selectedEquipmentListID = $0 }
+        )
     }
 
-    private func equipmentSummary(_ summary: PersonalEquipmentSummary) -> String {
-        "已读取 \(summary.equipmentItemCount) 类个人装备，已知总重量 \(summary.knownTotalWeight.grams) 克，\(summary.missingWeightItemCount) 类未计入重量。"
+    private func transportSection(_ selection: PersonalTripTransportSelection) -> some View {
+        RouteBusinessComponents.TransportOptionSelection(
+            projection: TransportOptionSelectionProjection(
+                selectionID: selection.selectionID,
+                options: selection.options.map { option in
+                    TransportOptionProjection(
+                        transportOptionID: option.transportOptionID,
+                        transferCount: transferCountFact(option.transferCount),
+                        estimatedArrivalAt: estimatedArrivalFact(option.estimatedArrivalAt),
+                        estimatedDuration: estimatedDurationFact(option.estimatedDuration),
+                        verificationItems: option.verificationItems
+                    )
+                },
+                selectedTransportOptionID: viewModel.selectedTransportOptionID
+            ),
+            onSelectTransportOption: { viewModel.selectedTransportOptionID = $0 }
+        )
     }
 
-    private func transportDescription(_ option: PersonalTripTransportOption) -> String {
-        var parts: [String] = []
-        if let count = option.transferCount.value { parts.append("换乘 \(count) 次") }
-        if let arrival = option.estimatedArrivalAt.value { parts.append("预计到达 \(arrival)") }
-        if let duration = option.estimatedDuration.value?.seconds {
-            parts.append("约 \((duration / 3_600).formatted(.number.precision(.fractionLength(0...1)))) 小时")
+    private func transferCountFact(_ qualified: QualifiedInteger) -> TransportOptionFactState {
+        if let count = qualified.value {
+            return .available("换乘 \(count) 次")
         }
-        if !option.verificationItems.isEmpty {
-            parts.append(option.verificationItems.joined(separator: "、"))
+        return .unavailable("换乘次数未知")
+    }
+
+    private func estimatedArrivalFact(_ qualified: QualifiedInstant) -> TransportOptionFactState {
+        if let arrival = qualified.value {
+            return .available(arrival.rawValue)
         }
-        return parts.isEmpty ? "方案信息待核验" : parts.joined(separator: " · ")
+        return .unavailable("到达时间待核验")
+    }
+
+    private func estimatedDurationFact(_ qualified: QualifiedDuration) -> TransportOptionFactState {
+        if let duration = qualified.value {
+            let hours = (duration.seconds / 3_600).formatted(.number.precision(.fractionLength(0...1)))
+            return .available("约 \(hours) 小时")
+        }
+        return .unavailable("用时不可用")
+    }
+
+    private var departureCityError: String? {
+        guard viewModel.departureCity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return "请输入出发城市"
+    }
+
+    private var submitTitle: String {
+        if viewModel.transportSelection != nil && viewModel.selectedTransportOptionID == nil {
+            return "请选择交通方案"
+        }
+        if viewModel.errorMessage != nil { return "重试生成" }
+        if viewModel.transportSelection != nil { return "使用所选方案继续生成" }
+        return "生成我的行程"
+    }
+
+    private func generationMissingReasonText(_ reason: RouteGenerationMissingReason) -> String {
+        switch reason {
+        case .name: "缺少路线名称"
+        case .region: "缺少所在地区"
+        case .estimatedDuration: "缺少预计用时"
+        case .start: "缺少起点"
+        case .end: "缺少终点"
+        case .validMainTrack: "缺少有效主轨迹"
+        }
     }
 }

@@ -110,6 +110,10 @@ struct AppShellState: Equatable {
         }
     }
 
+    var showsPrimaryTabBar: Bool {
+        path(for: selectedTab).isEmpty
+    }
+
     mutating func setPath(_ path: [AppDestination], for tab: AppTab) {
         switch tab {
         case .home: homePath = path
@@ -150,12 +154,26 @@ enum RootNavigation {
     static let minimumHitSize: CGFloat = 44
     static let toolButtonHitSize = minimumHitSize
 
+    // PrimaryTabBar 规范：不增加独立胶囊；沉浸式场景延伸至系统边缘。
+    // 保持 tabBar 背景透明，只保留 Tab 项的选中/未选文字与图标色。
     static func makeTabBarAppearance() -> UITabBarAppearance {
         let appearance = UITabBarAppearance()
         appearance.configureWithTransparentBackground()
-        appearance.backgroundEffect = nil
-        appearance.backgroundColor = .clear
-        appearance.shadowColor = .clear
+
+        let itemAppearance = UITabBarItemAppearance()
+        itemAppearance.normal.iconColor = UIColor(AppColors.textWeak)
+        itemAppearance.normal.titleTextAttributes = [
+            .foregroundColor: UIColor(AppColors.textWeak),
+            .font: UIFont.systemFont(ofSize: 10, weight: .bold),
+        ]
+        itemAppearance.selected.iconColor = UIColor(AppColors.interactionPrimary)
+        itemAppearance.selected.titleTextAttributes = [
+            .foregroundColor: UIColor(AppColors.interactionPrimary),
+            .font: UIFont.systemFont(ofSize: 10, weight: .bold),
+        ]
+        appearance.stackedLayoutAppearance = itemAppearance
+        appearance.inlineLayoutAppearance = itemAppearance
+        appearance.compactInlineLayoutAppearance = itemAppearance
         return appearance
     }
 
@@ -163,6 +181,7 @@ enum RootNavigation {
         let appearance = makeTabBarAppearance()
         UITabBar.appearance().standardAppearance = appearance
         UITabBar.appearance().scrollEdgeAppearance = appearance
+        UITabBar.appearance().isHidden = true
     }
 
     static func makeNavigationBarAppearance() -> UINavigationBarAppearance {
@@ -185,11 +204,11 @@ enum RootNavigation {
 
 enum HomeStyle {
     static let gradientStops: [Gradient.Stop] = [
-        .init(color: AppColors.pageBase, location: 0),
-        .init(color: AppColors.pageMiddle, location: 0.4),
-        .init(color: AppColors.pageOuter, location: 1)
+        .init(color: AppColors.sceneForestHighlight, location: 0),
+        .init(color: AppColors.sceneForestMiddle, location: 0.46),
+        .init(color: AppColors.pageBase, location: 1),
     ]
-    static let gradientStartPoint = UnitPoint(x: 0.25, y: 0)
-    static let gradientEndPoint = UnitPoint(x: 0.75, y: 1)
-    static let weatherPlaceholder = "天气 --"
+    static let gradientStartPoint = UnitPoint(x: 0, y: 0)
+    static let gradientEndPoint = UnitPoint(x: 1, y: 1)
+    static let weatherPlaceholder = "天气摘要暂不可用"
 }

@@ -81,22 +81,22 @@ struct ProfileDetailsView: View {
 
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 Text(EntryPageContract.profileFields[1])
-                    .font(.caption)
+                    .font(.appCaption)
                     .foregroundStyle(AppColors.textSecondary)
                 Text(viewModel.profile?.maskedPhone ?? "加载中")
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(Spacing.md)
                     .foregroundStyle(AppColors.textSecondary)
-                    .background(AppColors.surfaceElevated, in: RoundedRectangle(cornerRadius: 10))
+                    .background(AppColors.surfaceElevated, in: RoundedRectangle(cornerRadius: Radius.md))
             }
 
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 Text(EntryPageContract.profileFields[2])
-                    .font(.caption)
+                    .font(.appCaption)
                     .foregroundStyle(AppColors.textSecondary)
                 if let avatar = viewModel.profile?.avatar {
                     Text(avatar)
-                        .font(.caption)
+                        .font(.appCaption)
                         .foregroundStyle(AppColors.textWeak)
                         .textSelection(.enabled)
                 } else {
@@ -117,8 +117,8 @@ struct ProfileDetailsView: View {
 
             if let errorMessage = viewModel.errorMessage {
                 Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(AppColors.statusCancelled)
+                    .font(.appCaption)
+                    .foregroundStyle(AppColors.danger)
             }
         }
         .task { await viewModel.load() }
@@ -148,18 +148,18 @@ struct AccountSecurityView: View {
         EntryFormPage(title: "账号与安全", notice: "手机号由服务端脱敏后展示。") {
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 Text("手机号")
-                    .font(.caption)
+                    .font(.appCaption)
                     .foregroundStyle(AppColors.textSecondary)
                 Text(maskedPhone ?? "加载中")
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(Spacing.md)
                     .foregroundStyle(AppColors.textPrimary)
-                    .background(AppColors.surfaceElevated, in: RoundedRectangle(cornerRadius: 10))
+                    .background(AppColors.surfaceElevated, in: RoundedRectangle(cornerRadius: Radius.md))
             }
             if let errorMessage {
                 Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(AppColors.statusCancelled)
+                    .font(.appCaption)
+                    .foregroundStyle(AppColors.danger)
             }
         }
         .task {
@@ -212,16 +212,16 @@ struct HelpAndFeedbackView: View {
         EntryFormPage(title: "帮助与反馈", notice: "反馈内容仅保留在本页面，当前不会提交。") {
             VStack(alignment: .leading, spacing: Spacing.md) {
                 Text("常见问题")
-                    .font(.headline)
+                    .font(.navTitle)
                     .foregroundStyle(AppColors.textPrimary)
                 Text("路线、行程和装备数据以当前页面显示为准；尚未开放的能力会明确标记。")
-                    .font(.body)
+                    .font(.appBody)
                     .foregroundStyle(AppColors.textSecondary)
             }
 
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 Text(EntryPageContract.feedbackFields[0])
-                    .font(.caption)
+                    .font(.appCaption)
                     .foregroundStyle(AppColors.textSecondary)
                 Picker(EntryPageContract.feedbackFields[0], selection: $category) {
                     ForEach(categories, id: \.self) { Text($0) }
@@ -241,56 +241,57 @@ struct AboutView: View {
     }
 
     var body: some View {
-        UtilityPageContainer {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.xl) {
-                    PageHeroHeader(title: "关于", subtitle: "Walk 户外徒步旅行助手")
-                    WalkPanel {
-                        VStack(alignment: .leading, spacing: Spacing.md) {
-                            Label("路线、行程与装备规划", systemImage: "figure.hiking")
-                            Text("版本 \(version)")
-                                .foregroundStyle(AppColors.textSecondary)
-                        }
-                        .foregroundStyle(AppColors.textPrimary)
-                    }
-                }
-                .padding(.horizontal, Spacing.pageHorizontal)
-                .padding(.vertical, Spacing.xl)
+        EntryFormPage(
+            title: "关于",
+            notice: "Walk 户外徒步旅行助手",
+            pageTitle: "关于 Walk"
+        ) {
+            VStack(alignment: .leading, spacing: Spacing.md) {
+                Label("路线、行程与装备规划", systemImage: "figure.hiking")
+                Text("版本 \(version)")
+                    .foregroundStyle(AppColors.textSecondary)
             }
+            .foregroundStyle(AppColors.textPrimary)
         }
-        .navigationTitle("关于")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
 struct EntryFormPage<Content: View>: View {
     let title: String
     let notice: String
+    let guide: String?
+    let pageTitle: String?
+    let fieldSpacing: CGFloat
     @ViewBuilder let content: Content
 
-    init(title: String, notice: String, @ViewBuilder content: () -> Content) {
+    init(
+        title: String,
+        notice: String,
+        guide: String? = nil,
+        pageTitle: String? = nil,
+        fieldSpacing: CGFloat = Spacing.lg,
+        @ViewBuilder content: () -> Content
+    ) {
         self.title = title
         self.notice = notice
+        self.guide = guide
+        self.pageTitle = pageTitle
+        self.fieldSpacing = fieldSpacing
         self.content = content()
     }
 
     var body: some View {
-        UtilityPageContainer {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.xl) {
-                    Text(notice)
-                        .font(.caption)
-                        .foregroundStyle(AppColors.textSecondary)
-                        .accessibilityLabel(notice)
+        UtilityPage {
+            PageTitleBlock(
+                title: pageTitle ?? title,
+                kicker: guide,
+                description: notice
+            )
 
-                    WalkPanel {
-                        VStack(alignment: .leading, spacing: Spacing.lg) {
-                            content
-                        }
-                    }
+            WalkPanel(variant: .default) {
+                VStack(alignment: .leading, spacing: fieldSpacing) {
+                    content
                 }
-                .padding(.horizontal, Spacing.pageHorizontal)
-                .padding(.vertical, Spacing.xl)
             }
         }
         .navigationTitle(title)
@@ -306,14 +307,15 @@ struct EntryTextField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Text(title)
-                .font(.caption)
+                .font(.appCaption)
                 .foregroundStyle(AppColors.textSecondary)
             TextField(title, text: $text)
+                .font(.appBody)
                 .keyboardType(keyboardType)
                 .textInputAutocapitalization(keyboardType == .emailAddress ? .never : .sentences)
                 .padding(Spacing.md)
                 .foregroundStyle(AppColors.textPrimary)
-                .background(AppColors.surfaceElevated, in: RoundedRectangle(cornerRadius: 10))
+                .background(AppColors.surfaceInput, in: RoundedRectangle(cornerRadius: Radius.md))
                 .accessibilityLabel(title)
         }
     }
@@ -326,14 +328,14 @@ struct EntryTextEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Text(title)
-                .font(.caption)
+                .font(.appCaption)
                 .foregroundStyle(AppColors.textSecondary)
             TextEditor(text: $text)
                 .scrollContentBackground(.hidden)
                 .frame(minHeight: 120)
                 .padding(Spacing.sm)
                 .foregroundStyle(AppColors.textPrimary)
-                .background(AppColors.surfaceElevated, in: RoundedRectangle(cornerRadius: 10))
+                .background(AppColors.surfaceElevated, in: RoundedRectangle(cornerRadius: Radius.md))
                 .accessibilityLabel(title)
         }
     }

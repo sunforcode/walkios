@@ -15,13 +15,13 @@ struct StatCardView: View {
     }
 
     var body: some View {
-        WalkPanel {
+        WalkPanel(variant: .default) {
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 HStack(spacing: Spacing.sm) {
                     if let icon {
                         Image(systemName: icon)
                             .foregroundStyle(AppColors.interactionPrimary)
-                            .font(.nav)
+                            .font(.navTitle)
                     }
                     Text(title)
                         .font(.label)
@@ -29,12 +29,12 @@ struct StatCardView: View {
                 }
 
                 Text(value)
-                    .font(.section)
+                    .font(.sectionTitle)
                     .foregroundStyle(AppColors.textPrimary)
 
                 if let trend {
                     Text(trend)
-                        .font(.caption)
+                        .font(.appCaption)
                         .foregroundStyle(AppColors.statusProgress)
                 }
             }

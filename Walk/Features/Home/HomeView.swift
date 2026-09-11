@@ -1,9 +1,10 @@
 import SwiftUI
 
 enum HomeLayout {
-    static let heroHorizontalPadding = Spacing.pageHorizontal
-    static let emptyHorizontalPadding: CGFloat = 28
-    static let contentBottomPadding: CGFloat = 24
+    static let sceneHorizontalPadding: CGFloat = 18
+    static let guestHorizontalPadding: CGFloat = 28
+    static let guestBottomPadding: CGFloat = 36
+    static let maximumContentWidth: CGFloat = 360
 }
 
 @MainActor
@@ -28,7 +29,7 @@ struct HomeView: View {
 
     init(
         onAuthenticate: @escaping (PendingAuthIntent) -> Void = { _ in },
-        onNavigate: @escaping (AppDestination) -> Void,
+        onNavigate: @escaping (AppDestination) -> Void = { _ in },
         viewModel: HomeViewModel
     ) {
         self.onAuthenticate = onAuthenticate
@@ -37,138 +38,116 @@ struct HomeView: View {
     }
 
     var body: some View {
-        ZStack {
+        HomeScene {
             switch viewModel.state {
             case .guest:
-                GuestHomeView { onAuthenticate(.homeStart) }
-            case .loading, .empty:
-                AppColors.pageBase
-                    .ignoresSafeArea()
-                    .accessibilityLabel("首页加载中")
-            case .error:
-                ErrorHomeView(onRetry: { Task { await viewModel.retry() } })
+                GuestHomeContent { onAuthenticate(.homeStart) }
+            case .loading:
+                HomeLoadingContent()
+            case .error(let message):
+                ErrorView(message: message, variant: .scene) {
+                    Task { await viewModel.retry() }
+                }
             case .ready:
                 if let trip = viewModel.focusedTrip {
-                    TripHomeView(
-                        trip: trip,
-                        weather: viewModel.weatherSummary,
-                        refreshError: viewModel.refreshError,
-                        onOpenTrip: { onNavigate(.tripDetail(trip.tripID)) }
+                    FocusTripSummary(
+                        model: focusSummary(for: trip),
+                        onOpen: { onNavigate(.tripDetail(trip.tripID)) }
                     )
+                } else {
+                    HomeLoadingContent()
                 }
             }
         }
-        .background(AppColors.pageBase.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.load() }
     }
-}
 
-private struct GuestHomeView: View {
-    let onStart: () -> Void
-
-    var body: some View {
-        ZStack {
-            HomePageBackground().ignoresSafeArea()
-            MountainSilhouetteView().ignoresSafeArea()
-            VStack(alignment: .leading) {
-                Spacer()
-                HomeGlassButton(
-                    title: "开启一次新的徒步行程",
-                    emphasized: true,
-                    action: onStart
+    private func focusSummary(for trip: PersonalTripSummary) -> FocusTripSummaryModel {
+        FocusTripSummaryModel(
+            routeName: trip.routeName,
+            start: trip.start.name,
+            end: trip.end.name,
+            distance: trip.distance.map { distanceText($0.meters) },
+            distanceUnit: trip.distance.map { $0.meters >= 1_000 ? "km" : "m" },
+            ascent: trip.ascent.map { elevationText($0.meters) },
+            ascentUnit: trip.ascent.map { _ in "m" },
+            estimatedDuration: durationText(trip.estimatedDuration.seconds),
+            weather: viewModel.weatherSummary.map {
+                WeatherSummaryModel(
+                    conclusion: $0.conclusion,
+                    impact: $0.impact,
+                    state: .available
                 )
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, HomeLayout.emptyHorizontalPadding)
-            .padding(.bottom, HomeLayout.contentBottomPadding)
+        )
+    }
+
+    private func distanceText(_ meters: Double) -> String {
+        if meters >= 1_000 {
+            return (meters / 1_000).formatted(.number.precision(.fractionLength(0...1)))
         }
-        .foregroundStyle(AppColors.textPrimary)
+        return meters.formatted(.number.precision(.fractionLength(0...1)))
+    }
+
+    private func elevationText(_ meters: Double) -> String {
+        meters.formatted(.number.precision(.fractionLength(0...0)))
+    }
+
+    private func durationText(_ seconds: Double) -> String {
+        let totalMinutes = Int((seconds / 60).rounded())
+        let hours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+        if hours >= 24, minutes == 0 {
+            return "约 \(hours / 24) 天"
+        }
+        if minutes == 0 {
+            return "约 \(hours) h"
+        }
+        return "约 \(hours) h \(minutes) min"
     }
 }
 
-private struct TripHomeView: View {
-    let trip: PersonalTripSummary
-    let weather: HomeWeatherSummary?
-    let refreshError: String?
-    let onOpenTrip: () -> Void
+private struct HomeScene<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                TripArtworkView(cover: trip.cover).ignoresSafeArea()
-                LinearGradient(
-                    colors: [
-                        AppColors.surfaceOverlay.opacity(0.40),
-                        AppColors.surfaceOverlay.opacity(0),
-                        AppColors.surfaceToast
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-
-                Rectangle()
-                    .fill(AppColors.pageBase.opacity(0.001))
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: onOpenTrip)
-                    .accessibilityElement()
-                    .accessibilityLabel("查看\(trip.name)")
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityAction { onOpenTrip() }
-
-                VStack(alignment: .leading, spacing: Spacing.md) {
-                    PageHeroHeader(
-                        title: trip.routeName,
-                        subtitle: "\(trip.start.name) → \(trip.end.name)"
-                    )
-                    .allowsHitTesting(false)
-
-                    Spacer()
-
-                    if let refreshError {
-                        Text(refreshError)
-                            .font(.caption)
-                            .foregroundStyle(AppColors.textWeak)
-                    }
-
-                    HStack(alignment: .bottom, spacing: Spacing.md) {
-                        WeatherHUD(text: weather?.text ?? "天气摘要暂不可用")
-                        Spacer(minLength: Spacing.md)
-                        VStack(alignment: .trailing, spacing: Spacing.xs) {
-                            if let distance = trip.distance {
-                                Text(formatDistance(distance.meters))
-                            }
-                            if let ascent = trip.ascent {
-                                Text("累计爬升 \(Int(ascent.meters.rounded())) m")
-                            }
-                            Text(formatDuration(trip.estimatedDuration.seconds))
-                        }
-                        .font(.caption)
-                        .foregroundStyle(AppColors.textSecondary)
-                    }
-                    .allowsHitTesting(false)
-                }
-                .padding(.top, Spacing.xl)
-                .padding(.horizontal, HomeLayout.heroHorizontalPadding)
-                .padding(.bottom, proxy.safeAreaInsets.bottom + HomeLayout.contentBottomPadding)
+                HomePageBackground()
+                HomeContrastOverlay()
+                HomeMountainSilhouette()
+                content
             }
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
+        .ignoresSafeArea(edges: [.top, .horizontal])
+        .background(AppColors.pageBase.ignoresSafeArea())
         .foregroundStyle(AppColors.textPrimary)
     }
+}
 
-    private func formatDistance(_ meters: Double) -> String {
-        if meters >= 1_000 {
-            return "\((meters / 1_000).formatted(.number.precision(.fractionLength(0...1)))) km"
+private struct GuestHomeContent: View {
+    let onStart: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            Spacer()
+            PrimaryAction(title: "开启一次新的徒步行程", variant: .compact, action: onStart)
         }
-        return "\(Int(meters.rounded())) m"
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+        .padding(.horizontal, HomeLayout.guestHorizontalPadding)
+        .padding(.bottom, HomeLayout.guestBottomPadding)
     }
+}
 
-    private func formatDuration(_ seconds: Double) -> String {
-        let hours = seconds / 3_600
-        return hours >= 24
-            ? "约 \((hours / 24).formatted(.number.precision(.fractionLength(0...1)))) 天"
-            : "约 \(hours.formatted(.number.precision(.fractionLength(0...1)))) 小时"
+private struct HomeLoadingContent: View {
+    var body: some View {
+        LoadingView(message: "正在读取当前行程", detail: "请稍候", variant: .scene)
     }
 }
 
@@ -179,70 +158,106 @@ struct HomePageBackground: View {
             startPoint: HomeStyle.gradientStartPoint,
             endPoint: HomeStyle.gradientEndPoint
         )
+        .ignoresSafeArea()
     }
 }
 
-private struct MountainSilhouetteView: View {
+private struct HomeContrastOverlay: View {
+    var body: some View {
+        LinearGradient(
+            stops: [
+                .init(color: AppColors.pageBase.opacity(0.18), location: 0),
+                .init(color: AppColors.pageBase.opacity(0), location: 0.34),
+                .init(color: AppColors.pageBase.opacity(0.90), location: 0.84),
+                .init(color: AppColors.pageBase, location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+    }
+}
+
+private struct HomeMountainSilhouette: View {
     var body: some View {
         Canvas { context, size in
-            let height: CGFloat = 280
+            let sceneHeight = size.height * 0.58
             let base = size.height
-            var path = Path()
-            path.move(to: CGPoint(x: 0, y: base))
-            path.addLine(to: CGPoint(x: size.width * 0.16, y: base - height * 0.57))
-            path.addLine(to: CGPoint(x: size.width * 0.48, y: base - height * 0.86))
-            path.addLine(to: CGPoint(x: size.width, y: base - height * 0.43))
-            path.addLine(to: CGPoint(x: size.width, y: base))
-            path.closeSubpath()
-            context.fill(path, with: .color(AppColors.surfaceDivider))
+
+            var middle = Path()
+            middle.move(to: CGPoint(x: -size.width * 0.08, y: base))
+            middle.addLine(to: CGPoint(x: -size.width * 0.08, y: base - sceneHeight * 0.28))
+            middle.addLine(to: CGPoint(x: size.width * 0.18, y: base - sceneHeight * 0.52))
+            middle.addLine(to: CGPoint(x: size.width * 0.43, y: base - sceneHeight * 0.37))
+            middle.addLine(to: CGPoint(x: size.width * 0.63, y: base - sceneHeight * 0.88))
+            middle.addLine(to: CGPoint(x: size.width * 0.78, y: base - sceneHeight * 0.55))
+            middle.addLine(to: CGPoint(x: size.width * 1.08, y: base - sceneHeight * 0.72))
+            middle.addLine(to: CGPoint(x: size.width * 1.08, y: base))
+            middle.closeSubpath()
+            context.fill(middle, with: .color(AppColors.sceneMountainMiddle))
+
+            var foreground = Path()
+            foreground.move(to: CGPoint(x: -size.width * 0.08, y: base))
+            foreground.addLine(to: CGPoint(x: -size.width * 0.08, y: base - sceneHeight * 0.14))
+            foreground.addLine(to: CGPoint(x: size.width * 0.20, y: base - sceneHeight * 0.34))
+            foreground.addLine(to: CGPoint(x: size.width * 0.46, y: base - sceneHeight * 0.18))
+            foreground.addLine(to: CGPoint(x: size.width * 0.72, y: base - sceneHeight * 0.48))
+            foreground.addLine(to: CGPoint(x: size.width * 1.08, y: base - sceneHeight * 0.20))
+            foreground.addLine(to: CGPoint(x: size.width * 1.08, y: base))
+            foreground.closeSubpath()
+            context.fill(foreground, with: .color(AppColors.sceneMountainFront))
         }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
-private struct WeatherHUD: View {
-    let text: String
-
-    var body: some View {
-        HStack(spacing: Spacing.sm) {
-            Image(systemName: "cloud.sun")
-            Text(text).lineLimit(1)
-        }
-        .font(.system(size: 13, weight: .medium))
-        .foregroundStyle(AppColors.textSecondary)
-    }
+#if DEBUG
+#Preview("guest") {
+    HomeView(viewModel: HomePreviewFixtures.homeViewModel(state: .guest))
 }
 
-private struct ErrorHomeView: View {
-    let onRetry: () -> Void
-
-    var body: some View {
-        ZStack {
-            HomePageBackground().ignoresSafeArea()
-            VStack(spacing: Spacing.md) {
-                Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 42, weight: .light))
-                    .foregroundStyle(AppColors.statusCancelled)
-                Text("当前行程加载失败").font(.system(size: 24, weight: .bold))
-                HomeGlassButton(title: "重试", emphasized: true, action: onRetry)
-            }
-        }
-        .foregroundStyle(AppColors.textPrimary)
-    }
+#Preview("focusComplete") {
+    HomeView(viewModel: HomePreviewFixtures.homeViewModel(
+        state: .ready,
+        trip: HomePreviewFixtures.completeTrip,
+        weather: HomePreviewFixtures.homeWeatherAvailable
+    ))
 }
 
-private struct HomeGlassButton: View {
-    let title: String
-    var emphasized = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(title, action: action)
-            .font(.system(size: 16, weight: .medium))
-            .foregroundStyle(emphasized ? AppColors.pageBase : AppColors.textPrimary)
-            .padding(.horizontal, Spacing.xl)
-            .padding(.vertical, Spacing.md)
-            .background(emphasized ? AppColors.interactionPrimary : AppColors.surfaceGlass, in: Capsule())
-            .overlay { Capsule().stroke(emphasized ? AppColors.borderStrong : AppColors.borderPrimary) }
-            .buttonStyle(.plain)
-    }
+#Preview("focusMissingMetrics") {
+    HomeView(viewModel: HomePreviewFixtures.homeViewModel(
+        state: .ready,
+        trip: HomePreviewFixtures.missingMetricsTrip,
+        weather: HomePreviewFixtures.homeWeatherAvailable
+    ))
 }
+
+#Preview("focusWeatherOmitted") {
+    HomeView(viewModel: HomePreviewFixtures.homeViewModel(
+        state: .ready,
+        trip: HomePreviewFixtures.completeTrip
+    ))
+}
+
+#Preview("loading") {
+    HomeView(viewModel: HomePreviewFixtures.homeViewModel(state: .loading))
+}
+
+#Preview("error") {
+    HomeView(viewModel: HomePreviewFixtures.homeViewModel(
+        state: .error("当前行程加载失败")
+    ))
+}
+
+#Preview("longContent") {
+    HomeView(viewModel: HomePreviewFixtures.homeViewModel(
+        state: .ready,
+        trip: HomePreviewFixtures.longContentTrip,
+        weather: HomePreviewFixtures.homeWeatherLongContent
+    ))
+    .environment(\.dynamicTypeSize, .accessibility2)
+}
+#endif

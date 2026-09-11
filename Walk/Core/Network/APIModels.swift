@@ -70,6 +70,25 @@ struct LocalDate: Codable, Hashable, Comparable, CustomStringConvertible {
     }
 }
 
+struct Instant: Codable, Hashable, CustomStringConvertible {
+    let rawValue: String
+
+    var description: String { rawValue }
+
+    init(rawValue: String) {
+        self.rawValue = rawValue
+    }
+
+    init(from decoder: Decoder) throws {
+        self.rawValue = try decoder.singleValueContainer().decode(String.self)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
 struct ErrorEnvelope: Decodable {
     let error: APIErrorPayload
 }
@@ -822,6 +841,7 @@ struct PublicRouteImage: Codable, Equatable, Identifiable {
     let mediaReference: String
     let role: PublicRouteImageRole
     let caption: String?
+    let description: String?
     let position: PublicRouteGeoPosition?
 
     var id: String { identity }
@@ -831,17 +851,19 @@ struct PublicRouteImage: Codable, Equatable, Identifiable {
         mediaReference: String,
         role: PublicRouteImageRole,
         caption: String? = nil,
+        description: String? = nil,
         position: PublicRouteGeoPosition? = nil
     ) {
         self.identity = identity
         self.mediaReference = mediaReference
         self.role = role
         self.caption = caption
+        self.description = description
         self.position = position
     }
 
     enum CodingKeys: String, CodingKey {
-        case identity, mediaReference, role, caption, position
+        case identity, mediaReference, role, caption, description, position
     }
 }
 
@@ -1258,9 +1280,17 @@ struct PersonalTripCalendar: Codable, Equatable {
     let days: [PersonalTripCalendarDay]
 }
 
+enum InformationCategory: String, Codable {
+    case publicRouteFact = "public_route_fact"
+    case dynamicExternalInformation = "dynamic_external_information"
+    case generatedSuggestion = "generated_suggestion"
+}
+
 struct InformationConfidence: Codable, Equatable {
     let status: String
-    let category: String?
+    var category: InformationCategory? = nil
+    var source: String? = nil
+    var updatedAt: Instant? = nil
 }
 
 struct QualifiedString: Codable, Equatable {
@@ -1283,8 +1313,38 @@ struct QualifiedDuration: Codable, Equatable {
     let confidence: InformationConfidence?
 }
 
+struct QualifiedInstant: Codable, Equatable {
+    let value: Instant?
+    let confidence: InformationConfidence?
+}
+
+struct WeatherOverview: Codable, Equatable {
+    let summary: QualifiedString
+    var importantImpacts: [ImportantWeatherImpact]? = nil
+}
+
+struct ImportantWeatherImpact: Codable, Equatable {
+    let sequence: Int
+    let content: QualifiedString
+}
+
 struct QualifiedDistance: Codable, Equatable {
     let value: RouteDistance?
+    let confidence: InformationConfidence?
+}
+
+struct QualifiedElevationGain: Codable, Equatable {
+    let value: RouteElevationGain?
+    let confidence: InformationConfidence?
+}
+
+struct TemperatureRange: Codable, Equatable {
+    let low: Double?
+    let high: Double?
+}
+
+struct QualifiedTemperatureRange: Codable, Equatable {
+    let value: TemperatureRange?
     let confidence: InformationConfidence?
 }
 
@@ -1295,73 +1355,6 @@ struct QualifiedPlace: Codable, Equatable {
 
 struct QualifiedPosition: Codable, Equatable {
     let value: PublicRouteGeoPosition?
-    let confidence: InformationConfidence?
-}
-
-indirect enum QualifiedJSONValue: Codable, Equatable {
-    case null
-    case string(String)
-    case number(Double)
-    case boolean(Bool)
-    case array([QualifiedJSONValue])
-    case object([String: QualifiedJSONValue])
-
-    var text: String? {
-        switch self {
-        case .null, .array, .object:
-            nil
-        case .string(let value):
-            value
-        case .number(let value):
-            String(value)
-        case .boolean(let value):
-            String(value)
-        }
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        if container.decodeNil() {
-            self = .null
-        } else if let value = try? container.decode(String.self) {
-            self = .string(value)
-        } else if let value = try? container.decode(Bool.self) {
-            self = .boolean(value)
-        } else if let value = try? container.decode(Double.self) {
-            self = .number(value)
-        } else if let value = try? container.decode([QualifiedJSONValue].self) {
-            self = .array(value)
-        } else if let value = try? container.decode([String: QualifiedJSONValue].self) {
-            self = .object(value)
-        } else {
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "Unsupported JSON value"
-            )
-        }
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-        switch self {
-        case .null:
-            try container.encodeNil()
-        case .string(let value):
-            try container.encode(value)
-        case .number(let value):
-            try container.encode(value)
-        case .boolean(let value):
-            try container.encode(value)
-        case .array(let value):
-            try container.encode(value)
-        case .object(let value):
-            try container.encode(value)
-        }
-    }
-}
-
-struct QualifiedJSON: Codable, Equatable {
-    let value: QualifiedJSONValue?
     let confidence: InformationConfidence?
 }
 
@@ -1384,7 +1377,7 @@ struct PersonalTripProjection: Codable, Equatable {
     let totalDayCount: Int
     let hikingDayCount: Int
     let frozenRouteBasis: FrozenRouteBasis
-    let weatherOverview: QualifiedString?
+    let weatherOverview: WeatherOverview?
     let importantNotices: [PersonalTripImportantNotice]?
 
     enum CodingKeys: String, CodingKey {
@@ -1414,7 +1407,7 @@ struct PersonalTripAction: Codable, Equatable, Identifiable {
     let start: QualifiedPlace?
     let end: QualifiedPlace?
     let distance: QualifiedDistance?
-    let ascent: QualifiedDistance?
+    let ascent: QualifiedElevationGain?
 
     var id: Int { sequence }
 
@@ -1426,14 +1419,14 @@ struct PersonalTripAction: Codable, Equatable, Identifiable {
 }
 
 struct PersonalTripDayWeather: Codable, Equatable {
-    let condition: QualifiedJSON
-    let temperatureRange: QualifiedJSON
-    let precipitation: QualifiedJSON
-    let wind: QualifiedJSON
-    let placeContext: QualifiedJSON
-    let routeSectionContext: QualifiedJSON?
+    let condition: QualifiedString
+    let temperatureRange: QualifiedTemperatureRange
+    let precipitation: QualifiedString
+    let wind: QualifiedString
+    let placeContext: QualifiedString
+    let routeSectionContext: QualifiedString?
     let source: QualifiedString?
-    let updatedAt: QualifiedString?
+    let updatedAt: QualifiedInstant?
 
     enum CodingKeys: String, CodingKey {
         case condition, temperatureRange, precipitation, wind
@@ -1646,18 +1639,228 @@ struct PersonalTripWeatherDay: Codable, Equatable, Identifiable {
     }
 }
 
-struct PersonalTripWeather: Codable, Equatable {
+struct LegacyPersonalTripWeather: Codable, Equatable {
     let tripID: String
     let revision: String
     let routeName: String
     let startDate: LocalDate
     let endDate: LocalDate
     let days: [PersonalTripWeatherDay]
-    let weatherOverview: QualifiedString?
+    let weatherOverview: WeatherOverview?
 
     enum CodingKeys: String, CodingKey {
         case tripID = "tripId"
         case revision, routeName, startDate, endDate, days, weatherOverview
+    }
+}
+
+struct WeatherQualifiedValue<Value: Codable & Equatable>: Codable, Equatable {
+    let value: Value?
+    let confidence: InformationConfidence?
+
+    init(value: Value? = nil, confidence: InformationConfidence? = nil) {
+        self.value = value
+        self.confidence = confidence
+    }
+}
+
+struct WeatherLocation: Codable, Equatable {
+    let position: PublicRouteGeoPosition
+    let name: String?
+
+    init(position: PublicRouteGeoPosition, name: String? = nil) {
+        self.position = position
+        self.name = name
+    }
+}
+
+struct WeatherCondition: Codable, Equatable {
+    let description: String
+
+    init(description: String) {
+        self.description = description
+    }
+}
+
+struct PrecipitationAmount: Codable, Equatable {
+    let millimeters: Double
+
+    init(millimeters: Double) {
+        self.millimeters = millimeters
+    }
+}
+
+struct WindSpeed: Codable, Equatable {
+    let metersPerSecond: Double
+
+    init(metersPerSecond: Double) {
+        self.metersPerSecond = metersPerSecond
+    }
+}
+
+struct WeatherPrecipitation: Codable, Equatable {
+    let description: String?
+    let probability: Double?
+    let amount: PrecipitationAmount?
+
+    init(
+        description: String? = nil,
+        probability: Double? = nil,
+        amount: PrecipitationAmount? = nil
+    ) {
+        self.description = description
+        self.probability = probability
+        self.amount = amount
+    }
+}
+
+struct WeatherWind: Codable, Equatable {
+    let description: String?
+    let averageSpeed: WindSpeed?
+    let gustSpeed: WindSpeed?
+    let direction: String?
+
+    init(
+        description: String? = nil,
+        averageSpeed: WindSpeed? = nil,
+        gustSpeed: WindSpeed? = nil,
+        direction: String? = nil
+    ) {
+        self.description = description
+        self.averageSpeed = averageSpeed
+        self.gustSpeed = gustSpeed
+        self.direction = direction
+    }
+}
+
+struct WeatherForecastPeriod: Codable, Equatable {
+    let periodStart: Instant
+    let periodEnd: Instant
+    let condition: WeatherQualifiedValue<WeatherCondition>?
+    let temperatureRange: WeatherQualifiedValue<TemperatureRange>?
+    let precipitation: WeatherQualifiedValue<WeatherPrecipitation>?
+    let wind: WeatherQualifiedValue<WeatherWind>?
+
+    init(
+        periodStart: Instant,
+        periodEnd: Instant,
+        condition: WeatherQualifiedValue<WeatherCondition>? = nil,
+        temperatureRange: WeatherQualifiedValue<TemperatureRange>? = nil,
+        precipitation: WeatherQualifiedValue<WeatherPrecipitation>? = nil,
+        wind: WeatherQualifiedValue<WeatherWind>? = nil
+    ) {
+        self.periodStart = periodStart
+        self.periodEnd = periodEnd
+        self.condition = condition
+        self.temperatureRange = temperatureRange
+        self.precipitation = precipitation
+        self.wind = wind
+    }
+}
+
+struct WeatherForecast: Codable, Equatable {
+    let identity: String
+    let location: WeatherLocation
+    let source: String?
+    let publishedAt: Instant?
+    let periods: [WeatherForecastPeriod]
+
+    init(
+        identity: String,
+        location: WeatherLocation,
+        source: String? = nil,
+        publishedAt: Instant? = nil,
+        periods: [WeatherForecastPeriod]
+    ) {
+        self.identity = identity
+        self.location = location
+        self.source = source
+        self.publishedAt = publishedAt
+        self.periods = periods
+    }
+}
+
+enum TripWeatherAssociationScope: String, Codable, Equatable {
+    case day
+    case hikeAction = "hike_action"
+}
+
+struct TripWeatherAssociation: Codable, Equatable, Identifiable {
+    let associationIdentity: String
+    let sequence: Int
+    let scope: TripWeatherAssociationScope
+    let hikeActionIdentity: String?
+    let targetLocation: WeatherLocation
+    let targetPeriodStart: Instant
+    let targetPeriodEnd: Instant
+    let forecastConfidence: InformationConfidence?
+    let forecast: WeatherForecast?
+
+    var id: String { associationIdentity }
+
+    init(
+        associationIdentity: String,
+        sequence: Int,
+        scope: TripWeatherAssociationScope,
+        hikeActionIdentity: String? = nil,
+        targetLocation: WeatherLocation,
+        targetPeriodStart: Instant,
+        targetPeriodEnd: Instant,
+        forecastConfidence: InformationConfidence? = nil,
+        forecast: WeatherForecast? = nil
+    ) {
+        self.associationIdentity = associationIdentity
+        self.sequence = sequence
+        self.scope = scope
+        self.hikeActionIdentity = hikeActionIdentity
+        self.targetLocation = targetLocation
+        self.targetPeriodStart = targetPeriodStart
+        self.targetPeriodEnd = targetPeriodEnd
+        self.forecastConfidence = forecastConfidence
+        self.forecast = forecast
+    }
+}
+
+struct PersonalTripWeatherAssociationDay: Codable, Equatable, Identifiable {
+    let tripDayID: String
+    let dayNumber: Int
+    let date: LocalDate
+    let weatherAssociations: [TripWeatherAssociation]
+
+    var id: String { tripDayID }
+
+    init(
+        tripDayID: String,
+        dayNumber: Int,
+        date: LocalDate,
+        weatherAssociations: [TripWeatherAssociation]
+    ) {
+        self.tripDayID = tripDayID
+        self.dayNumber = dayNumber
+        self.date = date
+        self.weatherAssociations = weatherAssociations
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case tripDayID = "tripDayId"
+        case dayNumber, date, weatherAssociations
+    }
+}
+
+struct PersonalTripWeather: Codable, Equatable {
+    let tripID: String
+    let revision: String
+    let days: [PersonalTripWeatherAssociationDay]
+
+    init(tripID: String, revision: String, days: [PersonalTripWeatherAssociationDay]) {
+        self.tripID = tripID
+        self.revision = revision
+        self.days = days
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case tripID = "tripId"
+        case revision, days
     }
 }
 
@@ -1709,7 +1912,7 @@ struct PersonalTripGenerationContext: Codable, Equatable {
 struct PersonalTripTransportOption: Codable, Equatable, Identifiable {
     let transportOptionID: String
     let transferCount: QualifiedInteger
-    let estimatedArrivalAt: QualifiedString
+    let estimatedArrivalAt: QualifiedInstant
     let estimatedDuration: QualifiedDuration
     let verificationItems: [String]
 

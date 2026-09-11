@@ -1,5 +1,4 @@
 import Foundation
-import SwiftUI
 
 /// 行程状态。后端当前定义 0...3；未知整数会被保留，避免新状态导致解码失败。
 enum TripStatus: Codable, Equatable {
@@ -48,23 +47,4 @@ enum TripStatus: Codable, Equatable {
         }
     }
 
-    var color: Color {
-        switch self {
-        case .planning: return AppColors.statusPlanning
-        case .inProgress: return AppColors.statusProgress
-        case .completed: return AppColors.statusCompleted
-        case .cancelled: return AppColors.statusCancelled
-        case .unknown: return AppColors.textWeak
-        }
-    }
-
-    var backgroundColor: Color {
-        switch self {
-        case .planning: return AppColors.statusPlanningBackground
-        case .inProgress: return AppColors.statusProgressBackground
-        case .completed: return AppColors.statusCompletedBackground
-        case .cancelled: return AppColors.statusCancelledBackground
-        case .unknown: return AppColors.borderPrimary
-        }
-    }
 }

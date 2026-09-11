@@ -1,25 +1,25 @@
 import SwiftUI
 
 enum RouteDiscoveryLayout {
-    static let cardHeightRatio: CGFloat = 0.72
-    static let minimumCardHeight: CGFloat = 400
-    static let maximumCardHeight: CGFloat = 680
+    static let tagTop: CGFloat = 72
+    static let copyBottom: CGFloat = 36
+    static let sceneHorizontalPadding: CGFloat = 20
+    static let compactHorizontalPadding: CGFloat = 16
+    static let allRoutesTop: CGFloat = 58
 
     static func cardHeight(for viewportHeight: CGFloat) -> CGFloat {
-        min(max(viewportHeight * cardHeightRatio, minimumCardHeight), maximumCardHeight)
+        max(0, viewportHeight - (2 * Spacing.sm))
     }
 }
 
 struct RouteDiscoveryView: View {
     @StateObject private var viewModel: RouteDiscoveryViewModel
-    private let routeService: RouteService
     private let onNavigate: (AppDestination) -> Void
 
     init(
         routeService: RouteService,
         onNavigate: @escaping (AppDestination) -> Void = { _ in }
     ) {
-        self.routeService = routeService
         self.onNavigate = onNavigate
         _viewModel = StateObject(wrappedValue: RouteDiscoveryViewModel(service: routeService))
     }
@@ -28,62 +28,387 @@ struct RouteDiscoveryView: View {
         GeometryReader { geometry in
             ImmersivePageContainer {
                 ZStack(alignment: .topTrailing) {
-                    Group {
-                        if viewModel.isLoading && viewModel.routes.isEmpty {
-                            RouteCardSkeletonView(height: RouteDiscoveryLayout.cardHeight(for: geometry.size.height))
-                        } else if viewModel.errorMessage != nil && viewModel.routes.isEmpty {
-                            RouteMessageCard(
-                                icon: "arrow.clockwise.circle",
-                                message: "加载失败，点击重试",
-                                height: RouteDiscoveryLayout.cardHeight(for: geometry.size.height)
-                            ) {
-                                Task { await viewModel.retry() }
-                            }
-                        } else if viewModel.routes.isEmpty {
-                            RouteMessageCard(
-                                icon: "map",
-                                message: "暂无可发现路线",
-                                height: RouteDiscoveryLayout.cardHeight(for: geometry.size.height)
-                            )
-                        } else {
-                            ScrollView(.vertical) {
-                                LazyVStack(spacing: 0) {
-                                    ForEach(viewModel.routes) { route in
-                                        Button {
-                                            onNavigate(.routeDetail(route.routeId))
-                                        } label: {
-                                            RouteCardView(route: route, height: geometry.size.height)
-                                                .padding(.horizontal, Spacing.pageHorizontal)
-                                                .padding(.vertical, Spacing.sm)
-                                        }
-                                        .buttonStyle(RouteCardButtonStyle())
-                                        .frame(height: geometry.size.height)
-                                    }
-                                }
-                                .background(RoutePagingConfigurator())
-                            }
-                            .scrollIndicators(.hidden)
-                        }
-                    }
+                    routeState(viewport: geometry.size)
 
-                    Button {
+                    SecondaryAction(title: "全部路线", variant: .overlayCompact) {
                         onNavigate(.routeList)
-                    } label: {
-                        Text("全部路线")
-                            .font(.label)
-                            .foregroundStyle(AppColors.textSecondary)
-                            .padding(.horizontal, Spacing.md)
-                            .frame(minHeight: 44)
-                            .background(AppColors.shadowOverlay, in: Capsule())
                     }
-                    .buttonStyle(.plain)
-                    .padding(.top, Spacing.sm)
-                    .padding(.trailing, Spacing.pageHorizontal)
+                    .padding(.top, RouteDiscoveryLayout.allRoutesTop)
+                    .padding(.trailing, horizontalPadding(for: geometry.size.width))
                 }
             }
         }
         .task { await viewModel.loadRoutes() }
         .toolbar(.hidden, for: .navigationBar)
+        .ignoresSafeArea(edges: .top)
+    }
+
+    @ViewBuilder
+    private func routeState(viewport: CGSize) -> some View {
+        if viewModel.isLoading && viewModel.routes.isEmpty {
+            RouteSceneSkeleton()
+                .frame(width: viewport.width, height: viewport.height)
+        } else if let message = viewModel.errorMessage, viewModel.routes.isEmpty {
+            RouteSceneState {
+                ErrorView(message: message, title: "暂时无法加载路线", variant: .section) {
+                    Task { await viewModel.retry() }
+                }
+            }
+            .frame(width: viewport.width, height: viewport.height)
+        } else if viewModel.routes.isEmpty {
+            RouteSceneState {
+                EmptyStateView(
+                    title: "暂无路线",
+                    message: "当前暂无可发现路线",
+                    icon: nil,
+                    variant: .compactText
+                )
+            }
+            .frame(width: viewport.width, height: viewport.height)
+        } else {
+            ScrollView(.vertical) {
+                LazyVStack(spacing: 0) {
+                    ForEach(viewModel.routes) { route in
+                        RouteBusinessComponents.RouteScene(
+                            projection: RouteSceneProjection(
+                                routeID: route.routeId,
+                                coverAvailable: false,
+                                name: route.name,
+                                region: route.region,
+                                difficulty: route.difficulty,
+                                metrics: [
+                                    route.distance.map {
+                                        MetricItemModel(
+                                            id: "distance",
+                                            value: distanceText($0.meters),
+                                            label: "距离"
+                                        )
+                                    },
+                                    route.ascent.map {
+                                        MetricItemModel(
+                                            id: "ascent",
+                                            value: metersText($0.meters),
+                                            label: "累计爬升"
+                                        )
+                                    },
+                                    route.estimatedDuration.map {
+                                        MetricItemModel(
+                                            id: "estimated-duration",
+                                            value: durationText($0.seconds),
+                                            label: "预计用时"
+                                        )
+                                    },
+                                ].compactMap { $0 }
+                            ),
+                            onSelect: { _ in
+                                onNavigate(.routeDetail(route.routeId))
+                            }
+                        ) {
+                            RouteDeterministicImageSurface(style: .forest)
+                        }
+                        .frame(width: viewport.width, height: viewport.height)
+                    }
+                }
+                .background(RoutePagingConfigurator())
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+
+    private func horizontalPadding(for width: CGFloat) -> CGFloat {
+        width < 390
+            ? RouteDiscoveryLayout.compactHorizontalPadding
+            : RouteDiscoveryLayout.sceneHorizontalPadding
+    }
+}
+
+struct RouteCollectionView: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var viewModel: RouteCollectionViewModel
+    private let showsBackButton: Bool
+    private let onNavigate: (AppDestination) -> Void
+
+    init(
+        routeService: RouteService,
+        showsBackButton: Bool = true,
+        onNavigate: @escaping (AppDestination) -> Void = { _ in }
+    ) {
+        self.showsBackButton = showsBackButton
+        self.onNavigate = onNavigate
+        _viewModel = StateObject(wrappedValue: RouteCollectionViewModel(service: routeService))
+    }
+
+    var body: some View {
+        UtilityPageContainer {
+            VStack(spacing: 0) {
+                UtilityNavigationHeader(
+                    title: "全部路线",
+                    leading: showsBackButton
+                        ? IconButtonConfiguration(
+                            systemName: "chevron.left",
+                            accessibilityLabel: "返回",
+                            action: { dismiss() }
+                        )
+                        : nil,
+                    trailing: IconButtonConfiguration(
+                        systemName: "magnifyingglass",
+                        accessibilityLabel: "搜索路线",
+                        action: { onNavigate(.routeSearch) }
+                    )
+                )
+
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: Spacing.lg) {
+                        Text("快速扫描和比较 Walk 当前提供的路线")
+                            .font(.appCaption)
+                            .foregroundStyle(AppColors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        collectionState
+                            .frame(maxWidth: .infinity)
+                    }
+                    .frame(maxWidth: 600, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .padding(Spacing.lg)
+                }
+            }
+        }
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
+        .task { await viewModel.loadRoutes() }
+    }
+
+    @ViewBuilder
+    private var collectionState: some View {
+        if viewModel.isLoading && viewModel.routes.isEmpty {
+            RouteRowSkeletonList()
+        } else if let message = viewModel.errorMessage, viewModel.routes.isEmpty {
+            ErrorView(message: message, variant: .section) {
+                Task { await viewModel.retry() }
+            }
+            .frame(minHeight: 360)
+        } else if viewModel.routes.isEmpty {
+            EmptyStateView(
+                title: "暂无路线",
+                message: "当前暂无可选择路线",
+                icon: "map",
+                variant: .section
+            )
+            .frame(maxWidth: .infinity, minHeight: 360, alignment: .center)
+        } else {
+            LazyVStack(spacing: Spacing.md) {
+                ForEach(viewModel.routes) { route in
+                    RouteBusinessComponents.RouteListRow(
+                        projection: .browse(
+                            RouteBrowseRowProjection(
+                                routeID: route.routeId,
+                                coverAvailable: false,
+                                name: route.name,
+                                region: route.region,
+                                difficulty: route.difficulty,
+                                distance: route.distance.map { distanceText($0.meters) },
+                                ascent: route.ascent.map { "爬升 \(metersText($0.meters))" },
+                                estimatedDuration: route.estimatedDuration.map { "约 \(durationText($0.seconds))" }
+                            )
+                        ),
+                        onSelect: { routeID in
+                            onNavigate(.routeDetail(routeID))
+                        }
+                    ) {
+                        RouteDeterministicImageSurface(style: .forest)
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct RouteSearchView: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var viewModel: RouteDiscoveryViewModel
+    @State private var query = ""
+    private let onNavigate: (AppDestination) -> Void
+
+    init(
+        routeService: RouteService,
+        onNavigate: @escaping (AppDestination) -> Void = { _ in }
+    ) {
+        self.onNavigate = onNavigate
+        _viewModel = StateObject(wrappedValue: RouteDiscoveryViewModel(service: routeService))
+    }
+
+    var body: some View {
+        UtilityPageContainer {
+            VStack(spacing: 0) {
+                UtilityNavigationHeader(
+                    title: "路线搜索",
+                    leading: IconButtonConfiguration(
+                        systemName: "chevron.left",
+                        accessibilityLabel: "返回全部路线",
+                        action: { dismiss() }
+                    )
+                )
+
+                searchInputRegion
+
+                ScrollView(.vertical, showsIndicators: false) {
+                    searchState
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: 320, alignment: .top)
+                        .frame(maxWidth: 600, alignment: .topLeading)
+                        .padding(.horizontal, Spacing.lg)
+                        .padding(.bottom, Spacing.xxl)
+                }
+                .scrollDismissesKeyboard(.interactively)
+            }
+        }
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
+        .task(id: query) {
+            await viewModel.search(query: normalizedQueryIsEmpty(query) ? nil : query)
+        }
+    }
+
+    private var searchInputRegion: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            SearchField(
+                text: $query,
+                placeholder: "搜索路线名称或地区",
+                onSubmit: submitSearch
+            )
+            .background(SearchFocusActivator(placeholder: "搜索路线名称或地区"))
+
+            Text("只搜索 Walk 当前提供的徒步路线")
+                .font(.appCaption)
+                .foregroundStyle(AppColors.textWeak)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: 600, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .padding(.horizontal, Spacing.lg)
+        .padding(.top, Spacing.md)
+        .padding(.bottom, Spacing.lg)
+        .background(AppColors.pageBase.opacity(0.96))
+        .zIndex(2)
+    }
+
+    @ViewBuilder
+    private var searchState: some View {
+        if viewModel.isLoading {
+            RouteRowSkeletonList()
+        } else if let message = viewModel.errorMessage {
+            ErrorView(message: message, title: "搜索失败", variant: .section) {
+                submitSearch()
+            }
+        } else if viewModel.searchState == .initial {
+            EmptyStateView(
+                title: "搜索路线",
+                message: "输入路线名称或地区",
+                icon: nil,
+                variant: .compactText
+            )
+            .padding(.top, Spacing.xxxl)
+        } else if viewModel.searchResults.isEmpty {
+            EmptyStateView(
+                title: "未找到路线",
+                message: "Walk 当前没有找到相关路线",
+                icon: nil,
+                variant: .compactText
+            )
+            .padding(.top, Spacing.xxxl)
+        } else {
+            LazyVStack(spacing: Spacing.md) {
+                ForEach(viewModel.searchResults) { route in
+                    RouteBusinessComponents.SearchRouteResultRow(
+                        projection: SearchRouteResultRowProjection(
+                            routeID: route.routeId,
+                            coverAvailable: nonEmpty(route.cover) != nil,
+                            name: route.name,
+                            region: route.region,
+                            difficulty: route.difficulty,
+                            distance: route.distance.map { distanceText($0.meters) },
+                            estimatedDuration: route.estimatedDuration.map { "约 \(durationText($0.seconds))" }
+                        ),
+                        onSelect: { routeID in
+                            onNavigate(.routeDetail(routeID))
+                        }
+                    ) {
+                        RouteArtworkView(cover: route.cover)
+                    }
+                }
+            }
+        }
+    }
+
+    private func submitSearch() {
+        Task { await viewModel.search(query: query) }
+    }
+
+    private func normalizedQueryIsEmpty(_ value: String) -> Bool {
+        value.unicodeScalars.allSatisfy { scalar in
+            switch scalar.value {
+            case 0x20, 0x09, 0x0A, 0x0D, 0x3000: true
+            default: false
+            }
+        }
+    }
+}
+
+private struct SearchFocusActivator: UIViewRepresentable {
+    let placeholder: String
+
+    func makeUIView(context: Context) -> FocusProbeView {
+        FocusProbeView(placeholder: placeholder)
+    }
+
+    func updateUIView(_ view: FocusProbeView, context: Context) {
+        view.placeholder = placeholder
+        view.requestFocus()
+    }
+
+    final class FocusProbeView: UIView {
+        var placeholder: String
+        private var didRequestFocus = false
+
+        init(placeholder: String) {
+            self.placeholder = placeholder
+            super.init(frame: .zero)
+            isUserInteractionEnabled = false
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            requestFocus()
+        }
+
+        func requestFocus() {
+            guard window != nil, !didRequestFocus else { return }
+            didRequestFocus = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self,
+                      let textField = self.window?.firstTextField(placeholder: self.placeholder) else { return }
+                textField.becomeFirstResponder()
+            }
+        }
+    }
+}
+
+private extension UIView {
+    func firstTextField(placeholder: String) -> UITextField? {
+        if let textField = self as? UITextField, textField.placeholder == placeholder {
+            return textField
+        }
+        for subview in subviews {
+            if let match = subview.firstTextField(placeholder: placeholder) { return match }
+        }
+        return nil
     }
 }
 
@@ -116,294 +441,70 @@ private struct RoutePagingConfigurator: UIViewRepresentable {
     }
 }
 
-struct RouteCollectionView: View {
-    @StateObject private var viewModel: RouteCollectionViewModel
-    private let routeService: RouteService
-    private let onNavigate: (AppDestination) -> Void
-
-    init(
-        routeService: RouteService,
-        onNavigate: @escaping (AppDestination) -> Void = { _ in }
-    ) {
-        self.routeService = routeService
-        self.onNavigate = onNavigate
-        _viewModel = StateObject(wrappedValue: RouteCollectionViewModel(service: routeService))
-    }
-
-    var body: some View {
-        Group {
-            if viewModel.isLoading && viewModel.routes.isEmpty {
-                LoadingView()
-            } else if viewModel.errorMessage != nil && viewModel.routes.isEmpty {
-                ErrorView(message: "加载失败") { Task { await viewModel.retry() } }
-            } else if viewModel.routes.isEmpty {
-                EmptyStateView(title: "暂无路线", message: "当前暂无可选择路线", icon: "map")
-            } else {
-                List(viewModel.routes) { route in
-                    Button {
-                        onNavigate(.routeDetail(route.routeId))
-                    } label: {
-                        PublicRouteCompactRow(
-                            cover: route.cover,
-                            name: route.name,
-                            region: route.region,
-                            difficulty: route.difficulty,
-                            distance: route.distance,
-                            ascent: route.ascent,
-                            estimatedDuration: route.estimatedDuration
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .listRowBackground(AppColors.pageBase)
-                }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-            }
-        }
-        .background(AppColors.pageBase.ignoresSafeArea())
-        .navigationTitle("全部路线")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    onNavigate(.routeSearch)
-                } label: {
-                    Image(systemName: "magnifyingglass")
-                }
-                .accessibilityLabel("搜索路线")
-            }
-        }
-        .task { await viewModel.loadRoutes() }
-    }
-}
-
-struct RouteSearchView: View {
-    @StateObject private var viewModel: RouteDiscoveryViewModel
-    @FocusState private var searchFocused: Bool
-    @State private var query = ""
-    private let routeService: RouteService
-    private let onNavigate: (AppDestination) -> Void
-
-    init(
-        routeService: RouteService,
-        onNavigate: @escaping (AppDestination) -> Void = { _ in }
-    ) {
-        self.routeService = routeService
-        self.onNavigate = onNavigate
-        _viewModel = StateObject(wrappedValue: RouteDiscoveryViewModel(service: routeService))
-    }
-
-    var body: some View {
-        VStack(spacing: Spacing.md) {
-            HStack(spacing: Spacing.sm) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(AppColors.textWeak)
-                TextField("搜索路线名称或地区", text: $query)
-                    .focused($searchFocused)
-                    .submitLabel(.search)
-                    .onSubmit { Task { await viewModel.search(query: query) } }
-                if !query.isEmpty {
-                    Button {
-                        query = ""
-                        Task { await viewModel.search(query: nil) }
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("清空搜索")
-                }
-            }
-            .padding(.horizontal, Spacing.md)
-            .frame(minHeight: 44)
-            .background(AppColors.surfacePrimary, in: RoundedRectangle(cornerRadius: Radius.md))
-            .padding(.horizontal, Spacing.pageHorizontal)
-
-            searchContent
-        }
-        .background(AppColors.pageBase.ignoresSafeArea())
-        .navigationTitle("路线搜索")
-        .navigationBarTitleDisplayMode(.inline)
-        .task { searchFocused = true }
-    }
-
-    @ViewBuilder
-    private var searchContent: some View {
-        if viewModel.isLoading {
-            LoadingView()
-        } else if viewModel.errorMessage != nil {
-            ErrorView(message: "搜索失败") { Task { await viewModel.search(query: query) } }
-        } else if viewModel.searchState == .initial {
-            EmptyStateView(title: "搜索路线", message: "输入路线名称或地区", icon: "magnifyingglass")
-        } else if viewModel.searchResults.isEmpty {
-            EmptyStateView(title: "未找到路线", message: "Walk 当前没有找到相关路线", icon: "map")
-        } else {
-            List(viewModel.searchResults) { route in
-                Button {
-                    onNavigate(.routeDetail(route.routeId))
-                } label: {
-                    PublicRouteCompactRow(
-                        cover: route.cover,
-                        name: route.name,
-                        region: route.region,
-                        difficulty: route.difficulty,
-                        distance: route.distance,
-                        ascent: nil,
-                        estimatedDuration: route.estimatedDuration
-                    )
-                }
-                .buttonStyle(.plain)
-                .listRowBackground(AppColors.pageBase)
-            }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-        }
-    }
-}
-
-private struct PublicRouteCompactRow: View {
-    let cover: String?
-    let name: String?
-    let region: String?
-    let difficulty: String?
-    let distance: RouteDistance?
-    let ascent: RouteElevationGain?
-    let estimatedDuration: RouteDuration?
-
-    var body: some View {
-        HStack(spacing: Spacing.md) {
-            RouteArtworkView(cover: cover)
-                .frame(width: 96, height: 76)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-
-            VStack(alignment: .leading, spacing: Spacing.xs) {
-                Text(nonEmpty(name) ?? "未命名路线")
-                    .font(.headline)
-                    .foregroundStyle(AppColors.textPrimary)
-
-                Text([region, difficulty].compactMap(nonEmpty).joined(separator: " · "))
-                    .font(.bodySmall)
-                    .foregroundStyle(AppColors.textSecondary)
-
-                Text(metrics)
-                    .font(.caption)
-                    .foregroundStyle(AppColors.textWeak)
-            }
-        }
-        .padding(.vertical, Spacing.xs)
-    }
-
-    private var metrics: String {
-        var values: [String] = []
-        if let meters = distance?.meters {
-            values.append(meters >= 1_000 ? "\((meters / 1_000).formatted(.number.precision(.fractionLength(0...1)))) km" : "\(meters.formatted()) m")
-        }
-        if let meters = ascent?.meters {
-            values.append("爬升 \(meters.formatted(.number.precision(.fractionLength(0...1)))) m")
-        }
-        if let seconds = estimatedDuration?.seconds {
-            let hours = seconds / 3_600
-            values.append(hours >= 24 ? "\((hours / 24).formatted(.number.precision(.fractionLength(0...1)))) 天" : "\(hours.formatted(.number.precision(.fractionLength(0...1)))) 小时")
-        }
-        return values.joined(separator: " · ")
-    }
-
-    private func nonEmpty(_ value: String?) -> String? {
-        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
-        return value
-    }
-}
-
-struct RouteCardView: View {
-    let route: PublicRouteBrowseSummary
-    let height: CGFloat
-
-    init(
-        route: PublicRouteBrowseSummary,
-        height: CGFloat = RouteDiscoveryLayout.minimumCardHeight
-    ) {
-        self.route = route
-        self.height = height
-    }
-
+private struct RouteSceneSkeleton: View {
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            RouteArtworkView(cover: route.cover)
-
             LinearGradient(
-                colors: [AppColors.surfaceOverlay.opacity(0), AppColors.surfaceOverlay, AppColors.pageBase],
+                colors: [AppColors.surfacePrimary, AppColors.pageBase],
                 startPoint: .top,
                 endPoint: .bottom
             )
 
-            VStack(alignment: .leading, spacing: Spacing.md) {
-                HStack(spacing: Spacing.sm) {
-                    if let region = nonEmpty(route.region) { routePill(region) }
-                    if let difficulty = nonEmpty(route.difficulty) { routePill(difficulty) }
-                }
-
+            VStack(alignment: .leading, spacing: Spacing.lg) {
                 Spacer()
-
-                Text(nonEmpty(route.name) ?? "未命名路线")
-                    .font(.system(size: 30, weight: .bold))
-                    .lineLimit(2)
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: Spacing.md) {
-                    if let distance = route.distance?.meters {
-                        routeMetric(icon: "point.topleft.down.curvedto.point.bottomright.up", value: formatDistance(distance))
-                    }
-                    if let ascent = route.ascent?.meters {
-                        routeMetric(icon: "arrow.up.right", value: "爬升 \(formatMeters(ascent))")
-                    }
-                    if let duration = route.estimatedDuration?.seconds {
-                        routeMetric(icon: "clock", value: formatDuration(duration))
+                RoundedRectangle(cornerRadius: Radius.sm)
+                    .fill(AppColors.surfaceGlass)
+                    .frame(width: 228, height: 34)
+                HStack(spacing: Spacing.xl) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: Radius.sm)
+                            .fill(AppColors.surfaceGlass)
+                            .frame(width: 68, height: 36)
                     }
                 }
             }
-            .padding(Spacing.heroHorizontal)
+            .padding(.horizontal, RouteDiscoveryLayout.sceneHorizontalPadding)
+            .padding(.bottom, RouteDiscoveryLayout.copyBottom)
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: min(max(height - 2 * Spacing.sm, RouteDiscoveryLayout.minimumCardHeight), RouteDiscoveryLayout.maximumCardHeight))
-        .clipShape(RoundedRectangle(cornerRadius: Radius.xl, style: .continuous))
-        .shadow(color: AppColors.shadowCard, radius: 20, y: 10)
-        .contentShape(RoundedRectangle(cornerRadius: Radius.xl, style: .continuous))
+        .accessibilityLabel("路线加载中")
+    }
+}
+
+private struct RouteSceneState<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
     }
 
-    private func routePill(_ title: String) -> some View {
-        Text(title)
-            .font(.label)
-            .padding(.horizontal, Spacing.md)
-            .padding(.vertical, Spacing.sm)
-            .background(AppColors.surfaceGlass, in: Capsule())
+    var body: some View {
+        content
+            .frame(maxWidth: 320)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, Spacing.xl)
     }
+}
 
-    private func routeMetric(icon: String, value: String) -> some View {
-        Label(value, systemImage: icon)
-            .font(.caption)
-            .foregroundStyle(AppColors.textSecondary)
-    }
-
-    private func nonEmpty(_ value: String?) -> String? {
-        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
-        return value
-    }
-
-    private func formatDistance(_ meters: Double) -> String {
-        if meters >= 1_000 {
-            return "\((meters / 1_000).formatted(.number.precision(.fractionLength(0...1)))) km"
+private struct RouteRowSkeletonList: View {
+    var body: some View {
+        VStack(spacing: Spacing.md) {
+            ForEach(0..<3, id: \.self) { _ in
+                RouteListRow(title: " ") {
+                    RouteThumbnailPlaceholder(systemImage: "map")
+                } metadata: {
+                    VStack(alignment: .leading, spacing: Spacing.sm) {
+                        RoundedRectangle(cornerRadius: Radius.sm)
+                            .fill(AppColors.surfaceDivider)
+                            .frame(width: 110, height: 10)
+                        RoundedRectangle(cornerRadius: Radius.sm)
+                            .fill(AppColors.surfaceDivider)
+                            .frame(width: 150, height: 10)
+                    }
+                }
+                .redacted(reason: .placeholder)
+                .accessibilityLabel("路线加载中")
+            }
         }
-        return formatMeters(meters)
-    }
-
-    private func formatMeters(_ meters: Double) -> String {
-        "\(meters.formatted(.number.precision(.fractionLength(0...1)))) m"
-    }
-
-    private func formatDuration(_ seconds: Double) -> String {
-        let hours = seconds / 3_600
-        if hours >= 24 {
-            return "\((hours / 24).formatted(.number.precision(.fractionLength(0...1)))) 天"
-        }
-        return "\(hours.formatted(.number.precision(.fractionLength(0...1)))) 小时"
     }
 }
 
@@ -417,93 +518,59 @@ private struct RouteArtworkView: View {
                     if let image = phase.image {
                         image.resizable().scaledToFill()
                     } else {
-                        atmosphericPlaceholder
+                        neutralTerrain
                     }
                 }
             } else {
-                atmosphericPlaceholder
+                neutralTerrain
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
     }
 
-    private var atmosphericPlaceholder: some View {
+    private var neutralTerrain: some View {
         ZStack {
             LinearGradient(
-                colors: [AppColors.surfaceElevated, AppColors.pageMiddle, AppColors.pageBase],
+                colors: [AppColors.surfacePrimary, AppColors.pageMiddle, AppColors.pageBase],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             Image(systemName: "mountain.2.fill")
-                .font(.system(size: 150, weight: .ultraLight))
+                .font(.ornament(64))
                 .foregroundStyle(AppColors.surfaceGlass)
-                .offset(y: -30)
         }
     }
 }
 
-private struct RouteCardSkeletonView: View {
-    let height: CGFloat
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: Radius.xl, style: .continuous)
-            .fill(AppColors.surfacePrimary)
-            .overlay {
-                LinearGradient(
-                    colors: [AppColors.surfaceGlass.opacity(0), AppColors.surfaceGlass, AppColors.surfaceGlass.opacity(0)],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            }
-            .frame(height: height)
-            .padding(.horizontal, Spacing.pageHorizontal)
-            .accessibilityLabel("路线加载中")
+private func nonEmpty(_ value: String?) -> String? {
+    guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+        return nil
     }
+    return value
 }
 
-private struct RouteMessageCard: View {
-    let icon: String
-    let message: String
-    let height: CGFloat
-    var action: (() -> Void)?
-
-    var body: some View {
-        Button { action?() } label: {
-            VStack(spacing: Spacing.md) {
-                Image(systemName: icon)
-                    .font(.system(size: 36, weight: .light))
-                Text(message)
-                    .font(.bodyLarge)
-            }
-            .foregroundStyle(AppColors.textSecondary)
-            .frame(maxWidth: .infinity)
-            .frame(height: height)
-            .background(AppColors.surfacePrimary)
-            .clipShape(RoundedRectangle(cornerRadius: Radius.xl, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .disabled(action == nil)
-        .padding(.horizontal, Spacing.pageHorizontal)
+private func distanceText(_ meters: Double) -> String {
+    if meters >= 1_000 {
+        return "\((meters / 1_000).formatted(.number.precision(.fractionLength(0...1)))) km"
     }
+    return metersText(meters)
 }
 
-private struct RouteCardButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
-            .animation(.easeOut(duration: 0.16), value: configuration.isPressed)
+private func metersText(_ meters: Double) -> String {
+    "\(meters.formatted(.number.precision(.fractionLength(0...1)))) m"
+}
+
+private func durationText(_ seconds: Double) -> String {
+    let hours = seconds / 3_600
+    if hours >= 24 {
+        return "\((hours / 24).formatted(.number.precision(.fractionLength(0...1)))) 天"
     }
+    return "\(hours.formatted(.number.precision(.fractionLength(0...1)))) 小时"
 }
 
 #if DEBUG
 #Preview("Route Discovery") {
     NavigationStack { RouteDiscoveryView(routeService: PreviewHelpers.routeService) }
-}
-
-#Preview("Route Card") {
-    RouteCardView(route: RouteDiscoveryViewModel.preview.routes[0], height: 560)
-        .padding()
-        .background(AppColors.pageBase)
 }
 #endif

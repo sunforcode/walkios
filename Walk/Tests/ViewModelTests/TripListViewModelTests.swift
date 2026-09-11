@@ -34,6 +34,25 @@ final class TripListViewModelTests: XCTestCase {
         XCTAssertTrue(sut.historicalTrips.isEmpty)
         XCTAssertNotNil(sut.errorMessage)
     }
+
+    func testTripListPageUsesProductionTripListRowWithoutLegacyWrapper() throws {
+        let pageSource = try productionSource(at: "Features/Trips/TripListView.swift")
+        let legacySource = try productionSource(at: "Features/Trips/TripRowView.swift")
+
+        XCTAssertTrue(pageSource.contains("TripBusinessComponents.TripListRow("))
+        XCTAssertFalse(pageSource.contains("TripRowView(trip:"))
+        XCTAssertFalse(legacySource.contains("struct TripRowView: View"))
+        XCTAssertFalse(legacySource.contains("struct TripArtworkView: View"))
+    }
+
+    private func productionSource(at relativePath: String) throws -> String {
+        let testFileURL = URL(fileURLWithPath: #filePath)
+        let walkRoot = testFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        return try String(contentsOf: walkRoot.appendingPathComponent(relativePath), encoding: .utf8)
+    }
 }
 
 @MainActor
@@ -55,7 +74,7 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
             },
             loadWeather: { tripID in
                 calls.append("weather:\(tripID)")
-                return PersonalTripTestFixtures.weather
+                return PersonalTripTestFixtures.populatedWeatherProjection
             }
         )
 
@@ -63,21 +82,37 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
 
         XCTAssertEqual(calls.sorted(), ["days:trip-1", "detail:trip-1", "weather:trip-1"])
         XCTAssertEqual(sut.trip?.trip.identity, "trip-1")
-        XCTAssertEqual(sut.mapCoordinates.map(\.latitude), [29.6, 29.7])
-        XCTAssertFalse(sut.isFrozenTrackUnavailable)
     }
 
-    func testMissingFrozenTrackRemainsUnavailableWithoutFallback() async {
+    func testLoadKeepsDetailAndDaysWhenWeatherProjectionIsTemporarilyUnavailable() async {
+        let detail = PersonalTripTestFixtures.detail(track: [])
         let sut = TripDetailViewModel(
-            loadDetail: { _ in PersonalTripTestFixtures.detail(track: []) },
+            loadDetail: { _ in detail },
             loadDays: { _ in PersonalTripTestFixtures.days },
-            loadWeather: { _ in PersonalTripTestFixtures.weather }
+            loadWeather: { _ in
+                throw APIClientError.api(
+                    code: "trip_weather_projection_unavailable",
+                    message: "行程天气关联尚未形成完整投影",
+                    retryable: true
+                )
+            }
         )
 
         await sut.loadTrip(id: "trip-1")
 
-        XCTAssertTrue(sut.mapCoordinates.isEmpty)
-        XCTAssertTrue(sut.isFrozenTrackUnavailable)
+        XCTAssertEqual(sut.trip, detail)
+        XCTAssertEqual(sut.days, PersonalTripTestFixtures.days)
+        XCTAssertNil(sut.weather)
+        XCTAssertTrue(sut.isWeatherUnavailable)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(
+            TripDetailPresentation(
+                detail: detail,
+                days: PersonalTripTestFixtures.days,
+                weather: nil,
+                routeVersionStatus: detail.routeVersionStatus
+            ).blocks.contains(.weather)
+        )
     }
 
     func testLoadRejectsRevisionMismatchWithoutReplacingExistingProjection() async {
@@ -94,7 +129,7 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         let sut = TripDetailViewModel(
             loadDetail: { _ in original },
             loadDays: { _ in mismatchedDays },
-            loadWeather: { _ in PersonalTripTestFixtures.weather }
+            loadWeather: { _ in PersonalTripTestFixtures.populatedWeatherProjection }
         )
 
         await sut.loadTrip(id: "trip-1")
@@ -110,7 +145,7 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         let sut = TripDetailViewModel(
             loadDetail: { _ in detail },
             loadDays: { _ in PersonalTripTestFixtures.days },
-            loadWeather: { _ in PersonalTripTestFixtures.weather },
+            loadWeather: { _ in PersonalTripTestFixtures.populatedWeatherProjection },
             loadRouteVersionStatus: { _ in detail.routeVersionStatus },
             cancelTrip: { _, _, _, _ in throw APIClientError.invalidResponse },
             migrateTrip: { _, _, _, _ in throw APIClientError.invalidResponse },
@@ -122,7 +157,7 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
 
         XCTAssertEqual(sut.trip, detail)
         XCTAssertEqual(sut.days, PersonalTripTestFixtures.days)
-        XCTAssertEqual(sut.weather, PersonalTripTestFixtures.weather)
+        XCTAssertEqual(sut.weather, PersonalTripTestFixtures.populatedWeatherProjection)
         XCTAssertNotNil(sut.errorMessage)
     }
 
@@ -135,7 +170,7 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         let sut = TripDetailViewModel(
             loadDetail: { _ in initial },
             loadDays: { _ in PersonalTripTestFixtures.days },
-            loadWeather: { _ in PersonalTripTestFixtures.weather },
+            loadWeather: { _ in PersonalTripTestFixtures.populatedWeatherProjection },
             loadRouteVersionStatus: { _ in initial.routeVersionStatus },
             cancelTrip: { _, _, _, key in
                 keys.append(key)
@@ -162,7 +197,7 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         let sut = TripDetailViewModel(
             loadDetail: { _ in initial },
             loadDays: { _ in PersonalTripTestFixtures.days },
-            loadWeather: { _ in PersonalTripTestFixtures.weather },
+            loadWeather: { _ in PersonalTripTestFixtures.populatedWeatherProjection },
             loadRouteVersionStatus: { _ in initial.routeVersionStatus },
             cancelTrip: { _, _, _, key in
                 keys.append(key)
@@ -196,7 +231,7 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         let sut = TripDetailViewModel(
             loadDetail: { _ in initial },
             loadDays: { _ in PersonalTripTestFixtures.days },
-            loadWeather: { _ in PersonalTripTestFixtures.weather },
+            loadWeather: { _ in PersonalTripTestFixtures.populatedWeatherProjection },
             loadRouteVersionStatus: { _ in
                 defer { statusCalls += 1 }
                 return statusCalls == 0 ? PersonalTripTestFixtures.newerStatus : changedStatus
@@ -245,7 +280,7 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         let sut = TripDetailViewModel(
             loadDetail: { _ in initial },
             loadDays: { _ in PersonalTripTestFixtures.days },
-            loadWeather: { _ in PersonalTripTestFixtures.weather },
+            loadWeather: { _ in PersonalTripTestFixtures.populatedWeatherProjection },
             loadRouteVersionStatus: { _ in PersonalTripTestFixtures.newerStatus },
             cancelTrip: { _, _, _, _ in XCTFail("cancel must not run"); return initial },
             migrateTrip: { _, revision, target, _ in
@@ -264,8 +299,8 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         XCTAssertEqual(receivedTarget, "route-version-2")
         XCTAssertEqual(sut.trip, migrated)
         XCTAssertEqual(sut.days?.revision, "revision-2")
-        XCTAssertEqual(sut.weather?.revision, "revision-2")
-        XCTAssertEqual(sut.mapCoordinates.count, 1)
+        XCTAssertNil(sut.weather)
+        XCTAssertTrue(sut.isWeatherUnavailable)
     }
 
     func testActionPolicyAllowsOnlyPlannedEligibleOperations() {
@@ -308,8 +343,12 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
 
         XCTAssertEqual(
             presentation.blocks,
-            [.identity, .days, .route, .weather, .equipment, .routeVersion, .notices]
+            [.identity, .days, .route, .weather, .equipment, .notices]
         )
+        XCTAssertEqual(TripDetailBlock.allCases, [.identity, .days, .route, .weather, .equipment, .notices])
+        // personal-trip：每日行动按 sequence 表达的实际发生顺序组织；TripDayPresentation 按 sequence 升序提供。
+        XCTAssertEqual(presentation.dayProjections[0].actions.map(\.id), ["1", "2"])
+        XCTAssertEqual(presentation.dayProjections[0].points.map(\.id), ["3", "8"])
         XCTAssertEqual(presentation.notices.map(\.content.value), ["午后降雨", "核对冰爪"])
         XCTAssertTrue(presentation.showsPageLevelCancel)
     }
@@ -323,33 +362,80 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         let presentation = TripDetailPresentation(
             detail: detail,
             days: PersonalTripTestFixtures.days,
-            weather: PersonalTripTestFixtures.weather,
+            weather: PersonalTripTestFixtures.populatedWeather,
             routeVersionStatus: detail.routeVersionStatus
         )
 
         XCTAssertEqual(
             presentation.blocks,
-            [.identity, .days, .route, .weather, .equipment, .routeVersion]
+            [.identity, .days, .route, .weather, .equipment]
         )
         XCTAssertFalse(presentation.showsPageLevelCancel)
     }
 
-    func testTripDetailKeepsCancelOutsideScrollAndMigrationInsideVersionSection() throws {
-        let source = try productionSource(at: "Features/Trips/TripDetailView.swift")
-        let scrollStart = try XCTUnwrap(source.range(of: "ScrollView {"))
-        let scrollEnd = try XCTUnwrap(source.range(
-            of: ".refreshable { await viewModel.loadTrip(id: tripID) }",
-            range: scrollStart.upperBound..<source.endIndex
-        ))
-        let cancel = try XCTUnwrap(source.range(of: "private var pageLevelCancelAction"))
-        let migration = try XCTUnwrap(source.range(of: "Button(\"整体迁移到当前公开新版\")"))
-        let versionSection = try XCTUnwrap(source.range(of: "private func routeVersionSection"))
+    func testDetailPresentationMapsSafeComponentFieldsWithoutInventingMissingFacts() throws {
+        let detail = PersonalTripTestFixtures.detail(track: [], versionLabel: nil)
+        let presentation = TripDetailPresentation(
+            detail: detail,
+            days: PersonalTripTestFixtures.populatedDays,
+            weather: PersonalTripTestFixtures.populatedWeather,
+            routeVersionStatus: detail.routeVersionStatus
+        )
 
-        XCTAssertGreaterThan(cancel.lowerBound, scrollEnd.upperBound)
-        XCTAssertGreaterThan(migration.lowerBound, versionSection.lowerBound)
-        XCTAssertFalse(source.contains("title: \"关联路线\""))
-        XCTAssertFalse(source.contains("title: \"本次准备\""))
-        XCTAssertFalse(source.contains("title: \"行程操作\""))
+        XCTAssertEqual(presentation.coverProjection.versionLabel, nil)
+        XCTAssertFalse(presentation.coverProjection.coverAvailable)
+        XCTAssertEqual(presentation.dayProjections[0].tripDayID, "day-1")
+        // personal-trip：每日行动按 sequence 表达的实际发生顺序组织；TripDayPresentation 按 sequence 升序提供。
+        XCTAssertEqual(presentation.dayProjections[0].actions.map(\.id), ["1", "2"])
+        XCTAssertEqual(presentation.dayProjections[0].points.map(\.id), ["3", "8"])
+        XCTAssertEqual(presentation.dayProjections[0].weather.condition.value, "多云")
+        XCTAssertEqual(presentation.weatherSummaryProjection?.days.map(\.id), ["day-1"])
+        XCTAssertNil(presentation.weatherSummaryProjection?.notice)
+        XCTAssertEqual(presentation.equipmentSummaryProjection.itemCount, 0)
+        XCTAssertEqual(presentation.equipmentSummaryProjection.knownTotalWeight, "0 g")
+        XCTAssertTrue(presentation.equipmentSummaryProjection.editable)
+    }
+
+    func testTripCoverProjectionOmitsVersionTagWhenLabelIsMissing() {
+        let projection = TripCoverHeaderProjection(
+            name: "贡嘎行程",
+            status: .planned,
+            departureCity: "成都",
+            startDate: "2026-08-25",
+            endDate: "2026-08-27",
+            totalDayCount: 3,
+            hikingDayCount: 2,
+            versionLabel: nil,
+            coverAvailable: false
+        )
+
+        XCTAssertEqual(projection.conditionTags, ["成都出发", "2026-08-25–2026-08-27", "3 天 · 徒步 2 天"])
+    }
+
+    func testTripDetailPageUsesOnlySafeProductionComponentsAndKeepsBlockedRouteRegion() throws {
+        let source = try productionSource(at: "Features/Trips/TripDetailView.swift")
+        let cover = try productionSource(at: "DesignSystem/BusinessComponents/Trip/TripCoverHeader.swift")
+
+        XCTAssertTrue(source.contains("TripBusinessComponents.TripCoverHeader("))
+        XCTAssertTrue(source.contains("TripBusinessComponents.TripDaySummaryCard("))
+        XCTAssertTrue(source.contains("TripBusinessComponents.TripWeatherSummaryCard("))
+        XCTAssertTrue(source.contains("viewModel.isWeatherUnavailable"))
+        XCTAssertTrue(source.contains("title: \"行程天气暂不可用\""))
+        XCTAssertTrue(source.contains("TripBusinessComponents.TripEquipmentSummaryCard("))
+        XCTAssertFalse(source.contains("private struct TripCoverHeader: View"))
+        XCTAssertFalse(source.contains("private struct TripDaySummaryCard: View"))
+        XCTAssertFalse(source.contains("private struct TripWeatherSummaryCard: View"))
+        XCTAssertFalse(source.contains("private struct TripEquipmentSummaryCard: View"))
+        XCTAssertFalse(source.contains("RouteMapView("), "冻结轨迹不得冒充行程封面")
+        XCTAssertFalse(source.contains("adoptedRouteVersionID"), "封面不得回退显示不透明版本 ID")
+
+        XCTAssertFalse(source.contains("private struct TripRouteSummaryCard: View"))
+        XCTAssertTrue(source.contains("TripBusinessComponents.TripRouteSummaryCard("))
+        XCTAssertTrue(source.contains("TripBusinessComponents.TripRouteVersionCard("))
+        XCTAssertTrue(source.contains("TripBusinessComponents.TripRouteMetricsSummary("))
+
+        XCTAssertTrue(cover.contains("let versionLabel: String?"))
+        XCTAssertTrue(cover.contains("if let versionLabel = tripNonEmpty(versionLabel)"))
     }
 
     private func productionSource(at relativePath: String) throws -> String {
@@ -364,7 +450,28 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
 
 @MainActor
 final class CreateTripViewModelTests: XCTestCase {
-    func testSelectionRequiredPreservesInputAndUsesSelectionOnContinuation() async {
+    func testTransportSelectionRequiredWithOneOptionIsRejectedAsInvalidResponse() async {
+        let selection = PersonalTripTransportSelection(
+            selectionID: "selection-1",
+            options: [PersonalTripTestFixtures.transportSelection.options[0]]
+        )
+        let sut = CreateTripViewModel(
+            routeID: "route-1",
+            loadContext: { _ in PersonalTripTestFixtures.generationContext },
+            createTrip: { _, _ in .transportSelectionRequired(selection) }
+        )
+        await sut.load()
+        sut.departureCity = "成都"
+
+        await sut.submit()
+
+        XCTAssertNil(sut.transportSelection)
+        XCTAssertNil(sut.selectedTransportOptionID)
+        XCTAssertEqual(sut.errorMessage, APIClientError.invalidResponse.errorDescription)
+        XCTAssertFalse(sut.isSubmitting)
+    }
+
+    func testTransportSelectionRequiredWithTwoOptionsPreservesInputAndUsesSelectionOnContinuation() async {
         var requests: [PersonalTripCreateRequest] = []
         var responses: [PersonalTripGenerationResult] = [
             .transportSelectionRequired(PersonalTripTestFixtures.transportSelection),
@@ -391,6 +498,7 @@ final class CreateTripViewModelTests: XCTestCase {
         XCTAssertEqual(sut.departureCity, "成都")
         XCTAssertEqual(sut.selectedEquipmentListID, "equipment-list-1")
         XCTAssertEqual(sut.transportSelection?.selectionID, "selection-1")
+        XCTAssertEqual(sut.transportSelection?.options.count, 2)
 
         sut.selectedTransportOptionID = "option-2"
         await sut.submit()
@@ -411,6 +519,52 @@ final class CreateTripViewModelTests: XCTestCase {
         XCTAssertEqual(
             presentation.facts,
             ["v1", "多日路线", "四川甘孜", "中等", "老榆林 → 草科", "42.5 km", "48 小时"]
+        )
+    }
+
+    func testCreateTripRouteSummaryListsEveryGenerationMissingReasonInChinese() {
+        let route = PersonalTripGenerationRoute(
+            routeID: "route-1",
+            currentPublicRouteVersionID: "route-version-1",
+            routeType: "multi_day",
+            generationEligibility: RouteGenerationEligibility(
+                eligible: false,
+                missingReasons: [.name, .region, .estimatedDuration, .start, .end, .validMainTrack]
+            ),
+            versionLabel: nil,
+            name: nil,
+            region: nil,
+            start: nil,
+            end: nil,
+            difficulty: nil,
+            distance: nil,
+            estimatedDuration: nil
+        )
+
+        let presentation = CreateTripRouteSummaryPresentation(route: route)
+
+        XCTAssertEqual(
+            presentation.generationUnavailableMessage,
+            "缺少：路线名称、所在地区、预计用时、起点、终点、有效主轨迹"
+        )
+    }
+
+    func testEquipmentListPickerPresentationIncludesEverySummaryField() {
+        let option = PersonalTripGenerationEquipmentListOption(
+            equipmentListID: "equipment-list-1",
+            name: "轻装",
+            summary: EquipmentListSummary(
+                itemCount: 3,
+                knownTotalWeight: EquipmentWeight(grams: 1_250),
+                missingWeightItemCount: 2
+            )
+        )
+
+        let presentation = CreateTripEquipmentListPresentation(option: option)
+
+        XCTAssertEqual(
+            presentation.text,
+            "轻装 · 3 类 · 已知总重量 1250 克 · 2 类未计入重量"
         )
     }
 
@@ -499,17 +653,32 @@ final class CreateTripViewModelTests: XCTestCase {
         XCTAssertTrue(source.contains(".onAppear { Task { await viewModel.handleAppearance() } }"))
         XCTAssertFalse(source.contains(".task { await viewModel.load() }"))
     }
+
+    func testCreateTripPageUsesProductionRouteSummaryAndWaitingComponents() throws {
+        let testFileURL = URL(fileURLWithPath: #filePath)
+        let sourceURL = testFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Features/Trips/CreateTripView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        XCTAssertTrue(source.contains("RouteBusinessComponents.GenerationRouteSummaryCard("))
+        XCTAssertTrue(source.contains("RouteBusinessComponents.GenerationWaitingView("))
+        XCTAssertFalse(source.contains("private struct GenerationRouteSummaryCard"))
+        XCTAssertFalse(source.contains("private struct GenerationWaitingView"))
+    }
 }
 
 @MainActor
 final class TripDayWeatherViewModelTests: XCTestCase {
-    func testTripDayPresentationPreservesServerActionAndPointOrder() {
+    func testTripDayPresentationUsesSequenceAsTheOnlyActionAndPointOrder() {
         let day = PersonalTripTestFixtures.populatedDays.days[0]
 
         let presentation = TripDayPresentation(day: day)
 
-        XCTAssertEqual(presentation.actionSequence, day.actions.map(\.sequence))
-        XCTAssertEqual(presentation.pointSequence, day.points?.map(\.sequence))
+        XCTAssertEqual(presentation.actionSequence, [1, 2])
+        XCTAssertEqual(presentation.pointSequence, [3, 8])
         XCTAssertEqual(presentation.primaryStage, day.primaryStage)
         XCTAssertEqual(presentation.dayLabel, "D1")
     }
@@ -524,19 +693,36 @@ final class TripDayWeatherViewModelTests: XCTestCase {
         XCTAssertEqual(TripDayFocusPolicy.clampedIndex(0, dayCount: 0), 0)
     }
 
-    func testTripDayPresentationSeparatesDailyRouteTransportAndCategorizedPoints() {
+    func testTripDayPresentationKeepsDailyRouteSummaryWithoutDuplicatingHikeAction() {
         let day = PersonalTripTestFixtures.populatedDays.days[0]
 
         let presentation = TripDayPresentation(day: day)
 
-        XCTAssertEqual(presentation.dailyRouteActions.map(\.sequence), [2])
-        XCTAssertTrue(presentation.dailyRouteActions.allSatisfy { $0.actionType == "hike" })
-        XCTAssertEqual(presentation.transportActions.map(\.sequence), [1])
-        XCTAssertTrue(presentation.transportActions.allSatisfy { $0.actionType != "hike" })
-        XCTAssertEqual(presentation.groupedPoints.map(\.category), ["campsite", "water_source"])
-        XCTAssertEqual(presentation.groupedPoints.map(\.title), ["营地", "水源"])
-        XCTAssertEqual(presentation.groupedPoints.first?.points.map(\.sequence), [3])
+        XCTAssertEqual(presentation.presentationItems.map(\.sequence), [1, 2])
+        XCTAssertEqual(presentation.presentationItems.compactMap(\.action).map(\.actionType), [
+            "long_distance_transport",
+            "hike",
+        ])
+        XCTAssertEqual(
+            presentation.presentationItems.filter(\.isDailyRouteSummary).map(\.sequence),
+            [2]
+        )
+        XCTAssertEqual(
+            presentation.presentationItems.compactMap(\.action).filter { $0.actionType == "hike" }.count,
+            1
+        )
+        XCTAssertEqual(presentation.pointItems.map(\.sequence), [3, 8])
+        XCTAssertEqual(presentation.pointItems.compactMap(\.point).map(\.category), ["campsite", "water_source"])
         XCTAssertTrue(presentation.hasDayContent)
+    }
+
+    func testTripDayPresentationDoesNotExposeRemovedSemanticSlots() throws {
+        let source = try productionSource(at: "Features/Trips/TripDayWeatherViews.swift")
+
+        XCTAssertFalse(source.contains("departureTransportActions"))
+        XCTAssertFalse(source.contains("remainingTransportActions"))
+        XCTAssertFalse(source.contains("groupedPoints"))
+        XCTAssertFalse(source.contains("dailyRouteActions"))
     }
 
     func testTripDayPageUsesFullScreenPagingWithoutDayJumpControls() throws {
@@ -547,17 +733,249 @@ final class TripDayWeatherViewModelTests: XCTestCase {
         XCTAssertFalse(source.contains("TripDaySelection"))
         XCTAssertTrue(source.contains("tabViewStyle(.page"))
         XCTAssertTrue(source.contains("scrollBoundaryHandoff"))
-        XCTAssertTrue(source.contains("每日路程"))
+        XCTAssertTrue(source.contains("ForEach(presentation.presentationItems)"))
+        XCTAssertFalse(source.contains("presentation.presentationItems.filter"))
+        XCTAssertTrue(source.contains("if item.isDailyRouteSummary"))
+        XCTAssertTrue(source.contains("Text(\"每日路程\")"))
+        XCTAssertTrue(source.contains("ForEach(presentation.pointItems)"))
     }
 
-    func testTripWeatherPresentationIncludesOverviewImpactsDailyWeatherAndFreshness() {
-        let presentation = TripWeatherPresentation(weather: PersonalTripTestFixtures.populatedWeather)
+    func testTripDayWeatherUnavailableCountsAsVisibleDayContent() {
+        let unavailable = InformationConfidence(status: "unavailable", category: .dynamicExternalInformation)
+        let day = PersonalTripDay(
+            identity: "day-1",
+            dayNumber: 1,
+            date: LocalDate(year: 2026, month: 8, day: 25),
+            primaryStage: "徒步日 1",
+            hikingDayNumber: 1,
+            actions: [],
+            weather: PersonalTripDayWeather(
+                condition: QualifiedString(value: nil, confidence: unavailable),
+                temperatureRange: QualifiedTemperatureRange(value: nil, confidence: unavailable),
+                precipitation: QualifiedString(value: nil, confidence: unavailable),
+                wind: QualifiedString(value: nil, confidence: unavailable),
+                placeContext: QualifiedString(value: nil, confidence: unavailable),
+                routeSectionContext: nil,
+                source: nil,
+                updatedAt: nil
+            ),
+            points: nil
+        )
 
-        XCTAssertEqual(presentation.overview, "整体多云")
-        XCTAssertEqual(presentation.importantImpacts, ["午后降雨"])
-        XCTAssertEqual(presentation.days.map(\.dayNumber), [1])
-        XCTAssertEqual(presentation.sources, ["气象服务"])
-        XCTAssertEqual(presentation.updatedTimes, ["2026-08-24T08:00:00+08:00"])
+        XCTAssertTrue(TripDayPresentation(day: day).hasDayContent)
+    }
+
+    func testTripDayQualifiedFieldsKeepUnavailableStaleAndPendingVisible() {
+        let unavailable = InformationConfidence(status: "unavailable", category: .dynamicExternalInformation)
+        let stale = InformationConfidence(status: "stale", category: .dynamicExternalInformation)
+        let pending = InformationConfidence(status: "pending_verification", category: .dynamicExternalInformation)
+        let action = PersonalTripAction(
+            sequence: 1,
+            actionType: "long_distance_transport",
+            origin: QualifiedPlace(value: PublicRoutePlace(name: "成都"), confidence: nil),
+            destination: QualifiedPlace(value: nil, confidence: unavailable),
+            mode: QualifiedString(value: nil, confidence: unavailable),
+            keyTimes: QualifiedStringList(value: ["06:30"], confidence: pending),
+            estimatedDuration: QualifiedDuration(value: RouteDuration(seconds: 7_200), confidence: stale),
+            transferNotes: QualifiedStringList(value: nil, confidence: unavailable),
+            routeSectionSnapshot: nil,
+            start: nil,
+            end: nil,
+            distance: nil,
+            ascent: nil
+        )
+        let point = PersonalTripPoint(
+            sequence: 1,
+            category: "water_source",
+            type: "溪流",
+            name: "补水点",
+            distance: QualifiedDistance(value: nil, confidence: unavailable),
+            location: nil,
+            details: QualifiedString(value: nil, confidence: pending),
+            isAlternative: nil
+        )
+
+        let actionPresentation = TripActionPresentation(action: action)
+        XCTAssertTrue(actionPresentation.details.contains("起点 成都"))
+        XCTAssertEqual(
+            actionPresentation.statusNotices.map(\.message),
+            ["终点：信息不可用", "交通方式：信息不可用", "关键时间：待核验", "预计耗时：信息已过期", "换乘说明：信息不可用"]
+        )
+        XCTAssertEqual(
+            TripPointPresentation(point: point).statusNotices.map(\.message),
+            ["距离：信息不可用", "详情：待核验"]
+        )
+
+        let weather = PersonalTripDayWeather(
+            condition: QualifiedString(value: "多云", confidence: pending),
+            temperatureRange: QualifiedTemperatureRange(value: nil, confidence: unavailable),
+            precipitation: QualifiedString(value: "午后降雨", confidence: stale),
+            wind: QualifiedString(value: nil, confidence: unavailable),
+            placeContext: QualifiedString(value: "老榆林", confidence: nil),
+            routeSectionContext: nil,
+            source: nil,
+            updatedAt: nil
+        )
+        XCTAssertEqual(
+            TripDayWeatherPresentation(weather: weather).statusNotices.map(\.message),
+            ["天气状况：待核验", "温度：信息不可用", "降水：信息已过期", "风力：信息不可用"]
+        )
+    }
+
+    func testStructuredTemperatureRangeUsesTypedLowAndHighPresentation() {
+        let temperatureRange = QualifiedTemperatureRange(
+            value: TemperatureRange(low: 8, high: 16),
+            confidence: nil
+        )
+
+        let presentation = TripTemperatureRangePresentation(qualified: temperatureRange)
+
+        XCTAssertEqual(presentation.low, 8)
+        XCTAssertEqual(presentation.high, 16)
+        XCTAssertEqual(presentation.text, "8–16°C")
+    }
+
+    func testWeatherUnavailableRemainsVisibleWhenNoValueExists() {
+        let unavailable = InformationConfidence(status: "unavailable", category: .dynamicExternalInformation)
+        let weather = PersonalTripDayWeather(
+            condition: QualifiedString(value: nil, confidence: unavailable),
+            temperatureRange: QualifiedTemperatureRange(value: nil, confidence: unavailable),
+            precipitation: QualifiedString(value: nil, confidence: unavailable),
+            wind: QualifiedString(value: nil, confidence: unavailable),
+            placeContext: QualifiedString(value: nil, confidence: unavailable),
+            routeSectionContext: nil,
+            source: nil,
+            updatedAt: nil
+        )
+
+        XCTAssertEqual(weatherLine(weather), "暂不可用")
+    }
+
+    func testTripWeatherExposesDedicatedUnavailableState() async {
+        let sut = TripWeatherViewModel(
+            tripID: "trip-1",
+            loadWeather: { _ in
+                throw APIClientError.api(
+                    code: "trip_weather_projection_unavailable",
+                    message: "行程天气关联尚未形成完整投影",
+                    retryable: true
+                )
+            },
+            loadCurrentRevision: { _ in
+                XCTFail("dedicated unavailable response does not require a revision request")
+                return "revision-1"
+            }
+        )
+
+        await sut.load()
+
+        XCTAssertNil(sut.weather)
+        XCTAssertTrue(sut.isUnavailable)
+        XCTAssertNil(sut.errorMessage)
+    }
+
+    func testTripWeatherRejectsEmptyDailyProjection() async {
+        let sut = TripWeatherViewModel(
+            tripID: "trip-1",
+            loadWeather: { _ in PersonalTripTestFixtures.emptyWeatherProjection },
+            loadCurrentRevision: { _ in "revision-1" }
+        )
+
+        await sut.load()
+
+        XCTAssertNil(sut.weather)
+        XCTAssertFalse(sut.isUnavailable)
+        XCTAssertNotNil(sut.errorMessage)
+    }
+
+    func testTripWeatherRejectsInvalidAssociationOrdering() async {
+        let weather = PersonalTripWeather(
+            tripID: "trip-1",
+            revision: "revision-1",
+            days: [
+                PersonalTripWeatherAssociationDay(
+                    tripDayID: "day-1",
+                    dayNumber: 1,
+                    date: LocalDate(year: 2026, month: 8, day: 25),
+                    weatherAssociations: [
+                        PersonalTripTestFixtures.association(identity: "weather-2", sequence: 2),
+                        PersonalTripTestFixtures.association(identity: "weather-1", sequence: 1),
+                    ]
+                ),
+            ]
+        )
+        let sut = TripWeatherViewModel(
+            tripID: "trip-1",
+            loadWeather: { _ in weather },
+            loadCurrentRevision: { _ in "revision-1" }
+        )
+
+        await sut.load()
+
+        XCTAssertNil(sut.weather)
+        XCTAssertFalse(sut.isUnavailable)
+        XCTAssertNotNil(sut.errorMessage)
+    }
+
+    func testTripWeatherRejectsUnavailableAssociationThatContainsForecast() async {
+        let invalidAssociation = PersonalTripTestFixtures.association(
+            confidence: InformationConfidence(
+                status: "unavailable",
+                category: .dynamicExternalInformation
+            ),
+            forecast: PersonalTripTestFixtures.forecast
+        )
+        let weather = PersonalTripTestFixtures.weatherProjection(
+            associations: [invalidAssociation]
+        )
+        let sut = TripWeatherViewModel(
+            tripID: "trip-1",
+            loadWeather: { _ in weather },
+            loadCurrentRevision: { _ in "revision-1" }
+        )
+
+        await sut.load()
+
+        XCTAssertNil(sut.weather)
+        XCTAssertNotNil(sut.errorMessage)
+    }
+
+    func testTripWeatherRejectsDifferentContentsForSameForecastIdentity() async {
+        let conflictingForecast = WeatherForecast(
+            identity: PersonalTripTestFixtures.forecast.identity,
+            location: PersonalTripTestFixtures.forecast.location,
+            source: "另一来源",
+            publishedAt: PersonalTripTestFixtures.forecast.publishedAt,
+            periods: PersonalTripTestFixtures.forecast.periods
+        )
+        let weather = PersonalTripTestFixtures.weatherProjection(
+            associations: [
+                PersonalTripTestFixtures.association(identity: "weather-1", sequence: 1),
+                PersonalTripTestFixtures.association(
+                    identity: "weather-2",
+                    sequence: 2,
+                    forecast: conflictingForecast
+                ),
+            ]
+        )
+        let sut = TripWeatherViewModel(
+            tripID: "trip-1",
+            loadWeather: { _ in weather },
+            loadCurrentRevision: { _ in "revision-1" }
+        )
+
+        await sut.load()
+
+        XCTAssertNil(sut.weather)
+        XCTAssertNotNil(sut.errorMessage)
+    }
+
+    func testTripWeatherPageDoesNotAggregateForecastPeriodsIntoLegacyDailyCard() throws {
+        let source = try productionSource(at: "Features/Trips/TripDayWeatherViews.swift")
+
+        XCTAssertFalse(source.contains("TripBusinessComponents.DailyWeatherCard("))
+        XCTAssertFalse(source.contains("TripWeatherDayComponentPresentation(day:"))
+        XCTAssertFalse(source.contains("WeatherOverview"))
     }
 
     func testTripDayRejectsProjectionFromDifferentCurrentRevision() async {
@@ -577,13 +995,14 @@ final class TripDayWeatherViewModelTests: XCTestCase {
     func testTripWeatherAcceptsProjectionMatchingCurrentRevision() async {
         let sut = TripWeatherViewModel(
             tripID: "trip-1",
-            loadWeather: { _ in PersonalTripTestFixtures.weather },
+            loadWeather: { _ in PersonalTripTestFixtures.populatedWeatherProjection },
             loadCurrentRevision: { _ in "revision-1" }
         )
 
         await sut.load()
 
-        XCTAssertEqual(sut.weather, PersonalTripTestFixtures.weather)
+        XCTAssertEqual(sut.weather, PersonalTripTestFixtures.populatedWeatherProjection)
+        XCTAssertFalse(sut.isUnavailable)
         XCTAssertNil(sut.errorMessage)
     }
 
@@ -651,7 +1070,8 @@ enum PersonalTripTestFixtures {
         adoptedRouteVersionID: String = "route-version-1",
         track: [PublicRouteGeoPosition],
         routeVersionStatus: PersonalTripRouteVersionStatus? = nil,
-        importantNotices: [PersonalTripImportantNotice]? = nil
+        importantNotices: [PersonalTripImportantNotice]? = nil,
+        versionLabel: String? = "v1"
     ) -> PersonalTripDetail {
         PersonalTripDetail(
             revision: revision,
@@ -673,7 +1093,7 @@ enum PersonalTripTestFixtures {
                     end: PublicRoutePlace(name: "草科"),
                     estimatedDuration: RouteDuration(seconds: 172_800),
                     mainTrackPath: track,
-                    versionLabel: "v1",
+                    versionLabel: versionLabel,
                     cover: nil,
                     direction: "环线",
                     distance: RouteDistance(meters: 42_500),
@@ -681,7 +1101,7 @@ enum PersonalTripTestFixtures {
                     descent: RouteElevationLoss(meters: 2_200),
                     maxElevation: RouteElevation(meters: 4_700)
                 ),
-                weatherOverview: QualifiedString(value: "多云，午后可能有雨", confidence: nil),
+                weatherOverview: WeatherOverview(summary: QualifiedString(value: "多云，午后可能有雨", confidence: nil)),
                 importantNotices: importantNotices
             ),
             routeReference: PersonalTripRouteReference(
@@ -749,17 +1169,17 @@ enum PersonalTripTestFixtures {
         days: []
     )
 
-    static let weather = PersonalTripWeather(
+    static let weather = LegacyPersonalTripWeather(
         tripID: "trip-1",
         revision: "revision-1",
         routeName: "贡嘎环线",
         startDate: LocalDate(year: 2026, month: 8, day: 25),
         endDate: LocalDate(year: 2026, month: 8, day: 27),
         days: [],
-        weatherOverview: QualifiedString(value: "多云", confidence: nil)
+        weatherOverview: WeatherOverview(summary: QualifiedString(value: "多云", confidence: nil))
     )
 
-    static let populatedWeather = PersonalTripWeather(
+    static let populatedWeather = LegacyPersonalTripWeather(
         tripID: "trip-1",
         revision: "revision-1",
         routeName: "贡嘎环线",
@@ -773,18 +1193,93 @@ enum PersonalTripTestFixtures {
             hikingDayNumber: 1,
             weather: populatedDayWeather
         )],
-        weatherOverview: QualifiedString(value: "整体多云", confidence: nil)
+        weatherOverview: WeatherOverview(summary: QualifiedString(value: "整体多云", confidence: nil))
     )
 
     static let populatedDayWeather = PersonalTripDayWeather(
-        condition: QualifiedJSON(value: .string("多云"), confidence: nil),
-        temperatureRange: QualifiedJSON(value: .string("8–16°C"), confidence: nil),
-        precipitation: QualifiedJSON(value: .string("午后降雨"), confidence: InformationConfidence(status: "pending_verification", category: nil)),
-        wind: QualifiedJSON(value: .string("微风"), confidence: InformationConfidence(status: "verified", category: nil)),
-        placeContext: QualifiedJSON(value: .string("老榆林"), confidence: nil),
-        routeSectionContext: QualifiedJSON(value: .string("日乌且垭口段"), confidence: nil),
-        source: QualifiedString(value: "气象服务", confidence: InformationConfidence(status: "verified", category: nil)),
-        updatedAt: QualifiedString(value: "2026-08-24T08:00:00+08:00", confidence: InformationConfidence(status: "verified", category: nil))
+        condition: QualifiedString(value: "多云", confidence: nil),
+        temperatureRange: QualifiedTemperatureRange(value: TemperatureRange(low: 8, high: 16), confidence: nil),
+        precipitation: QualifiedString(value: "午后降雨", confidence: InformationConfidence(status: "pending_verification", category: .dynamicExternalInformation)),
+        wind: QualifiedString(value: "微风", confidence: InformationConfidence(status: "verified", category: .dynamicExternalInformation)),
+        placeContext: QualifiedString(value: "老榆林", confidence: nil),
+        routeSectionContext: QualifiedString(value: "日乌且垭口段", confidence: nil),
+        source: QualifiedString(value: "气象服务", confidence: InformationConfidence(status: "verified", category: .dynamicExternalInformation)),
+        updatedAt: QualifiedInstant(value: Instant(rawValue: "2026-08-24T08:00:00+08:00"), confidence: InformationConfidence(status: "verified", category: .dynamicExternalInformation))
+    )
+
+    static let forecast = WeatherForecast(
+        identity: "forecast-1",
+        location: WeatherLocation(
+            position: PublicRouteGeoPosition(
+                latitude: 29.6,
+                longitude: 101.8,
+                referenceSystem: "WGS84"
+            ),
+            name: "老榆林"
+        ),
+        source: "气象服务",
+        publishedAt: Instant(rawValue: "2026-08-24T08:00:00Z"),
+        periods: [
+            WeatherForecastPeriod(
+                periodStart: Instant(rawValue: "2026-08-24T16:00:00Z"),
+                periodEnd: Instant(rawValue: "2026-08-25T04:00:00Z"),
+                condition: WeatherQualifiedValue(
+                    value: WeatherCondition(description: "多云")
+                )
+            ),
+        ]
+    )
+
+    static func association(
+        identity: String = "weather-1",
+        sequence: Int = 1,
+        confidence: InformationConfidence? = nil,
+        forecast: WeatherForecast? = forecast
+    ) -> TripWeatherAssociation {
+        TripWeatherAssociation(
+            associationIdentity: identity,
+            sequence: sequence,
+            scope: .day,
+            targetLocation: WeatherLocation(
+                position: PublicRouteGeoPosition(
+                    latitude: 29.6,
+                    longitude: 101.8,
+                    referenceSystem: "WGS84"
+                ),
+                name: "老榆林"
+            ),
+            targetPeriodStart: Instant(rawValue: "2026-08-24T16:00:00Z"),
+            targetPeriodEnd: Instant(rawValue: "2026-08-25T16:00:00Z"),
+            forecastConfidence: confidence,
+            forecast: forecast
+        )
+    }
+
+    static func weatherProjection(
+        associations: [TripWeatherAssociation]
+    ) -> PersonalTripWeather {
+        PersonalTripWeather(
+            tripID: "trip-1",
+            revision: "revision-1",
+            days: [
+                PersonalTripWeatherAssociationDay(
+                    tripDayID: "day-1",
+                    dayNumber: 1,
+                    date: LocalDate(year: 2026, month: 8, day: 25),
+                    weatherAssociations: associations
+                ),
+            ]
+        )
+    }
+
+    static let emptyWeatherProjection = PersonalTripWeather(
+        tripID: "trip-1",
+        revision: "revision-1",
+        days: []
+    )
+
+    static let populatedWeatherProjection = weatherProjection(
+        associations: [association()]
     )
 
     static let populatedDays = PersonalTripDays(
@@ -819,7 +1314,7 @@ enum PersonalTripTestFixtures {
                     start: QualifiedPlace(value: PublicRoutePlace(name: "老榆林"), confidence: nil),
                     end: QualifiedPlace(value: PublicRoutePlace(name: "垭口"), confidence: nil),
                     distance: QualifiedDistance(value: RouteDistance(meters: 12_000), confidence: nil),
-                    ascent: QualifiedDistance(value: RouteDistance(meters: 900), confidence: nil)
+                    ascent: QualifiedElevationGain(value: RouteElevationGain(meters: 900), confidence: nil)
                 ),
                 PersonalTripAction(
                     sequence: 1,
@@ -934,7 +1429,10 @@ enum PersonalTripTestFixtures {
             PersonalTripTransportOption(
                 transportOptionID: "option-1",
                 transferCount: QualifiedInteger(value: 1, confidence: nil),
-                estimatedArrivalAt: QualifiedString(value: "08:00", confidence: nil),
+                estimatedArrivalAt: QualifiedInstant(
+                    value: Instant(rawValue: "2026-08-25T08:00:00Z"),
+                    confidence: nil
+                ),
                 estimatedDuration: QualifiedDuration(
                     value: RouteDuration(seconds: 7_200),
                     confidence: nil
@@ -944,7 +1442,10 @@ enum PersonalTripTestFixtures {
             PersonalTripTransportOption(
                 transportOptionID: "option-2",
                 transferCount: QualifiedInteger(value: 0, confidence: nil),
-                estimatedArrivalAt: QualifiedString(value: "09:00", confidence: nil),
+                estimatedArrivalAt: QualifiedInstant(
+                    value: Instant(rawValue: "2026-08-25T09:00:00Z"),
+                    confidence: nil
+                ),
                 estimatedDuration: QualifiedDuration(
                     value: RouteDuration(seconds: 9_000),
                     confidence: nil

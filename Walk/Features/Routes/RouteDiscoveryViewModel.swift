@@ -9,12 +9,14 @@ final class RouteDiscoveryViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     private let service: any RouteDiscoveryServicing
+    private var searchGeneration = 0
 
     init(service: any RouteDiscoveryServicing) {
         self.service = service
     }
 
     func loadRoutes() async {
+        guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -27,7 +29,16 @@ final class RouteDiscoveryViewModel: ObservableObject {
     }
 
     func search(query: String?) async {
-        guard let query, !query.isEmpty else {
+        searchGeneration += 1
+        let generation = searchGeneration
+
+        guard let query,
+              !query.unicodeScalars.allSatisfy({ scalar in
+                  switch scalar.value {
+                  case 0x20, 0x09, 0x0A, 0x0D, 0x3000: true
+                  default: false
+                  }
+              }) else {
             searchState = .initial
             searchResults = []
             errorMessage = nil
@@ -37,14 +48,17 @@ final class RouteDiscoveryViewModel: ObservableObject {
 
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
 
         do {
             let result = try await service.searchRoutes(query: query)
+            guard generation == searchGeneration, !Task.isCancelled else { return }
             searchState = result.state
             searchResults = result.items
+            isLoading = false
         } catch {
+            guard generation == searchGeneration, !Task.isCancelled else { return }
             errorMessage = Self.message(for: error)
+            isLoading = false
         }
     }
 
@@ -73,6 +87,7 @@ final class RouteCollectionViewModel: ObservableObject {
     }
 
     func loadRoutes() async {
+        guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }

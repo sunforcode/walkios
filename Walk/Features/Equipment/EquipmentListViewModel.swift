@@ -1,17 +1,33 @@
 import SwiftUI
 
+enum EquipmentEditLoadState: Equatable {
+    case idle
+    case loading
+    case loaded
+    case failed
+}
+
 @MainActor
 final class EquipmentListViewModel: ObservableObject {
     @Published var items: [PersonalEquipment] = []
     @Published var equipmentLists: [EquipmentListOverview] = []
     @Published var summary: PersonalEquipmentSummary?
-    @Published var selectedEquipmentList: EquipmentListDetail?
+    @Published private(set) var selectedEquipmentListID: String?
+    @Published private(set) var selectedEquipmentList: EquipmentListDetail?
     @Published var editingEquipment: PersonalEquipment?
     @Published var deletionImpact: PersonalEquipmentDeletionImpact?
     @Published var lastMutationSucceeded = false
     @Published var isLoading = false
     @Published var isMutating = false
+    @Published private(set) var isLoadingEquipmentList = false
+    @Published private(set) var editLoadState: EquipmentEditLoadState = .idle
+    @Published private(set) var errorCode: String?
+    @Published private(set) var loadErrorMessage: String?
     @Published var errorMessage: String?
+
+    var nameErrorMessage: String? {
+        errorCode == "equipment_name_conflict" ? errorMessage : nil
+    }
 
     private let service: any EquipmentServicing
 
@@ -21,24 +37,82 @@ final class EquipmentListViewModel: ObservableObject {
 
     func load() async {
         isLoading = true
-        errorMessage = nil
+        loadErrorMessage = nil
+        clearMutationError()
         defer { isLoading = false }
 
         do {
-            let equipment = try await service.getPersonalEquipment()
-            let lists = try await service.getEquipmentLists()
+            async let equipmentRequest = service.getPersonalEquipment()
+            async let listsRequest = service.getEquipmentLists()
+            let (equipment, lists) = try await (equipmentRequest, listsRequest)
             items = equipment.items
             summary = equipment.summary
             equipmentLists = lists.items
         } catch {
-            errorMessage = message(for: error, operation: "加载")
+            let message = message(for: error, operation: "加载")
+            loadErrorMessage = message
+            errorMessage = message
         }
     }
 
     func loadEquipment(id: String) async {
-        await mutate(operation: "加载") {
+        editLoadState = .loading
+        editingEquipment = nil
+        clearMutationError()
+        lastMutationSucceeded = false
+        do {
             editingEquipment = try await service.getPersonalEquipment(id: id)
+            editLoadState = .loaded
+        } catch {
+            apply(error, operation: "加载")
+            editLoadState = .failed
         }
+    }
+
+    func saveEquipment(
+        equipmentID: String?,
+        name: String,
+        ownedQuantity: Int,
+        unitWeightGrams: Int?
+    ) async {
+        if let equipmentID {
+            guard editLoadState == .loaded, let editingEquipment else {
+                lastMutationSucceeded = false
+                return
+            }
+            let unitWeight: PersonalEquipmentUpdateField<EquipmentWeight>
+            if let unitWeightGrams {
+                unitWeight = .value(EquipmentWeight(grams: unitWeightGrams))
+            } else if editingEquipment.unitWeight != nil {
+                unitWeight = .clear
+            } else {
+                unitWeight = .unchanged
+            }
+            await updateEquipment(
+                id: equipmentID,
+                update: PersonalEquipmentUpdate(
+                    name: name,
+                    ownedQuantity: ownedQuantity,
+                    unitWeight: unitWeight
+                )
+            )
+        } else {
+            await createEquipment(
+                name: name,
+                ownedQuantity: ownedQuantity,
+                unitWeightGrams: unitWeightGrams
+            )
+        }
+    }
+
+    func clearMutationError() {
+        errorCode = nil
+        errorMessage = nil
+    }
+
+    func clearNameError() {
+        guard errorCode == "equipment_name_conflict" else { return }
+        clearMutationError()
     }
 
     func createEquipment(name: String, ownedQuantity: Int, unitWeightGrams: Int?) async {
@@ -76,20 +150,42 @@ final class EquipmentListViewModel: ObservableObject {
             editingEquipment = nil
             summary = result.summary
             deletionImpact = nil
-            selectedEquipmentList = nil
+            clearSelectedEquipmentList()
         }
     }
 
     func loadEquipmentList(id: String) async {
-        await mutate(operation: "加载清单") {
-            selectedEquipmentList = try await service.getEquipmentList(id: id)
+        selectedEquipmentListID = id
+        selectedEquipmentList = nil
+        isLoadingEquipmentList = true
+        clearMutationError()
+        defer {
+            if selectedEquipmentListID == id {
+                isLoadingEquipmentList = false
+            }
         }
+
+        do {
+            let detail = try await service.getEquipmentList(id: id)
+            guard selectedEquipmentListID == id else { return }
+            selectedEquipmentList = detail
+            clearMutationError()
+        } catch {
+            guard selectedEquipmentListID == id else { return }
+            apply(error, operation: "加载清单")
+        }
+    }
+
+    func clearSelectedEquipmentList() {
+        selectedEquipmentListID = nil
+        selectedEquipmentList = nil
+        isLoadingEquipmentList = false
+        clearMutationError()
     }
 
     func createEquipmentList(name: String) async {
         await mutate(operation: "创建清单") {
             let result = try await service.createEquipmentList(name: name)
-            selectedEquipmentList = result.equipmentList
             summary = result.personalEquipmentSummary
             upsertList(result.equipmentList)
         }
@@ -98,7 +194,9 @@ final class EquipmentListViewModel: ObservableObject {
     func renameEquipmentList(id: String, name: String) async {
         await mutate(operation: "重命名清单") {
             let result = try await service.renameEquipmentList(id: id, name: name)
-            selectedEquipmentList = result.equipmentList
+            if selectedEquipmentListID == id {
+                selectedEquipmentList = result.equipmentList
+            }
             upsertList(result.equipmentList)
         }
     }
@@ -107,7 +205,7 @@ final class EquipmentListViewModel: ObservableObject {
         await mutate(operation: "删除清单") {
             let result = try await service.deleteEquipmentList(id: id)
             equipmentLists.removeAll { $0.identity == result.deletedEquipmentListId }
-            if selectedEquipmentList?.identity == id { selectedEquipmentList = nil }
+            if selectedEquipmentListID == id { clearSelectedEquipmentList() }
             summary = result.personalEquipmentSummary
         }
     }
@@ -119,7 +217,9 @@ final class EquipmentListViewModel: ObservableObject {
                 personalEquipmentID: personalEquipmentID,
                 quantity: quantity
             )
-            selectedEquipmentList = result.equipmentList
+            if selectedEquipmentListID == equipmentListID {
+                selectedEquipmentList = result.equipmentList
+            }
             upsertList(result.equipmentList)
         }
     }
@@ -130,14 +230,20 @@ final class EquipmentListViewModel: ObservableObject {
                 equipmentListID: equipmentListID,
                 personalEquipmentID: personalEquipmentID
             )
-            selectedEquipmentList = result.equipmentList
+            if selectedEquipmentListID == equipmentListID {
+                selectedEquipmentList = result.equipmentList
+            }
             upsertList(result.equipmentList)
         }
     }
 
     private func mutate(operation: String, action: () async throws -> Void) async {
+        guard !isMutating else {
+            lastMutationSucceeded = false
+            return
+        }
         isMutating = true
-        errorMessage = nil
+        clearMutationError()
         lastMutationSucceeded = false
         defer { isMutating = false }
 
@@ -145,8 +251,17 @@ final class EquipmentListViewModel: ObservableObject {
             try await action()
             lastMutationSucceeded = true
         } catch {
-            errorMessage = message(for: error, operation: operation)
+            apply(error, operation: operation)
         }
+    }
+
+    private func apply(_ error: Error, operation: String) {
+        if case let APIClientError.api(code, _, _, _) = error {
+            errorCode = code
+        } else {
+            errorCode = nil
+        }
+        errorMessage = message(for: error, operation: operation)
     }
 
     private func upsert(_ item: PersonalEquipment) {
