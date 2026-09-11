@@ -187,7 +187,7 @@ final class DesignSystemTests: XCTestCase {
         assertColor(AppColors.textSecondary, red: 184, green: 194, blue: 189)
         assertColor(AppColors.textWeak, red: 143, green: 154, blue: 149)
         assertColor(AppColors.interactionPrimary, red: 139, green: 214, blue: 173)
-        assertColor(AppColors.interactionBackground, red: 139, green: 214, blue: 173, alpha: 0.12)
+        assertColor(AppColors.interactionBackground, red: 139, green: 214, blue: 173, alpha: 0.13)
         assertColor(AppColors.interactionFocus, red: 139, green: 214, blue: 173, alpha: 0.30)
         assertColor(AppColors.borderPrimary, red: 113, green: 135, blue: 123)
         assertColor(AppColors.borderStrong, red: 143, green: 163, blue: 153)
@@ -789,19 +789,25 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(day.contains("ForEach(presentation.pointItems)"), "点位按单一 sequence 流展示")
         XCTAssertFalse(day.contains("departureTransportActions"), "客户端不推断去程交通槽位")
         XCTAssertFalse(day.contains("groupedPoints"), "客户端不按类别重排点位")
-        XCTAssertTrue(day.contains("滚动到边界后继续同方向滑动，切换相邻日期"), "日分页边界滑动提示")
+        XCTAssertTrue(day.contains("本次行程只有一天"), "一日行程边界提示")
+        XCTAssertTrue(day.contains("到达底部后继续上滑查看"), "非末日边界提示指向下一日")
+        XCTAssertTrue(day.contains("已到行程最后一天"), "末日边界提示")
         XCTAssertTrue(day.contains("spacing: Spacing.md"), "内部滚动区行距使用 canonical md token")
         XCTAssertFalse(day.contains("Spacing.listItemGap"), "禁止旧 listItemGap alias")
     }
 
-    func testTripWeatherDoesNotMapForecastPeriodsIntoLegacyDailyCards() throws {
+    /// PAGE-TRIP-WEATHER（6.1 修订）：逐日卡唯一数据源是冻结自然日天气（detail.days[].weather），
+    /// 概况与重要影响来自 weatherOverview 合同；不从预报时段或天气关联聚合派生。
+    func testTripWeatherBuildsDailyCardsFromFrozenDayWeather() throws {
         let source = try productionSource(at: "Features/Trips/TripDayWeatherViews.swift")
-        XCTAssertFalse(source.contains("TripBusinessComponents.DailyWeatherCard("), "新 Forecast periods 尚无已批准的逐日卡片映射")
-        XCTAssertFalse(source.contains("TripWeatherDayComponentPresentation(day:"), "不得从 Forecast periods 生成旧四字段摘要")
+        XCTAssertTrue(source.contains("TripBusinessComponents.DailyWeatherCard("), "逐日卡消费冻结自然日天气")
+        XCTAssertTrue(source.contains("detail.days"), "逐日数据源为行程详情冻结自然日")
+        XCTAssertTrue(source.contains("importantImpacts"), "重要影响来自概况合同")
         XCTAssertTrue(source.contains("trip_weather_projection_unavailable"), "后端暂不可用错误使用稳定错误码判断")
+        XCTAssertFalse(source.contains("forecast"), "不从预报时段聚合派生逐日字段")
+        XCTAssertFalse(source.contains("weatherAssociations"), "不从天气关联聚合派生")
         XCTAssertFalse(source.contains("private struct DailyTripWeatherCard"), "不建立页面私有逐日天气卡")
         XCTAssertFalse(source.contains("private struct WeatherOverview"), "不建立页面私有天气概况")
-        XCTAssertFalse(source.contains("importantImpacts"), "不得从天气关联推导整趟重要影响")
     }
 
     func testTripEquipmentFollowsSectionedSpec() throws {

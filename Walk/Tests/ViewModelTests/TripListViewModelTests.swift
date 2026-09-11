@@ -851,7 +851,8 @@ final class TripDayWeatherViewModelTests: XCTestCase {
         XCTAssertEqual(weatherLine(weather), "暂不可用")
     }
 
-    func testTripWeatherExposesDedicatedUnavailableState() async {
+    func testTripWeatherUnavailableKeepsTripContext() async {
+        let detail = PersonalTripTestFixtures.detail(track: [])
         let sut = TripWeatherViewModel(
             tripID: "trip-1",
             loadWeather: { _ in
@@ -861,10 +862,7 @@ final class TripDayWeatherViewModelTests: XCTestCase {
                     retryable: true
                 )
             },
-            loadCurrentRevision: { _ in
-                XCTFail("dedicated unavailable response does not require a revision request")
-                return "revision-1"
-            }
+            loadDetail: { _ in detail }
         )
 
         await sut.load()
@@ -872,13 +870,30 @@ final class TripDayWeatherViewModelTests: XCTestCase {
         XCTAssertNil(sut.weather)
         XCTAssertTrue(sut.isUnavailable)
         XCTAssertNil(sut.errorMessage)
+        XCTAssertEqual(sut.detail, detail)
+    }
+
+    func testTripWeatherExposesDetailForMainBranch() async {
+        let detail = PersonalTripTestFixtures.detail(track: [])
+        let sut = TripWeatherViewModel(
+            tripID: "trip-1",
+            loadWeather: { _ in PersonalTripTestFixtures.populatedWeatherProjection },
+            loadDetail: { _ in detail }
+        )
+
+        await sut.load()
+
+        XCTAssertEqual(sut.weather, PersonalTripTestFixtures.populatedWeatherProjection)
+        XCTAssertEqual(sut.detail, detail)
+        XCTAssertFalse(sut.isUnavailable)
+        XCTAssertNil(sut.errorMessage)
     }
 
     func testTripWeatherRejectsEmptyDailyProjection() async {
         let sut = TripWeatherViewModel(
             tripID: "trip-1",
             loadWeather: { _ in PersonalTripTestFixtures.emptyWeatherProjection },
-            loadCurrentRevision: { _ in "revision-1" }
+            loadDetail: { _ in PersonalTripTestFixtures.detail(track: []) }
         )
 
         await sut.load()
@@ -907,7 +922,7 @@ final class TripDayWeatherViewModelTests: XCTestCase {
         let sut = TripWeatherViewModel(
             tripID: "trip-1",
             loadWeather: { _ in weather },
-            loadCurrentRevision: { _ in "revision-1" }
+            loadDetail: { _ in PersonalTripTestFixtures.detail(track: []) }
         )
 
         await sut.load()
@@ -931,7 +946,7 @@ final class TripDayWeatherViewModelTests: XCTestCase {
         let sut = TripWeatherViewModel(
             tripID: "trip-1",
             loadWeather: { _ in weather },
-            loadCurrentRevision: { _ in "revision-1" }
+            loadDetail: { _ in PersonalTripTestFixtures.detail(track: []) }
         )
 
         await sut.load()
@@ -961,7 +976,7 @@ final class TripDayWeatherViewModelTests: XCTestCase {
         let sut = TripWeatherViewModel(
             tripID: "trip-1",
             loadWeather: { _ in weather },
-            loadCurrentRevision: { _ in "revision-1" }
+            loadDetail: { _ in PersonalTripTestFixtures.detail(track: []) }
         )
 
         await sut.load()
@@ -970,12 +985,25 @@ final class TripDayWeatherViewModelTests: XCTestCase {
         XCTAssertNotNil(sut.errorMessage)
     }
 
-    func testTripWeatherPageDoesNotAggregateForecastPeriodsIntoLegacyDailyCard() throws {
+    /// PAGE-TRIP-WEATHER 逐日卡的唯一数据源是冻结自然日天气（detail.days[].weather），
+    /// 不从预报关联聚合派生逐日字段；整趟概况同样不聚合预报时段。
+    func testTripWeatherPageBuildsDailyCardsFromFrozenDayWeatherNotForecastPeriods() throws {
         let source = try productionSource(at: "Features/Trips/TripDayWeatherViews.swift")
 
-        XCTAssertFalse(source.contains("TripBusinessComponents.DailyWeatherCard("))
-        XCTAssertFalse(source.contains("TripWeatherDayComponentPresentation(day:"))
-        XCTAssertFalse(source.contains("WeatherOverview"))
+        XCTAssertFalse(source.contains("forecast"))
+        XCTAssertFalse(source.contains("Forecast"))
+        XCTAssertFalse(source.contains("weatherAssociations"))
+    }
+
+    /// PAGE-TRIP-DAY：无自然日结果用 EmptyState 表达，不进入结构错误；
+    /// 边界提示按 Page spec 三形态文案。
+    func testTripDayUsesEmptyStateForNoDaysAndBoundaryCueTexts() throws {
+        let source = try productionSource(at: "Features/Trips/TripDayWeatherViews.swift")
+
+        XCTAssertTrue(source.contains("不会根据起止日期或默认模板补造"))
+        XCTAssertTrue(source.contains("本次行程只有一天"))
+        XCTAssertTrue(source.contains("到达底部后继续上滑查看"))
+        XCTAssertTrue(source.contains("已到行程最后一天"))
     }
 
     func testTripDayRejectsProjectionFromDifferentCurrentRevision() async {
@@ -996,7 +1024,7 @@ final class TripDayWeatherViewModelTests: XCTestCase {
         let sut = TripWeatherViewModel(
             tripID: "trip-1",
             loadWeather: { _ in PersonalTripTestFixtures.populatedWeatherProjection },
-            loadCurrentRevision: { _ in "revision-1" }
+            loadDetail: { _ in PersonalTripTestFixtures.detail(track: []) }
         )
 
         await sut.load()

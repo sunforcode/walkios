@@ -240,7 +240,7 @@ struct TripWeatherDayComponentPresentation: Equatable {
         TripWeatherValueProjection(value: field.text, state: informationState(field.status))
     }
 
-    private static func informationState(_ status: String?) -> TripInformationState? {
+    static func informationState(_ status: String?) -> TripInformationState? {
         switch status {
         case "unknown": .unknown
         case "missing": .missing
@@ -333,11 +333,11 @@ struct TripDayView: View {
                     } else if !days.isEmpty {
                         dayPages
                     } else {
-                        ErrorView(
-                            message: "完整自然日投影缺失或冲突，不生成空 Pager。",
-                            title: "无法显示自然日安排",
-                            variant: .page,
-                            retry: { Task { await viewModel.load() } }
+                        EmptyStateView(
+                            title: "完整行程结果暂不可用",
+                            message: "不会根据起止日期或默认模板补造 D1、D2。",
+                            icon: "calendar",
+                            variant: .default
                         )
                     }
                 }
@@ -366,7 +366,6 @@ struct TripDayView: View {
             IconButton(
                 systemName: "chevron.left",
                 accessibilityLabel: "返回个人行程",
-                variant: .overlay,
                 action: { dismiss() }
             )
 
@@ -723,7 +722,7 @@ private struct TripDayPage: View {
 
     private var boundaryText: String {
         if !canMovePrevious && !canMoveNext { return "本次行程只有一天" }
-        if canMoveNext { return "滚动到边界后继续同方向滑动，切换相邻日期" }
+        if canMoveNext { return "到达底部后继续上滑查看 D\(presentation.day.dayNumber + 1)" }
         return "已到行程最后一天"
     }
 
@@ -749,28 +748,29 @@ private struct TripDayPage: View {
 @MainActor
 final class TripWeatherViewModel: ObservableObject {
     @Published private(set) var weather: PersonalTripWeather?
+    @Published private(set) var detail: PersonalTripDetail?
     @Published private(set) var isLoading = false
     @Published private(set) var isUnavailable = false
     @Published var errorMessage: String?
 
     private let tripID: String
     private let loadWeather: (String) async throws -> PersonalTripWeather
-    private let loadCurrentRevision: (String) async throws -> String
+    private let loadDetail: (String) async throws -> PersonalTripDetail
 
     init(tripID: String, service: any PersonalTripServicing) {
         self.tripID = tripID
         self.loadWeather = { try await service.weather(tripID: $0) }
-        self.loadCurrentRevision = { try await service.detail(tripID: $0).revision }
+        self.loadDetail = { try await service.detail(tripID: $0) }
     }
 
     init(
         tripID: String,
         loadWeather: @escaping (String) async throws -> PersonalTripWeather,
-        loadCurrentRevision: @escaping (String) async throws -> String
+        loadDetail: @escaping (String) async throws -> PersonalTripDetail
     ) {
         self.tripID = tripID
         self.loadWeather = loadWeather
-        self.loadCurrentRevision = loadCurrentRevision
+        self.loadDetail = loadDetail
     }
 
     func load() async {
@@ -780,20 +780,24 @@ final class TripWeatherViewModel: ObservableObject {
         defer { isLoading = false }
         do {
             let weather = try await loadWeather(tripID)
-            let revision = try await loadCurrentRevision(tripID)
+            let detail = try await loadDetail(tripID)
             guard PersonalTripWeatherValidator.isValid(
                 weather,
                 tripID: tripID,
-                revision: revision
+                revision: detail.revision
             ) else {
                 throw APIClientError.invalidResponse
             }
             self.weather = weather
+            self.detail = detail
         } catch let error where Self.isProjectionUnavailable(error) {
             weather = nil
             isUnavailable = true
+            // 整趟天气不可用时保留上下文：仍尝试读取行程详情供分支 B 展示；失败则省略上下文。
+            detail = try? await loadDetail(tripID)
         } catch {
             weather = nil
+            detail = nil
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
@@ -801,6 +805,41 @@ final class TripWeatherViewModel: ObservableObject {
     private static func isProjectionUnavailable(_ error: Error) -> Bool {
         guard case APIClientError.api(let code, _, _, _) = error else { return false }
         return code == "trip_weather_projection_unavailable"
+    }
+}
+
+/// PAGE-TRIP-WEATHER 页面非组件：路线 + 完整年月日区间，双胶囊芯片。
+private struct TripWeatherContextLine: View {
+    let routeName: String
+    let startDate: LocalDate
+    let endDate: LocalDate
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            chip(routeName)
+            chip(dateRangeText)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var dateRangeText: String {
+        let start = Self.fullDate(startDate)
+        let end = Self.fullDate(endDate)
+        return start == end ? start : "\(start)—\(end)"
+    }
+
+    private func chip(_ text: String) -> some View {
+        Text(text)
+            .font(.tag)
+            .foregroundStyle(AppColors.textSecondary)
+            .lineLimit(1)
+            .padding(.horizontal, Spacing.sm)
+            .padding(.vertical, Spacing.xs)
+            .background(AppColors.surfaceSoft, in: Capsule())
+    }
+
+    private static func fullDate(_ date: LocalDate) -> String {
+        "\(date.year)年\(date.month)月\(date.day)日"
     }
 }
 
@@ -828,30 +867,19 @@ struct TripWeatherView: View {
                     if viewModel.isLoading && viewModel.weather == nil {
                         LoadingView(message: "正在加载行程天气", variant: .page)
                     } else if viewModel.isUnavailable {
-                        ErrorView(
-                            message: "行程天气关联尚未形成完整投影。",
-                            title: "行程天气暂不可用",
-                            variant: .page,
-                            retry: { Task { await viewModel.load() } }
-                        )
-                    } else if viewModel.errorMessage != nil, viewModel.weather == nil {
+                        weatherUnavailableContent
+                    } else if viewModel.errorMessage != nil || viewModel.weather == nil {
                         ErrorView(
                             message: "逐日天气投影缺失或顺序冲突。",
                             title: "无法显示行程天气",
                             variant: .page,
                             retry: { Task { await viewModel.load() } }
                         )
-                    } else if viewModel.weather != nil {
-                        EmptyStateView(
-                            title: "行程天气已加载",
-                            message: "天气关联已读取，逐日天气卡片待开放。",
-                            icon: "cloud.sun",
-                            variant: .default
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if let detail = viewModel.detail, !detail.days.isEmpty {
+                        weatherScrollContent(detail)
                     } else {
                         ErrorView(
-                            message: "逐日天气投影缺失或顺序冲突。",
+                            message: "完整自然日投影缺失，不生成空逐日区。",
                             title: "无法显示行程天气",
                             variant: .page,
                             retry: { Task { await viewModel.load() } }
@@ -863,6 +891,110 @@ struct TripWeatherView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.load() }
+    }
+
+    /// 分支 B：整趟天气目标不可用；保留导航与上下文，整页 EmptyState，不用其他地点或日期补齐。
+    private var weatherUnavailableContent: some View {
+        VStack(spacing: 0) {
+            if let detail = viewModel.detail {
+                TripWeatherContextLine(
+                    routeName: detail.trip.frozenRouteBasis.routeName,
+                    startDate: detail.trip.startDate,
+                    endDate: detail.trip.endDate
+                )
+                .padding(.horizontal, Spacing.pageHorizontal)
+                .padding(.top, Spacing.md)
+            }
+            EmptyStateView(
+                title: "暂时无法获取本次天气",
+                message: "不会用其他地点、其他日期或季节天气补齐。",
+                icon: "cloud.sun",
+                variant: .default
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    /// 主分支：上下文 → 置信标签行 → 可选过期警示 → 可选概况 → 逐日区，单一纵向滚动。
+    private func weatherScrollContent(_ detail: PersonalTripDetail) -> some View {
+        let expired = detail.trip.weatherOverview?.summary.confidence?.status == "stale"
+        return ScrollView {
+            VStack(alignment: .leading, spacing: Spacing.xl) {
+                TripWeatherContextLine(
+                    routeName: detail.trip.frozenRouteBasis.routeName,
+                    startDate: detail.trip.startDate,
+                    endDate: detail.trip.endDate
+                )
+
+                HStack(spacing: Spacing.sm) {
+                    InfoTag(title: "外部动态信息", tone: .info)
+                    if detail.trip.weatherOverview != nil {
+                        InfoTag(
+                            title: expired ? "信息已过期" : "更新时间有效",
+                            tone: expired ? .warning : .info
+                        )
+                    }
+                }
+
+                if expired {
+                    NoticeView(
+                        message: "当前版本不提供调整或重新生成，请在出发前核对最新天气。",
+                        title: "天气信息可能不再准确",
+                        tone: .warning
+                    )
+                }
+
+                if let overview = detail.trip.weatherOverview {
+                    TripBusinessComponents.WeatherOverview(projection: Self.overviewProjection(overview))
+                }
+
+                SectionHeader(title: "逐日天气") {
+                    Text("\(detail.days.count) 个自然日")
+                        .font(.appCaption)
+                        .foregroundStyle(AppColors.textSecondary)
+                }
+
+                VStack(spacing: Spacing.lg) {
+                    ForEach(detail.days) { day in
+                        TripBusinessComponents.DailyWeatherCard(day: Self.dayProjection(day))
+                    }
+                }
+            }
+            .padding(.horizontal, Spacing.pageHorizontal)
+            .padding(.top, Spacing.md)
+            .padding(.bottom, Spacing.xl)
+            .frame(maxWidth: 600, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private static func overviewProjection(_ overview: WeatherOverview) -> WeatherOverviewProjection {
+        WeatherOverviewProjection(
+            summary: TripWeatherValueProjection(
+                value: overview.summary.value,
+                state: TripWeatherDayComponentPresentation.informationState(overview.summary.confidence?.status)
+            ),
+            importantImpacts: (overview.importantImpacts ?? [])
+                .sorted { $0.sequence < $1.sequence }
+                .compactMap { impact in
+                    guard let value = impact.content.value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                          !value.isEmpty else { return nil }
+                    return value
+                }
+        )
+    }
+
+    private static func dayProjection(_ day: PersonalTripDay) -> TripWeatherDayProjection {
+        TripWeatherDayComponentPresentation(
+            day: PersonalTripWeatherDay(
+                tripDayID: day.identity,
+                dayNumber: day.dayNumber,
+                date: day.date,
+                primaryStage: day.primaryStage,
+                hikingDayNumber: day.hikingDayNumber,
+                weather: day.weather
+            )
+        ).projection
     }
 
 }

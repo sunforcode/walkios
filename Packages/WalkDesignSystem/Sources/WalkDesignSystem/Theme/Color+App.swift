@@ -15,7 +15,7 @@ public enum AppColors {
      public static let surfacePrimary = Color(red: 16 / 255, green: 35 / 255, blue: 27 / 255)
      public static let surfaceElevated = Color(red: 23 / 255, green: 49 / 255, blue: 38 / 255)
      public static let surfaceMuted = surfaceElevated
-     public static let surfaceSoft = Color.white.opacity(0.055)
+     public static let surfaceSoft = Color.white.opacity(0.06)
      public static let surfaceInput = Color.white.opacity(0.04)
      public static let surfaceSubtle = Color.white.opacity(0.035)
      public static let surfaceHeader = pageMiddle.opacity(0.94)
@@ -36,7 +36,7 @@ public enum AppColors {
      public static let textDisabled = textWeak.opacity(0.62)
      public static let interactionPrimary = Color(red: 139 / 255, green: 214 / 255, blue: 173 / 255)
      public static let interactionOnPrimary = Color(red: 8 / 255, green: 33 / 255, blue: 22 / 255)
-     public static let interactionBackground = interactionPrimary.opacity(0.12)
+     public static let interactionBackground = interactionPrimary.opacity(0.13)
      public static let interactionFocus = interactionPrimary.opacity(0.30)
      public static let borderPrimary = Color(red: 113 / 255, green: 135 / 255, blue: 123 / 255)
      public static let borderStrong = Color(red: 143 / 255, green: 163 / 255, blue: 153 / 255)
