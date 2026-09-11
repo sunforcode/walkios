@@ -9,27 +9,37 @@ struct TripListRowProjection: Equatable {
     let routeName: String
     let startDate: String
     let endDate: String
-    var coverAvailable: Bool = true
 
+    /// 日期区间按 spec shortDate 口径展示（「M月D日」，区间用「—」连接）。
     var dateRange: String {
-        startDate == endDate ? startDate : "\(startDate)–\(endDate)"
+        let start = Self.shortDate(startDate)
+        return startDate == endDate ? start : "\(start)—\(Self.shortDate(endDate))"
+    }
+
+    var detailLine: String {
+        "\(routeName) · \(dateRange)"
+    }
+
+    private static func shortDate(_ value: String) -> String {
+        let parts = value.split(separator: "-")
+        guard parts.count == 3,
+              let month = Int(parts[1]),
+              let day = Int(parts[2]) else { return value }
+        return "\(month)月\(day)日"
     }
 }
 
 extension TripBusinessComponents {
-    struct TripListRow<Cover: View>: View {
+    struct TripListRow: View {
         let projection: TripListRowProjection
         let onActivate: (String) -> Void
-        private let cover: Cover
 
         init(
             projection: TripListRowProjection,
-            onActivate: @escaping (String) -> Void,
-            @ViewBuilder cover: () -> Cover
+            onActivate: @escaping (String) -> Void
         ) {
             self.projection = projection
             self.onActivate = onActivate
-            self.cover = cover()
         }
 
         var body: some View {
@@ -58,7 +68,7 @@ extension TripBusinessComponents {
 
         private var regularLayout: some View {
             HStack(spacing: Spacing.md) {
-                artwork
+                routeMark
                 copy
                 TripStatusBadge(status: projection.status)
             }
@@ -66,7 +76,7 @@ extension TripBusinessComponents {
 
         private var compactLayout: some View {
             HStack(alignment: .top, spacing: Spacing.md) {
-                artwork
+                routeMark
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     copy
                     TripStatusBadge(status: projection.status)
@@ -74,18 +84,17 @@ extension TripBusinessComponents {
             }
         }
 
-        private var artwork: some View {
-            Group {
-                if projection.coverAvailable {
-                    cover
-                } else {
-                    AppColors.surfaceElevated
+        /// RouteMark（mark 变体）：42 × 42，route 图标，薄荷软底，13px 原型圆角映射 Radius.md（12）。
+        private var routeMark: some View {
+            RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                .fill(AppColors.interactionBackground)
+                .frame(width: 42, height: 42)
+                .overlay {
+                    Image(systemName: "point.topleft.down.curvedto.point.bottomright.up")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(AppColors.interactionPrimary)
                 }
-            }
-            .frame(width: 52, height: 52)
-            .clipped()
-            .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-            .accessibilityHidden(true)
+                .accessibilityHidden(true)
         }
 
         private var copy: some View {
@@ -94,20 +103,17 @@ extension TripBusinessComponents {
                     .font(.listTitle)
                     .foregroundStyle(AppColors.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(projection.routeName)
+                Text(projection.detailLine)
                     .font(.appCaption)
                     .foregroundStyle(AppColors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(projection.dateRange)
-                    .font(.appCaption)
-                    .foregroundStyle(AppColors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
-            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
         }
 
         private var accessibilityLabel: String {
-            "\(projection.name)，\(projection.routeName)，\(projection.dateRange)，\(projection.status.title)"
+            "\(projection.name)，\(projection.detailLine)，\(projection.status.title)"
         }
     }
 }
@@ -118,9 +124,7 @@ extension TripBusinessComponents {
         TripBusinessComponents.TripListRow(
             projection: BusinessComponentPreviewFixtures.tripRowDefault,
             onActivate: { _ in }
-        ) {
-            TripDeterministicCoverSurface()
-        }
+        )
     }
 }
 
@@ -129,9 +133,7 @@ extension TripBusinessComponents {
         TripBusinessComponents.TripListRow(
             projection: BusinessComponentPreviewFixtures.tripRowInProgress,
             onActivate: { _ in }
-        ) {
-            TripDeterministicCoverSurface()
-        }
+        )
     }
 }
 
@@ -140,9 +142,7 @@ extension TripBusinessComponents {
         TripBusinessComponents.TripListRow(
             projection: BusinessComponentPreviewFixtures.tripRowCompleted,
             onActivate: { _ in }
-        ) {
-            TripDeterministicCoverSurface()
-        }
+        )
     }
 }
 
@@ -151,20 +151,7 @@ extension TripBusinessComponents {
         TripBusinessComponents.TripListRow(
             projection: BusinessComponentPreviewFixtures.tripRowCancelled,
             onActivate: { _ in }
-        ) {
-            TripDeterministicCoverSurface()
-        }
-    }
-}
-
-#Preview("TripListRow.coverMissing") {
-    BusinessComponentPreviewHost {
-        TripBusinessComponents.TripListRow(
-            projection: BusinessComponentPreviewFixtures.tripRowCoverMissing,
-            onActivate: { _ in }
-        ) {
-            TripDeterministicCoverSurface()
-        }
+        )
     }
 }
 
@@ -173,9 +160,7 @@ extension TripBusinessComponents {
         TripBusinessComponents.TripListRow(
             projection: BusinessComponentPreviewFixtures.tripRowLongContent,
             onActivate: { _ in }
-        ) {
-            TripDeterministicCoverSurface()
-        }
+        )
     }
 }
 #endif

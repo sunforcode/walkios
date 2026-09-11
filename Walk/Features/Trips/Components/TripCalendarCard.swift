@@ -30,7 +30,7 @@ extension TripBusinessComponents {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
-                        Text("过去连续 365 个业务日期的行程分布")
+                        Text("最近一年 · 热点仅展示日期分布")
                             .font(.appCaption)
                             .foregroundStyle(AppColors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)

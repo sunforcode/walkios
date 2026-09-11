@@ -42,6 +42,7 @@ struct TripListView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: Spacing.xl) {
+                        tripsTitleBlock
                         stateContent
                     }
                     .frame(maxWidth: 600, alignment: .topLeading)
@@ -50,7 +51,6 @@ struct TripListView: View {
                     .padding(.top, Spacing.lg)
                     .padding(.bottom, Spacing.xxl)
                 }
-                .refreshable { await viewModel.refresh() }
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -66,8 +66,8 @@ struct TripListView: View {
             loadingRows
         } else if viewModel.errorMessage != nil {
             ErrorView(
-                message: "不会使用缓存或模拟行程。",
-                title: "暂时无法加载行程",
+                message: "不会使用缓存或离线行程补齐。",
+                title: "无法加载行程列表",
                 variant: .page,
                 retry: { Task { await viewModel.retry() } }
             )
@@ -76,7 +76,7 @@ struct TripListView: View {
             EmptyStateView(
                 title: "还没有行程",
                 message: "先查找一条路线并生成个人行程。",
-                icon: "map",
+                icon: "calendar",
                 actionTitle: "查找路线",
                 action: onFindRoute,
                 variant: .default
@@ -96,6 +96,23 @@ struct TripListView: View {
                 emptyText: "暂无历史行程"
             )
         }
+    }
+
+    /// TripsTitleBlock（非组件）：kicker + 页面大标题 + 副标题，
+    /// 与导航头标题并存（原型证据：iOS 大标题形态）。
+    private var tripsTitleBlock: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text("个人行程找回")
+                .font(.label)
+                .foregroundStyle(AppColors.interactionPrimary)
+            Text("我的全部行程")
+                .font(.displayTitle)
+                .foregroundStyle(AppColors.textPrimary)
+            Text("当前行程和历史行程在同一页面分组展示。")
+                .font(.appCaption)
+                .foregroundStyle(AppColors.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var loadingRows: some View {
@@ -126,11 +143,11 @@ struct TripListView: View {
             .padding(.bottom, Spacing.sm)
 
             if trips.isEmpty {
-                EmptyStateView(
-                    title: emptyText,
-                    icon: nil,
-                    variant: .compactText
-                )
+                Text(emptyText)
+                    .font(.appCaption)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, Spacing.sm)
             } else {
                 ForEach(trips) { trip in
                     TripBusinessComponents.TripListRow(
@@ -140,15 +157,12 @@ struct TripListView: View {
                             status: trip.status,
                             routeName: trip.routeName,
                             startDate: trip.startDate.description,
-                            endDate: trip.endDate.description,
-                            coverAvailable: false
+                            endDate: trip.endDate.description
                         ),
                         onActivate: { tripID in
                             onNavigate(.tripDetail(tripID))
                         }
-                    ) {
-                        EmptyView()
-                    }
+                    )
                 }
             }
         }

@@ -6,6 +6,8 @@ enum WeatherSummaryState: Equatable {
     case available
     case stale
     case unavailable
+    /// 字段整体省略的中性态；不得把省略解释为 unavailable。
+    case omitted
 }
 
 struct WeatherSummaryModel: Equatable {
@@ -54,6 +56,7 @@ struct WeatherSummary: View {
         case .available: "可用"
         case .stale: "可能已过期"
         case .unavailable: "不可用"
+        case .omitted: "未提供"
         }
     }
 
@@ -62,6 +65,7 @@ struct WeatherSummary: View {
         case .available: "cloud.sun"
         case .stale: "exclamationmark.triangle"
         case .unavailable: "minus"
+        case .omitted: "tray"
         }
     }
 
@@ -73,7 +77,7 @@ struct WeatherSummary: View {
         switch model.state {
         case .available: AppColors.interactionPrimary
         case .stale: AppColors.warningBackground
-        case .unavailable: AppColors.surfaceMuted
+        case .unavailable, .omitted: AppColors.surfaceMuted
         }
     }
 }

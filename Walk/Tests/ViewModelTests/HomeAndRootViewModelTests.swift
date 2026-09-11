@@ -369,14 +369,17 @@ final class HomeAndRootViewModelTests: XCTestCase {
         XCTAssertFalse(viewModelSource.contains("山脊 4 级风"))
     }
 
-    func testFocusTripSummaryOmitsWeatherWhenItsModelHasNoWeather() throws {
+    /// 6.2 修订（H1）：weather 整体省略时 FocusTripSummary 仍渲染 WeatherSummary
+    /// 两个中性槽位（「本次未提供天气摘要」/「行程其他内容仍可查看」），
+    /// 不得把字段省略解释为 unavailable。
+    func testFocusTripSummaryRendersNeutralWeatherSlotsWhenModelHasNoWeather() throws {
         let source = try productionSource(at: "Features/Home/Components/FocusTripSummary.swift")
 
-        XCTAssertTrue(source.contains("if let weather = model.weather"))
-        XCTAssertTrue(source.contains("WeatherSummary(model: weather)"))
-        XCTAssertFalse(source.contains("本次未提供天气摘要"))
-        XCTAssertFalse(source.contains("行程其他内容仍可查看"))
-        XCTAssertFalse(source.contains("resolvedWeather"))
+        XCTAssertFalse(source.contains("if let weather = model.weather"), "省略不再整体跳过 WeatherSummary")
+        XCTAssertTrue(source.contains("WeatherSummary(model: resolvedWeather)"))
+        XCTAssertTrue(source.contains("本次未提供天气摘要"))
+        XCTAssertTrue(source.contains("行程其他内容仍可查看"))
+        XCTAssertTrue(source.contains("state: .omitted"), "省略是独立中性态，不是 unavailable")
     }
 
     private func productionSource(at relativePath: String) throws -> String {

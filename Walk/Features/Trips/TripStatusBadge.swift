@@ -9,7 +9,7 @@ extension PersonalTripStatus {
         switch self {
         case .planned: AppColors.statusPlanning
         case .inProgress: AppColors.statusProgress
-        case .completed: AppColors.statusCompleted
+        case .completed: AppColors.textSecondary
         case .cancelled: AppColors.statusCancelled
         }
     }
@@ -18,7 +18,7 @@ extension PersonalTripStatus {
         switch self {
         case .planned: AppColors.statusPlanningBackground
         case .inProgress: AppColors.statusProgressBackground
-        case .completed: AppColors.statusCompletedBackground
+        case .completed: AppColors.surfaceSoft
         case .cancelled: AppColors.statusCancelledBackground
         }
     }
@@ -41,7 +41,7 @@ struct TripStatusBadge: View {
             .frame(minHeight: 28)
             .background(
                 status.badgeBackgroundColor,
-                in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                in: Capsule(style: .continuous)
             )
             .fixedSize(horizontal: true, vertical: false)
             .accessibilityLabel("行程状态：\(status.badgeTitle)")

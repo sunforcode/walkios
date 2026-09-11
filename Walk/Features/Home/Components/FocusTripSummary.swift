@@ -58,29 +58,36 @@ struct FocusTripSummary: View {
     }
 
     private func content(horizontalPadding: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        // H2：三段独立锚定（顶部 58 / 指标底部 104 / 天气底部 26），不相互推挤。
+        ZStack(alignment: .bottomLeading) {
             routeIdentity
                 .frame(maxWidth: FocusTripLayout.routeIdentityMaxWidth, alignment: .leading)
+                .frame(maxHeight: .infinity, alignment: .top)
                 .padding(.top, FocusTripLayout.routeIdentityTop)
 
-            Spacer(minLength: Spacing.lg)
-
             MetricGroup(items: model.metrics, variant: .inline)
-                .padding(.bottom, Spacing.xl)
+                .padding(.bottom, FocusTripLayout.metricGroupBottom)
 
-            if let weather = model.weather {
-                WeatherSummary(model: weather)
-                    .padding(.bottom, FocusTripLayout.weatherBottom)
-            }
+            WeatherSummary(model: resolvedWeather)
+                .padding(.bottom, FocusTripLayout.weatherBottom)
         }
         .padding(.horizontal, horizontalPadding)
         .foregroundStyle(AppColors.textPrimary)
     }
 
+    /// H1：weather 整体省略时仍渲染 WeatherSummary 两个中性槽位（不得解释为 unavailable）。
+    private var resolvedWeather: WeatherSummaryModel {
+        model.weather ?? WeatherSummaryModel(
+            conclusion: "本次未提供天气摘要",
+            impact: "行程其他内容仍可查看",
+            state: .omitted
+        )
+    }
+
     private var routeIdentity: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Text(model.routeName)
-                .font(.sceneTitle)
+                .font(.displayTitle)
                 .tracking(-1.2)
                 .lineSpacing(1)
                 .fixedSize(horizontal: false, vertical: true)
@@ -99,9 +106,7 @@ struct FocusTripSummary: View {
             return "\(item.label)\(value)\(item.unit ?? "")"
         }
         var summary = ["\(model.start)到\(model.end)"] + metricSummary
-        if let weather = model.weather {
-            summary.append(contentsOf: [weather.conclusion, weather.impact])
-        }
+        summary.append(contentsOf: [resolvedWeather.conclusion, resolvedWeather.impact])
         return summary.joined(separator: "，")
     }
 
@@ -115,6 +120,7 @@ private enum FocusTripLayout {
     static let compactHorizontalPadding = Spacing.lg
     static let routeIdentityTop: CGFloat = 58
     static let routeIdentityMaxWidth: CGFloat = 290
+    static let metricGroupBottom: CGFloat = 104
     static let weatherBottom: CGFloat = 26
 }
 

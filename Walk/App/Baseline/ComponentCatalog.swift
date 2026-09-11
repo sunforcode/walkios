@@ -486,9 +486,7 @@ enum ComponentCatalog {
             TripBusinessComponents.TripListRow(
                 projection: BusinessComponentPreviewFixtures.tripRowDefault,
                 onActivate: { _ in }
-            ) {
-                TripDeterministicCoverSurface()
-            }
+            )
         },
         entry("TripRouteSummaryCard", .business) {
             TripBusinessComponents.TripRouteSummaryCard(

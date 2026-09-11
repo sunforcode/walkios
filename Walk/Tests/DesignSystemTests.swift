@@ -543,8 +543,8 @@ final class DesignSystemTests: XCTestCase {
         assertColor(PersonalTripStatus.planned.badgeBackgroundColor, red: 245, green: 158, blue: 11, alpha: 0.15)
         assertColor(PersonalTripStatus.inProgress.badgeForegroundColor, red: 74, green: 222, blue: 128)
         assertColor(PersonalTripStatus.inProgress.badgeBackgroundColor, red: 34, green: 197, blue: 94, alpha: 0.12)
-        assertColor(PersonalTripStatus.completed.badgeForegroundColor, red: 192, green: 132, blue: 252)
-        assertColor(PersonalTripStatus.completed.badgeBackgroundColor, red: 168, green: 85, blue: 247, alpha: 0.12)
+        assertColor(PersonalTripStatus.completed.badgeForegroundColor, red: 184, green: 194, blue: 189)
+        assertColor(PersonalTripStatus.completed.badgeBackgroundColor, red: 255, green: 255, blue: 255, alpha: 0.06)
         assertColor(PersonalTripStatus.cancelled.badgeForegroundColor, red: 248, green: 113, blue: 113)
         assertColor(PersonalTripStatus.cancelled.badgeBackgroundColor, red: 239, green: 68, blue: 68, alpha: 0.10)
     }
@@ -554,8 +554,8 @@ final class DesignSystemTests: XCTestCase {
 
         XCTAssertTrue(source.contains("private let status: PersonalTripStatus"))
         XCTAssertTrue(source.contains("init(status: PersonalTripStatus)"))
-        XCTAssertTrue(source.contains("RoundedRectangle(cornerRadius: Radius.md, style: .continuous)"))
-        XCTAssertFalse(source.contains("Capsule()"))
+        XCTAssertTrue(source.contains("Capsule(style: .continuous)"), "radius-pill：胶囊圆角")
+        XCTAssertFalse(source.contains("RoundedRectangle(cornerRadius: Radius.md"))
         XCTAssertFalse(source.contains("init(status: some StatusBadgeModel)"))
     }
 
@@ -781,6 +781,46 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(list.contains("variant: .default"), "全局空态使用 EmptyState.default")
         XCTAssertTrue(list.contains("variant: .page"), "加载失败使用 ErrorView.page")
         XCTAssertFalse(list.contains("variant: .section"), "PAGE-TRIPS 全局状态不得使用 Section 变体")
+        XCTAssertTrue(list.contains("个人行程找回"), "TripsTitleBlock kicker")
+        XCTAssertTrue(list.contains("当前行程和历史行程在同一页面分组展示。"), "TripsTitleBlock 副标题")
+        XCTAssertTrue(list.contains("无法加载行程列表"), "错误态标题钉入 spec")
+        XCTAssertTrue(list.contains("不会使用缓存或离线行程补齐。"), "错误态说明钉入 spec")
+        XCTAssertTrue(list.contains("icon: \"calendar\""), "全局空态图标 calendar（原型证据）")
+        XCTAssertFalse(list.contains(".refreshable"), "页面不提供下拉刷新")
+        XCTAssertFalse(list.contains("variant: .compactText"), "分组空态是纯文本提示，非 EmptyState 变体")
+    }
+
+    /// PAGE-TRIPS / TripListRow 6.2 修订：行首 RouteMark（42×42 薄荷软底 route 图标，无封面槽），
+    /// Copy 为 TripName + DetailLine 单行「路线名 · shortDate 区间」。
+    func testTripListRowUsesRouteMarkAndSingleDetailLine() throws {
+        let row = try productionSource(at: "Features/Trips/Components/TripListRow.swift")
+        XCTAssertTrue(row.contains("RouteMark"), "行首元素命名 RouteMark")
+        XCTAssertTrue(row.contains("42"), "RouteMark 42 × 42")
+        XCTAssertTrue(row.contains("AppColors.interactionBackground"), "薄荷软底")
+        XCTAssertFalse(row.contains("coverAvailable"), "不设封面槽")
+        XCTAssertFalse(row.contains("TripDeterministicCoverSurface"), "行内不消费封面")
+        XCTAssertTrue(row.contains("lineLimit(1)"), "DetailLine 单行")
+        XCTAssertTrue(row.contains("· "), "DetailLine 以「路线名 · 日期区间」组合")
+    }
+
+    /// FocusTripSummary 6.2 修订（H1/H2/H6）：
+    /// 三段独立锚定（顶部 58 / 指标底部 104 / 天气底部 26，撤销顶部堆叠）；
+    /// RouteName 用 font-display 档（原型 31px→32 档记录）；weather 省略时仍渲染两个中性槽位。
+    func testFocusTripSummaryUsesIndependentAnchoringAndNeutralWeatherSlots() throws {
+        let focus = try productionSource(at: "Features/Home/Components/FocusTripSummary.swift")
+        XCTAssertTrue(focus.contains("routeIdentityTop: CGFloat = 58"), "RouteIdentity 距场景顶部 58")
+        XCTAssertTrue(focus.contains("metricGroupBottom: CGFloat = 104"), "MetricGroup 距场景底部 104")
+        XCTAssertTrue(focus.contains("weatherBottom: CGFloat = 26"), "WeatherSummary 距场景底部 26")
+        XCTAssertTrue(focus.contains("ZStack("), "三段独立锚定不相互推挤")
+        XCTAssertTrue(focus.contains(".font(.displayTitle)"), "RouteName 用 displayTitle 档")
+        XCTAssertFalse(focus.contains(".font(.sceneTitle)"), "不再使用 sceneTitle")
+        XCTAssertTrue(focus.contains("本次未提供天气摘要"), "省略时中性槽位一")
+        XCTAssertTrue(focus.contains("行程其他内容仍可查看"), "省略时中性槽位二")
+        XCTAssertFalse(focus.contains("if let weather = model.weather {"), "weather 省略仍渲染 WeatherSummary")
+
+        let weather = try productionSource(at: "Features/Home/Components/WeatherSummary.swift")
+        XCTAssertTrue(weather.contains("case omitted"), "字段省略不得解释为 unavailable")
+        XCTAssertFalse(weather.contains("case omitted =>"), "omitted 是独立状态")
     }
 
     func testTripDayKeepsServerActionAndPointOrderAndEdgeHint() throws {

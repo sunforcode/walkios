@@ -1673,16 +1673,6 @@ enum BusinessComponentPreviewFixtures {
         endDate: "2026-07-19"
     )
 
-    static let tripRowCoverMissing = TripListRowProjection(
-        tripID: "trip-005",
-        name: "山谷观景行程",
-        status: .planned,
-        routeName: "山谷观景线",
-        startDate: "2026-10-02",
-        endDate: "2026-10-02",
-        coverAvailable: false
-    )
-
     static let tripRowLongContent = TripListRowProjection(
         tripID: "trip-006",
         name: "穿越高山草甸、原始森林与连续垭口的长距离个人徒步行程",
