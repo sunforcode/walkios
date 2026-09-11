@@ -43,7 +43,6 @@ struct TripListBaselineFixture: Equatable {
 
 enum BaselineFixtureProviderError: Error, Equatable {
     case unsupportedScenario(BaselineScenario)
-    case unsupportedCurrentScenario(CurrentBaselineScenario)
 }
 
 enum BaselineFixtureProvider {
@@ -74,9 +73,6 @@ enum BaselineFixtureProvider {
             state = .loaded(PersonalTripCollection(currentTrips: [], historicalTrips: []))
         case .pageTripsError:
             state = .error("行程加载失败，请重试")
-        default:
-            // home-pilot 场景尚未接入 trip-list fixture，运行时由 BaselineRootView 走 unsupported 分支
-            throw BaselineFixtureProviderError.unsupportedCurrentScenario(scenario)
         }
         return TripListBaselineFixture(scenario: scenario, state: state)
     }

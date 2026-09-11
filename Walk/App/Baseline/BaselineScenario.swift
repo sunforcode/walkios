@@ -143,30 +143,6 @@ enum CurrentBaselineScenario: String, CaseIterable {
     case pageTripsGlobalEmpty = "page-trips--global-empty"
     case pageTripsError = "page-trips--error"
 
-    case componentMetricItemAvailable = "component-metric-item--available"
-    case componentMetricItemMissing = "component-metric-item--missing"
-    case componentMetricGroupInline = "component-metric-group--inline"
-    case componentMetricGroupMissing = "component-metric-group--missing"
-    case componentWeatherSummaryDefault = "component-weather-summary--default"
-    case componentWeatherSummaryOmitted = "component-weather-summary--omitted"
-    case componentWeatherSummaryStale = "component-weather-summary--stale"
-    case componentWeatherSummaryLongContent = "component-weather-summary--long-content"
-    case componentFocusTripSummaryComplete = "component-focus-trip-summary--complete"
-    case componentFocusTripSummaryMissingMetrics = "component-focus-trip-summary--missing-metrics"
-    case componentFocusTripSummaryWeatherOmitted = "component-focus-trip-summary--weather-omitted"
-    case componentFocusTripSummaryLongContent = "component-focus-trip-summary--long-content"
-    case componentPrimaryTabBarHome = "component-primary-tab-bar--home"
-    case componentPrimaryTabBarRoutes = "component-primary-tab-bar--routes"
-    case componentPrimaryTabBarMe = "component-primary-tab-bar--me"
-
-    case pageHomeGuest = "page-home--guest"
-    case pageHomeFocusComplete = "page-home--focus-complete"
-    case pageHomeFocusMissingMetrics = "page-home--focus-missing-metrics"
-    case pageHomeFocusWeatherOmitted = "page-home--focus-weather-omitted"
-    case pageHomeLoading = "page-home--loading"
-    case pageHomeError = "page-home--error"
-    case pageHomeLongContent = "page-home--long-content"
-
     static let tripListScenarios: [CurrentBaselineScenario] = [
         .pageTripsLoaded,
         .pageTripsCurrentEmpty,
@@ -176,94 +152,10 @@ enum CurrentBaselineScenario: String, CaseIterable {
         .pageTripsError,
     ]
 
-    static let homePilotScenarios: [CurrentBaselineScenario] = [
-        .componentMetricItemAvailable,
-        .componentMetricItemMissing,
-        .componentMetricGroupInline,
-        .componentMetricGroupMissing,
-        .componentWeatherSummaryDefault,
-        .componentWeatherSummaryOmitted,
-        .componentWeatherSummaryStale,
-        .componentWeatherSummaryLongContent,
-        .componentFocusTripSummaryComplete,
-        .componentFocusTripSummaryMissingMetrics,
-        .componentFocusTripSummaryWeatherOmitted,
-        .componentFocusTripSummaryLongContent,
-        .componentPrimaryTabBarHome,
-        .componentPrimaryTabBarRoutes,
-        .componentPrimaryTabBarMe,
-        .pageHomeGuest,
-        .pageHomeFocusComplete,
-        .pageHomeFocusMissingMetrics,
-        .pageHomeFocusWeatherOmitted,
-        .pageHomeLoading,
-        .pageHomeError,
-        .pageHomeLongContent,
-    ]
-
-    static let allExecutableScenarios: [CurrentBaselineScenario] =
-        tripListScenarios + homePilotScenarios
-
-    /// 枚举只收录当前可执行的场景；历史冻结场景归 `BaselineScenario`。
-    var isSupported: Bool { true }
-
-    var pageID: BaselinePageID? {
-        switch self {
-        case .pageTripsLoaded, .pageTripsCurrentEmpty, .pageTripsHistoryEmpty,
-             .pageTripsLoading, .pageTripsGlobalEmpty, .pageTripsError:
-            return .trips
-        case .pageHomeGuest, .pageHomeFocusComplete, .pageHomeFocusMissingMetrics,
-             .pageHomeFocusWeatherOmitted, .pageHomeLoading, .pageHomeError,
-             .pageHomeLongContent:
-            return .home
-        default:
-            return nil
-        }
-    }
-
-    var surfaceID: String {
-        if let pageID {
-            return pageID.rawValue
-        }
-        switch self {
-        case .componentMetricItemAvailable:
-            return "MetricItem.default"
-        case .componentMetricItemMissing:
-            return "MetricItem.missingMetrics"
-        case .componentMetricGroupInline:
-            return "MetricGroup.inline"
-        case .componentMetricGroupMissing:
-            return "MetricGroup.missingMetrics"
-        case .componentWeatherSummaryDefault:
-            return "WeatherSummary.default"
-        case .componentWeatherSummaryOmitted:
-            return "WeatherSummary.omitted"
-        case .componentWeatherSummaryStale:
-            return "WeatherSummary.stale"
-        case .componentWeatherSummaryLongContent:
-            return "WeatherSummary.longContent"
-        case .componentFocusTripSummaryComplete:
-            return "FocusTripSummary.complete"
-        case .componentFocusTripSummaryMissingMetrics:
-            return "FocusTripSummary.missingMetrics"
-        case .componentFocusTripSummaryWeatherOmitted:
-            return "FocusTripSummary.weatherOmitted"
-        case .componentFocusTripSummaryLongContent:
-            return "FocusTripSummary.longContent"
-        case .componentPrimaryTabBarHome:
-            return "PrimaryTabBar.home"
-        case .componentPrimaryTabBarRoutes:
-            return "PrimaryTabBar.routes"
-        case .componentPrimaryTabBarMe:
-            return "PrimaryTabBar.me"
-        default:
-            return rawValue
-        }
-    }
+    var pageID: BaselinePageID { .trips }
 }
 
 enum BaselineReadinessStatus {
-    case pending
     case ready
     case unsupported
 }
@@ -275,8 +167,6 @@ enum BaselineReadiness {
     ) -> String {
         let prefix: String
         switch status {
-        case .pending:
-            prefix = "pending"
         case .ready:
             prefix = "ready"
         case .unsupported:

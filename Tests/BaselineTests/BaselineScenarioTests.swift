@@ -43,49 +43,11 @@ final class BaselineScenarioTests: XCTestCase {
         )
     }
 
-    func testHomePilotScenarioIDsRemainStable() {
-        XCTAssertEqual(
-            CurrentBaselineScenario.homePilotScenarios.map(\.rawValue),
-            [
-                "component-metric-item--available",
-                "component-metric-item--missing",
-                "component-metric-group--inline",
-                "component-metric-group--missing",
-                "component-weather-summary--default",
-                "component-weather-summary--omitted",
-                "component-weather-summary--stale",
-                "component-weather-summary--long-content",
-                "component-focus-trip-summary--complete",
-                "component-focus-trip-summary--missing-metrics",
-                "component-focus-trip-summary--weather-omitted",
-                "component-focus-trip-summary--long-content",
-                "component-primary-tab-bar--home",
-                "component-primary-tab-bar--routes",
-                "component-primary-tab-bar--me",
-                "page-home--guest",
-                "page-home--focus-complete",
-                "page-home--focus-missing-metrics",
-                "page-home--focus-weather-omitted",
-                "page-home--loading",
-                "page-home--error",
-                "page-home--long-content",
-            ]
-        )
-    }
-
-    func testAllExecutableScenariosAreStableUniqueAndSupported() {
-        let scenarios = CurrentBaselineScenario.allExecutableScenarios
-
-        XCTAssertEqual(CurrentBaselineScenario.allCases.count, 28)
-        XCTAssertEqual(scenarios, CurrentBaselineScenario.tripListScenarios + CurrentBaselineScenario.homePilotScenarios)
-        XCTAssertEqual(scenarios, CurrentBaselineScenario.allCases)
-        XCTAssertEqual(Set(scenarios.map(\.rawValue)).count, 28)
-        XCTAssertTrue(scenarios.allSatisfy(\.isSupported))
-        XCTAssertFalse(scenarios.contains { $0.pageID == .tripTransport })
-        XCTAssertNil(CurrentBaselineScenario.componentMetricItemAvailable.pageID)
-        XCTAssertEqual(CurrentBaselineScenario.componentMetricItemAvailable.surfaceID, "MetricItem.default")
-        XCTAssertEqual(CurrentBaselineScenario.pageHomeGuest.pageID, .home)
-        XCTAssertEqual(CurrentBaselineScenario.pageHomeGuest.surfaceID, "PAGE-HOME")
+    func testCurrentScenarioDenominatorMatchesTripListScope() {
+        XCTAssertEqual(CurrentBaselineScenario.allCases, CurrentBaselineScenario.tripListScenarios)
+        XCTAssertEqual(CurrentBaselineScenario.allCases.count, 6)
+        XCTAssertEqual(Set(CurrentBaselineScenario.allCases.map(\.rawValue)).count, 6)
+        XCTAssertFalse(CurrentBaselineScenario.allCases.contains { $0.pageID == .tripTransport })
     }
 
     func testConfigurationParsesExplicitCurrentBaselineScenario() throws {
@@ -164,24 +126,20 @@ final class BaselineScenarioTests: XCTestCase {
         }
     }
 
-    func testReadinessIdentifiersKeepPendingReadyAndUnsupportedSeparate() {
+    func testReadinessIdentifiersKeepReadyAndUnsupportedSeparate() {
         XCTAssertEqual(
-            BaselineReadiness.identifier(for: .pageTripsLoaded, status: .pending),
-            "baseline.pending.page-trips--loaded"
+            BaselineReadiness.identifier(for: .pageTripsLoaded, status: .ready),
+            "baseline.ready.page-trips--loaded"
         )
         XCTAssertEqual(
-            BaselineReadiness.identifier(for: .componentMetricItemAvailable, status: .ready),
-            "baseline.ready.component-metric-item--available"
+            BaselineReadiness.identifier(for: .pageTripsError, status: .unsupported),
+            "baseline.unsupported.page-trips--error"
         )
         XCTAssertEqual(
-            BaselineReadiness.identifier(for: .pageHomeLongContent, status: .unsupported),
-            "baseline.unsupported.page-home--long-content"
-        )
-        XCTAssertEqual(
-            Set(CurrentBaselineScenario.allExecutableScenarios.map {
+            Set(CurrentBaselineScenario.tripListScenarios.map {
                 BaselineReadiness.identifier(for: $0, status: .ready)
             }).count,
-            28
+            6
         )
     }
 
