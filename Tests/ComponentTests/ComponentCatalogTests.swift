@@ -7,10 +7,10 @@ final class ComponentCatalogTests: XCTestCase {
     func testCatalogMatchesAuthoritativeComponentInventory() {
         let entries = ComponentCatalog.entries
 
-        XCTAssertEqual(entries.count, 83)
-        XCTAssertEqual(Set(entries.map(\.id)).count, 83)
-        XCTAssertEqual(entries.filter { $0.category == .common }.count, 38)
-        XCTAssertEqual(entries.filter { $0.category == .business }.count, 45)
+        XCTAssertEqual(entries.count, 81)
+        XCTAssertEqual(Set(entries.map(\.id)).count, 81)
+        XCTAssertEqual(entries.filter { $0.category == .common }.count, 37)
+        XCTAssertEqual(entries.filter { $0.category == .business }.count, 44)
         XCTAssertEqual(Set(entries.map(\.id)), Set(Self.expectedComponentIDs))
     }
 
@@ -46,14 +46,14 @@ final class ComponentCatalogTests: XCTestCase {
         "AvatarButton", "Card", "ConfirmationDialog", "ContentSection", "DangerAction", "DateInput",
         "EmptyState", "ErrorView", "FixedActionArea", "FormField", "IconButton", "InfoTag", "ListRow",
         "LoadingState", "MetricGroup", "MetricItem", "MixedPageShell", "ModalBottomSheet", "Notice",
-        "PageTitleBlock", "Panel", "PrimaryAction", "PrimaryTabBar", "QuantityStepper", "SearchField",
+        "PageTitleBlock", "Panel", "PrimaryAction", "QuantityStepper", "SearchField",
         "SecondaryAction", "SectionHeader", "SegmentedControl", "SelectInput", "SelectableOptionCard",
         "SettingsListRow", "SheetHandle", "SourceNote", "TextInput", "Timeline", "UnavailableState",
         "UtilityNavigationHeader", "UtilityPage",
     ]
 
     private static let businessComponentIDs = [
-        "AccountMenuSheet", "AuthPanel", "ChecklistItemRow", "ChecklistPanel", "DailyWeatherCard",
+        "AuthPanel", "ChecklistItemRow", "ChecklistPanel", "DailyWeatherCard",
         "ElevationProfile", "EquipmentDeletionImpact", "EquipmentListRow", "FocusTripSummary",
         "GearRing", "GenerationRouteSummaryCard", "GenerationWaitingView", "HeatmapCalendar",
         "InlineEquipmentEditor", "InlineListNameEditor", "PersonalEquipmentForm", "PersonalEquipmentSummaryCard", "ProfileIdentityHeader",

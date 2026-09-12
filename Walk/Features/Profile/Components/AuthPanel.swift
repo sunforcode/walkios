@@ -36,30 +36,40 @@ struct AuthPanel: View {
     let onResendCode: () -> Void
     let onRetryFocusTrip: () -> Void
 
+    @FocusState private var isFieldFocused: Bool
+
     var body: some View {
         WalkPanel(variant: .glass) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.lg) {
-                    SheetHandle()
-
-                    header
-
-                    Text(projection.sourceContext)
-                        .font(.bodySmall)
-                        .foregroundStyle(AppColors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    stageContent
-
-                    Text("首次验证通过后将直接建立或复用 Walk 账号")
-                        .font(.appCaption)
-                        .foregroundStyle(AppColors.textWeak)
-                        .frame(maxWidth: .infinity)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
+            // PAGE-LOGIN：面板内容自高贴底；内容超出最大高时才退化为面板内部滚动。
+            ViewThatFits(in: .vertical) {
+                panelContent
+                ScrollView {
+                    panelContent
                 }
+                .scrollIndicators(.hidden)
             }
-            .scrollIndicators(.hidden)
+        }
+    }
+
+    private var panelContent: some View {
+        VStack(alignment: .leading, spacing: Spacing.lg) {
+            SheetHandle()
+
+            header
+
+            Text(projection.sourceContext)
+                .font(.bodySmall)
+                .foregroundStyle(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            stageContent
+
+            Text("首次验证通过后将直接建立或复用 Walk 账号")
+                .font(.appCaption)
+                .foregroundStyle(AppColors.textWeak)
+                .frame(maxWidth: .infinity)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -110,7 +120,8 @@ struct AuthPanel: View {
                 label: "手机号",
                 requirement: .required,
                 assistiveText: "请输入 E.164 国际格式手机号",
-                error: projection.fieldError
+                error: projection.fieldError,
+                isFocused: isFieldFocused
             ) {
                 formTextInput(
                     text: Binding(get: { projection.phone }, set: onChangePhone),
@@ -155,7 +166,8 @@ struct AuthPanel: View {
                 label: "验证码",
                 requirement: .required,
                 assistiveText: "验证码始终作为文本处理并保留前导零",
-                error: projection.fieldError
+                error: projection.fieldError,
+                isFocused: isFieldFocused
             ) {
                 formTextInput(
                     text: Binding(get: { projection.code }, set: onChangeCode),
@@ -201,20 +213,19 @@ struct AuthPanel: View {
         }
     }
 
+    /// FormField 自带容器样式（surfaceInput 底 + 描边），内部只接受裸控件；
+    /// 嵌套自带容器的 TextInput 会产生双层边框。焦点由本组件持有并驱动 FormField 聚焦态。
     private func formTextInput(
         text: Binding<String>,
         label: String,
         placeholder: String
     ) -> some View {
-        TextInput(
-            text: text,
-            label: label,
-            placeholder: placeholder,
-            isDisabled: projection.isLoading,
-            showsLabel: false,
-            leading: { EmptyView() },
-            trailing: { EmptyView() }
-        )
+        TextField(placeholder, text: text)
+            .tint(AppColors.interactionPrimary)
+            .focused($isFieldFocused)
+            .submitLabel(.done)
+            .disabled(projection.isLoading)
+            .accessibilityLabel(label)
     }
 
     private var stageTitle: String {

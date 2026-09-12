@@ -4,11 +4,10 @@ import WalkData
 import WalkDesignSystem
 
 enum RouteDiscoveryLayout {
-    static let tagTop: CGFloat = 72
-    static let copyBottom: CGFloat = 36
+    static let headerTop: CGFloat = 54
+    static let allRoutesTop: CGFloat = 148
     static let sceneHorizontalPadding: CGFloat = 20
     static let compactHorizontalPadding: CGFloat = 16
-    static let allRoutesTop: CGFloat = 58
 
     static func cardHeight(for viewportHeight: CGFloat) -> CGFloat {
         max(0, viewportHeight - (2 * Spacing.sm))
@@ -33,12 +32,19 @@ struct RouteDiscoveryView: View {
     var body: some View {
         GeometryReader { geometry in
             ImmersivePageContainer {
-                ZStack(alignment: .topTrailing) {
+                ZStack(alignment: .top) {
                     routeState(viewport: geometry.size)
+
+                    // 页面头：大标题 + 副标题，不拦截场景的分页手势。
+                    PageTitleBlock(title: "路线", description: "选一条想走的，看清了再出发")
+                        .padding(.top, RouteDiscoveryLayout.headerTop)
+                        .padding(.horizontal, horizontalPadding(for: geometry.size.width))
+                        .allowsHitTesting(false)
 
                     SecondaryAction(title: "全部路线", variant: .overlayCompact) {
                         onNavigate(.routeList)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                     .padding(.top, RouteDiscoveryLayout.allRoutesTop)
                     .padding(.trailing, horizontalPadding(for: geometry.size.width))
                 }
@@ -552,7 +558,7 @@ private struct RouteSceneSkeleton: View {
                 }
             }
             .padding(.horizontal, RouteDiscoveryLayout.sceneHorizontalPadding)
-            .padding(.bottom, RouteDiscoveryLayout.copyBottom)
+            .padding(.bottom, 36)
         }
         .accessibilityLabel("路线加载中")
     }

@@ -4,7 +4,7 @@ import SwiftUI
 public enum AppTypography {
      public static let brandMark = Font.system(size: 18, weight: .bold)
      public static let displayTitle = Font.system(size: 32, weight: .bold)
-     public static let pageTitle = Font.system(size: 26, weight: .bold)
+     public static let pageTitle = Font.system(size: 32, weight: .bold)
      public static let contextTitle = Font.system(size: 18, weight: .semibold)
      public static let dayDate = Font.system(size: 27, weight: .bold)
      public static let sequence = Font.system(size: 13, weight: .bold, design: .monospaced)

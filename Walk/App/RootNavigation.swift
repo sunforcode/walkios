@@ -9,13 +9,38 @@ enum PendingAuthIntent: Equatable {
     case reauthenticate
 }
 
+/// 一级导航的三个一级根 Page；系统 tab bar 的 tab 项由该枚举提供标题与图标。
+enum AppTab: String, CaseIterable, Identifiable, Hashable {
+    case home
+    case routes
+    case profile
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .home: "首页"
+        case .routes: "路线"
+        case .profile: "我的"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .home: "house"
+        case .routes: "map"
+        case .profile: "person"
+        }
+    }
+}
+
 enum AppDestination: Hashable {
-    case login
     case routeList
     case routeSearch
     case routeDetail(String)
     case profileDetails
     case accountSecurity
+    case accountMenu
     case notificationSettings
     case privacySettings
     case helpAndFeedback
@@ -31,12 +56,12 @@ enum AppDestination: Hashable {
 
     var pageID: String {
         switch self {
-        case .login: "PAGE-LOGIN"
         case .routeList: "PAGE-ROUTE-LIST"
         case .routeSearch: "PAGE-SEARCH"
         case .routeDetail: "PAGE-ROUTE-DETAIL"
         case .profileDetails, .accountSecurity, .notificationSettings, .privacySettings,
              .helpAndFeedback, .about: "PAGE-ME"
+        case .accountMenu: "PAGE-ACCOUNT-MENU"
         case .tripList: "PAGE-TRIPS"
         case .createTrip: "PAGE-TRIP-CREATE"
         case .tripDetail: "PAGE-TRIP-DETAIL"
@@ -60,6 +85,10 @@ enum EntryPageContract {
 
 struct AppShellState: Equatable {
     var selectedTab: AppTab = .home
+    /// PAGE-ROUTE-LIST 的返回入口可见性：由到达方式决定（发现页推入显示，首页落点不显示）。
+    var routeListShowsBackEntry = false
+    /// PAGE-LOGIN 为 Modal 任务，全屏覆盖呈现，不进入任务栈。
+    var isLoginPresented = false
 
     private var homePath: [AppDestination] = []
     private var routesPath: [AppDestination] = []
@@ -68,11 +97,13 @@ struct AppShellState: Equatable {
 
     mutating func showRouteDiscovery() {
         routesPath = []
+        routeListShowsBackEntry = false
         selectedTab = .routes
     }
 
-    mutating func showRouteList() {
+    mutating func showRouteList(showsBackEntry: Bool = false) {
         routesPath = [.routeList]
+        routeListShowsBackEntry = showsBackEntry
         selectedTab = .routes
     }
 
@@ -88,7 +119,7 @@ struct AppShellState: Equatable {
         }
     }
 
-    var showsPrimaryTabBar: Bool {
+    var showsGlobalNavigation: Bool {
         path(for: selectedTab).isEmpty
     }
 
@@ -100,16 +131,12 @@ struct AppShellState: Equatable {
         }
     }
 
-    mutating func presentLogin(in tab: AppTab) {
-        var path = path(for: tab)
-        if path.last != .login { path.append(.login) }
-        setPath(path, for: tab)
+    mutating func presentLogin() {
+        isLoginPresented = true
     }
 
-    mutating func dismissLogin(in tab: AppTab) {
-        var path = path(for: tab)
-        if path.last == .login { path.removeLast() }
-        setPath(path, for: tab)
+    mutating func dismissLogin() {
+        isLoginPresented = false
     }
 
     mutating func replaceTop(with destination: AppDestination, in tab: AppTab) {
@@ -132,7 +159,7 @@ enum RootNavigation {
     static let minimumHitSize: CGFloat = 44
     static let toolButtonHitSize = minimumHitSize
 
-    // PrimaryTabBar 规范：不增加独立胶囊；沉浸式场景延伸至系统边缘。
+    // 一级导航由系统 tab bar 承载：不增加独立胶囊；沉浸式场景延伸至系统边缘。
     // 保持 tabBar 背景透明，只保留 Tab 项的选中/未选文字与图标色。
     static func makeTabBarAppearance() -> UITabBarAppearance {
         let appearance = UITabBarAppearance()
@@ -159,7 +186,6 @@ enum RootNavigation {
         let appearance = makeTabBarAppearance()
         UITabBar.appearance().standardAppearance = appearance
         UITabBar.appearance().scrollEdgeAppearance = appearance
-        UITabBar.appearance().isHidden = true
     }
 
     static func makeNavigationBarAppearance() -> UINavigationBarAppearance {

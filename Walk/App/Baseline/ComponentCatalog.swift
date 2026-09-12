@@ -155,9 +155,6 @@ enum ComponentCatalog {
         entry("PrimaryAction", .common) {
             PrimaryAction(title: "继续", fillsWidth: true, action: {})
         },
-        entry("PrimaryTabBar", .common) {
-            PrimaryTabBar(selectedTab: .home, onSelect: { _ in })
-        },
         entry("QuantityStepper", .common) {
             QuantityStepper(value: .constant(2), minimum: 1, maximum: 5)
         },
@@ -229,15 +226,6 @@ enum ComponentCatalog {
     ]
 
     private static let businessEntries: [ComponentCatalogEntry] = [
-        entry("AccountMenuSheet", .business) {
-            AccountMenuSheet(
-                profile: BusinessComponentPreviewFixtures.profileWithAvatar,
-                avatarImage: Image(systemName: "person.crop.circle.fill"),
-                onDismiss: {},
-                onSelectSetting: { _ in },
-                onLogout: {}
-            )
-        },
         entry("AuthPanel", .business) {
             AuthPanel(
                 projection: BusinessComponentPreviewFixtures.authPhone,

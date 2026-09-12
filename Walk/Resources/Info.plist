@@ -30,7 +30,12 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>需要使用您的位置来记录轨迹和显示当前位置</string>
 	<key>UILaunchScreen</key>
-	<dict/>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+		<key>UIImageName</key>
+		<string>LaunchImage</string>
+	</dict>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

@@ -62,26 +62,8 @@ struct TripDetailView: View {
         ZStack {
             AppColors.pageBase.ignoresSafeArea()
 
-            Group {
-                if viewModel.errorMessage != nil, viewModel.trip == nil {
-                    ErrorView(
-                        message: "不会用其他行程或当前公开路线补齐。",
-                        title: "暂时无法加载行程",
-                        variant: .page,
-                        retry: { Task { await viewModel.loadTrip(id: tripID) } }
-                    )
-                } else if let detail = viewModel.trip,
-                          let days = viewModel.days {
-                    tripDetailContent(TripDetailPresentation(
-                        detail: detail,
-                        days: days,
-                        routeVersionStatus: viewModel.routeVersionStatus ?? detail.routeVersionStatus
-                    ))
-                } else {
-                    LoadingView(message: "正在加载个人行程", variant: .page)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            stateContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .toolbar(.hidden, for: .navigationBar)
         .overlay(alignment: .topLeading) {
@@ -95,6 +77,9 @@ struct TripDetailView: View {
                 .padding(.leading, Spacing.pageHorizontal)
                 .padding(.top, Spacing.sm)
             }
+        }
+        .overlay(alignment: .topTrailing) {
+            maintenanceMenuOverlay
         }
         .task { await viewModel.loadTrip(id: tripID) }
         .onChange(of: reloadRevision) { revision in
@@ -129,6 +114,48 @@ struct TripDetailView: View {
             Button("知道了") { viewModel.errorMessage = nil }
         } message: {
             Text(viewModel.errorMessage ?? "请稍后重试")
+        }
+    }
+
+    @ViewBuilder
+    private var maintenanceMenuOverlay: some View {
+        if let detail = viewModel.trip, detail.trip.status == .planned {
+            Menu {
+                Button("取消行程", role: .destructive) {
+                    isCancelConfirmationPresented = true
+                }
+            } label: {
+                IconButton(
+                    systemName: "ellipsis.circle",
+                    accessibilityLabel: "行程维护",
+                    variant: .overlay,
+                    action: {}
+                )
+            }
+            .disabled(viewModel.isMutating)
+            .padding(.trailing, Spacing.pageHorizontal)
+            .padding(.top, Spacing.sm)
+        }
+    }
+
+    @ViewBuilder
+    private var stateContent: some View {
+        if viewModel.errorMessage != nil, viewModel.trip == nil {
+            ErrorView(
+                message: "不会用其他行程或当前公开路线补齐。",
+                title: "暂时无法加载行程",
+                variant: .page,
+                retry: { Task { await viewModel.loadTrip(id: tripID) } }
+            )
+        } else if let detail = viewModel.trip,
+                  let days = viewModel.days {
+            tripDetailContent(TripDetailPresentation(
+                detail: detail,
+                days: days,
+                routeVersionStatus: viewModel.routeVersionStatus ?? detail.routeVersionStatus
+            ))
+        } else {
+            LoadingView(message: "正在加载个人行程", variant: .page)
         }
     }
 
@@ -212,17 +239,6 @@ struct TripDetailView: View {
                     .onChange(of: viewModel.trip?.revision) { revision in
                         guard revision != nil else { return }
                         scrollToBaselinePosition(using: proxy)
-                    }
-                }
-
-                if presentation.showsPageLevelCancel {
-                    FixedActionArea {
-                        DangerAction(
-                            title: "取消行程",
-                            isLoading: viewModel.isMutating,
-                            fillsWidth: true,
-                            action: { isCancelConfirmationPresented = true }
-                        )
                     }
                 }
             }

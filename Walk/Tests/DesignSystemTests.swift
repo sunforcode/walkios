@@ -379,18 +379,6 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(combined.contains("impact: \"山脊4级风\""))
     }
 
-    func testRootUsesTheProductionPrimaryTabBar() throws {
-        let root = try productionSource(at: "App/RootView.swift")
-        let tabBar = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/PrimaryTabBar.swift")
-        XCTAssertTrue(root.contains("PrimaryTabBar("))
-        XCTAssertTrue(root.contains("shell.path(for: shell.selectedTab).isEmpty"))
-        XCTAssertTrue(root.contains(".toolbar(.hidden, for: .tabBar)"))
-        XCTAssertTrue(tabBar.contains("ForEach(items)"))
-        XCTAssertTrue(tabBar.contains("static let height: CGFloat = 64"))
-        XCTAssertTrue(tabBar.contains("static let cornerRadius: CGFloat = 22"))
-        XCTAssertTrue(tabBar.contains("accessibilityAddTraits"))
-    }
-
     func testHomePilotUsesRegisteredVisualTokens() throws {
         let colors = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Theme/Color+App.swift")
         let typography = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Theme/Font+App.swift")
@@ -418,7 +406,6 @@ final class DesignSystemTests: XCTestCase {
         let weather = try productionSource(at: "Features/Home/Components/WeatherSummary.swift")
         let focus = try productionSource(at: "Features/Home/Components/FocusTripSummary.swift")
         let home = try productionSource(at: "Features/Home/HomeView.swift")
-        let tabBar = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/PrimaryTabBar.swift")
 
         XCTAssertTrue(metricItem.contains("#Preview"))
         XCTAssertTrue(metricItem.contains("MetricItem("))
@@ -430,8 +417,6 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(focus.contains("FocusTripSummary("))
         XCTAssertEqual(occurrences(of: "#Preview", in: home), 7)
         XCTAssertTrue(home.contains("HomeView("))
-        XCTAssertTrue(tabBar.contains("#Preview"))
-        XCTAssertTrue(tabBar.contains("PrimaryTabBar("))
     }
 
     func testStandardNavigationPagesUseSharedRootBackgroundContainer() throws {
@@ -475,13 +460,17 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertFalse(summary.contains("查看路线"))
     }
 
+    /// add-route-detail-pure-map-mode：生成入口迁入 MapToolbar，信息面滚动内容不承载生成动作；
+    /// 资格不足时保持可见、禁用呈现但可点，以轻提示传达原因。
     func testRouteDetailKeepsEligibilityAwareGenerationActionOutsideScrollableContent() throws {
         let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
 
-        XCTAssertTrue(source.contains("RouteGenerationPrimaryAction"))
+        XCTAssertTrue(source.contains("RouteToolbarGenerateAction"))
         XCTAssertTrue(source.contains("presentation.generationAction"))
-        XCTAssertTrue(source.contains(".disabled(!action.isEnabled)"))
+        XCTAssertTrue(source.contains("action.isEnabled ? onGenerate : onUnavailable"))
         XCTAssertTrue(source.contains("onGenerateTrip(routeId)"))
+        XCTAssertTrue(source.contains("showsGenerationNotice"))
+        XCTAssertFalse(source.contains("RouteGenerationPrimaryAction"))
     }
 
     func testRouteDetailOverlayUsesFullScreenContinuousScrollWithoutDrawerState() throws {
@@ -518,9 +507,9 @@ final class DesignSystemTests: XCTestCase {
     func testExpandedGroupsUseSolidSectionsWithTransparentGaps() throws {
         let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
 
-        // 6.3（D1）后页面不再持有私有 section 容器；14 区由各生产组件的 RouteBusinessSection 承载。
+        // 信息面迭代：容器透明，每个资料区由 sectionCard 独立成卡片展示。
         XCTAssertFalse(source.contains("RouteDetailSectionContainer"))
-        XCTAssertTrue(source.contains("VStack(alignment: .leading, spacing: Spacing.xl)"))
+        XCTAssertTrue(source.contains("private func sectionCard<Content: View>"))
         XCTAssertFalse(source.contains(".stroke(AppColors.sheetSectionBorder"))
         XCTAssertFalse(source.contains(".background(AppColors.sheetCardBackground)"))
     }
@@ -875,15 +864,17 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(row.contains("· "), "DetailLine 以「路线名 · 日期区间」组合")
     }
 
-    /// FocusTripSummary 6.2 修订（H1/H2/H6）：
-    /// 三段独立锚定（顶部 58 / 指标底部 104 / 天气底部 26，撤销顶部堆叠）；
-    /// RouteName 用 font-display 档（原型 31px→32 档记录）；weather 省略时仍渲染两个中性槽位。
-    func testFocusTripSummaryUsesIndependentAnchoringAndNeutralWeatherSlots() throws {
+    /// FocusTripSummary 沉底左下修订：
+    /// 信息块锚定左下、全局一级导航之上；路线名、起终点一句话描述、
+    /// 距离/爬升/用时三指标、天气自上而下排列；weather 省略时仍渲染两个中性槽位。
+    func testFocusTripSummaryUsesSingleLeftInfoBlockAndNeutralWeatherSlots() throws {
         let focus = try productionSource(at: "Features/Home/Components/FocusTripSummary.swift")
-        XCTAssertTrue(focus.contains("routeIdentityTop: CGFloat = 58"), "RouteIdentity 距场景顶部 58")
-        XCTAssertTrue(focus.contains("metricGroupBottom: CGFloat = 104"), "MetricGroup 距场景底部 104")
-        XCTAssertTrue(focus.contains("weatherBottom: CGFloat = 26"), "WeatherSummary 距场景底部 26")
-        XCTAssertTrue(focus.contains("ZStack("), "三段独立锚定不相互推挤")
+        XCTAssertTrue(focus.contains("VStack(alignment: .leading, spacing: Spacing.lg)"), "左侧单一信息块纵向排列")
+        XCTAssertTrue(focus.contains("alignment: .bottomLeading"), "信息块沉底左下")
+        XCTAssertTrue(focus.contains("contentBottomPadding"), "信息块不贴底，位于全局一级导航之上")
+        XCTAssertTrue(focus.contains("label: \"累计爬升\""), "保留累计爬升指标")
+        XCTAssertTrue(focus.contains("label: \"预计用时\""), "保留预计用时指标")
+        XCTAssertTrue(focus.contains("routeIdentityMaxWidth: CGFloat = 290"), "RouteName 最大宽 290")
         XCTAssertTrue(focus.contains(".font(.displayTitle)"), "RouteName 用 displayTitle 档")
         XCTAssertFalse(focus.contains(".font(.sceneTitle)"), "不再使用 sceneTitle")
         XCTAssertTrue(focus.contains("本次未提供天气摘要"), "省略时中性槽位一")
@@ -958,6 +949,18 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertFalse(profile.contains("arrow.clockwise"), "profileError 不再用重试图标按钮")
     }
 
+    /// PAGE-LOGIN：FormField 容器与 TextInput 容器不可嵌套（双层边框缺陷）；背景环境动画用 Lottie 承载。
+    func testLoginUsesSingleLayerFormControlsAndAnimatedBackground() throws {
+        let authPanel = try productionSource(at: "Features/Profile/Components/AuthPanel.swift")
+        XCTAssertFalse(authPanel.contains("TextInput("), "FormField 自带容器样式，嵌套自带容器的 TextInput 会产生双层边框")
+        XCTAssertTrue(authPanel.contains("TextField("), "FormField 内使用裸 TextField 控件")
+        XCTAssertTrue(authPanel.contains("@FocusState"), "焦点态由 AuthPanel 持有并驱动 FormField 聚焦描边")
+
+        let login = try productionSource(at: "Features/Profile/LoginView.swift")
+        XCTAssertTrue(login.contains("LottieView"), "背景环境动画使用 Lottie 承载（规范：极光呼吸层循环动画）")
+        XCTAssertTrue(login.contains("accessibilityReduceMotion"), "减少动态效果时环境动画不渲染（PAGE-LOGIN 结构验收）")
+    }
+
     /// PAGE-LOGIN 6.4 修订（A1/A2/A3）：消费生产 AuthPanel、焦点确认双态、品牌行；RootView 修复误判。
     func testLoginConsumesProductionAuthPanelWithFocusConfirmation() throws {
         let login = try productionSource(at: "Features/Profile/LoginView.swift")
@@ -974,6 +977,7 @@ final class DesignSystemTests: XCTestCase {
 
         let authPanel = try productionSource(at: "Features/Profile/Components/AuthPanel.swift")
         XCTAssertTrue(authPanel.contains("ScrollView"), "AuthPanel 在短屏、键盘或大字号下内部滚动")
+        XCTAssertTrue(authPanel.contains("ViewThatFits"), "AuthPanel 内容自高贴底，内容超出最大高时才内部滚动（PAGE-LOGIN：最大高只是上限，不是目标高度）")
 
         let root = try productionSource(at: "App/RootView.swift")
         XCTAssertTrue(root.contains("onConfirmFocusTrip"), "RootView 提供焦点确认处理器")
@@ -1042,12 +1046,14 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(profile.contains("ErrorView"), "登录态分节失败使用 ErrorView.section")
         XCTAssertTrue(profile.contains("viewModel.retryCalendar()"), "行程日历 Section 提供独立重试")
         XCTAssertTrue(profile.contains("viewModel.retryEquipment()"), "装备 Section 提供独立重试")
-        // 按 PAGE-ME 权威，查看入口、脱敏账号与关于行由 TripCalendarCard / AccountMenuSheet 组件拥有，不在页面。
+        // 按 PAGE-ME / PAGE-ACCOUNT-MENU 权威，查看入口、脱敏账号与关于行由 TripCalendarCard / AccountMenuView 承载，不在我的页。
         let calendarCard = try productionSource(at: "Features/Trips/Components/TripCalendarCard.swift")
         XCTAssertTrue(calendarCard.contains("查看全部"), "行程日历查看入口在 TripCalendarCard 组件内")
-        let accountMenu = try productionSource(at: "Features/Profile/Components/AccountMenuSheet.swift")
-        XCTAssertTrue(accountMenu.contains("maskedPhone"), "脱敏账号摘要在 AccountMenuSheet 组件内")
-        XCTAssertTrue(accountMenu.contains("关于 Walk"), "关于行文案在 AccountMenuSheet 组件内")
+        let accountMenu = try productionSource(at: "Features/Profile/AccountMenuView.swift")
+        XCTAssertTrue(accountMenu.contains("maskedPhone"), "脱敏账号摘要在账户菜单页内")
+        XCTAssertTrue(accountMenu.contains("关于 Walk"), "关于行文案在账户菜单页内")
+        XCTAssertFalse(profile.contains("fullScreenCover"), "头像入口推入账户菜单页，不弹覆盖层")
+        XCTAssertTrue(profile.contains("onNavigate(.accountMenu)"), "头像入口推入 PAGE-ACCOUNT-MENU")
     }
 
     func testEquipmentListFollowsPageStructureSpec() throws {
@@ -1095,6 +1101,15 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(pages.contains("fieldSpacing: CGFloat = Spacing.lg"), "字段间距参数可配置")
     }
 
+    func testEntryFormPageUsesUnifiedNavigationShell() throws {
+        let pages = try productionSource(at: "Features/Profile/ProfileEntryPages.swift")
+        XCTAssertTrue(pages.contains("UtilityNavigationHeader("), "设置子页与全 App 二级页共用自绘返回壳")
+        XCTAssertTrue(pages.contains(".toolbar(.hidden, for: .navigationBar)"), "隐藏系统导航栏")
+        XCTAssertTrue(pages.contains("dismiss()"), "返回入口语义为移除当前页")
+        XCTAssertFalse(pages.contains(".navigationTitle"), "不再依赖系统导航标题")
+        XCTAssertFalse(pages.contains("navigationBarTitleDisplayMode"), "不再依赖系统导航栏")
+    }
+
     // MARK: 批次 4b —— PAGE-ROUTE-DETAIL 结构差距修正
 
     func testRouteDetailKeepsMapLayerWhenMainTrackUnavailable() throws {
@@ -1119,7 +1134,8 @@ final class DesignSystemTests: XCTestCase {
         let component = try productionSource(at: "Features/Routes/Components/RoutePointDetail.swift")
         XCTAssertTrue(component.contains("systemName: \"xmark\""), "点位详情浮层提供关闭按钮")
         XCTAssertTrue(component.contains("关闭点位详情"), "关闭按钮可访问标签")
-        XCTAssertTrue(component.contains("ModalBottomSheet(onDismiss:"), "关闭事件由通用 Sheet 承载")
+        XCTAssertTrue(component.contains("popoverCard"), "点位详情使用 popover 式悬浮卡承载，不再全宽铺底")
+        XCTAssertTrue(component.contains("onTapGesture(perform: onDismiss)"), "点击遮罩关闭悬浮卡")
     }
 
     func testSpacingSourceUsesApprovedContractCanonicalNames() throws {

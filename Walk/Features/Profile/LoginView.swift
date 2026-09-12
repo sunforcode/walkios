@@ -1,3 +1,4 @@
+import Lottie
 import SwiftUI
 import WalkData
 import WalkDesignSystem
@@ -197,6 +198,7 @@ private enum LoginFocusedField: Hashable {
 
 struct LoginView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var viewModel: LoginViewModel
     @State private var didResolveAuthenticationFlow = false
     @State private var now = Date()
@@ -242,6 +244,11 @@ struct LoginView: View {
             ZStack(alignment: .bottom) {
                 LoginNightRidgeScene(phase: viewModel.phase)
                     .ignoresSafeArea()
+
+                if !reduceMotion {
+                    LoginAmbientAnimation()
+                        .ignoresSafeArea()
+                }
 
                 AuthPanel(
                     projection: authProjection,
@@ -378,6 +385,18 @@ struct LoginView: View {
         case .reauthenticate, nil:
             return "使用手机验证码继续你的个人任务。"
         }
+    }
+}
+
+/// PAGE-LOGIN 场景环境动画：极光呼吸光斑与缓升光点，Lottie 循环承载；
+/// 仅装饰，不拦截交互，Reduce Motion 时不渲染。
+private struct LoginAmbientAnimation: View {
+    var body: some View {
+        LottieView(animation: .named("LoginRidgeAmbient"))
+            .looping()
+            .playing()
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 

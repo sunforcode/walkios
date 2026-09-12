@@ -168,7 +168,7 @@ final class ProfileViewModelTests: XCTestCase {
             at: "Features/Trips/Components/TripCalendarCard.swift"
         )
         let accountMenuSource = try productionSource(
-            at: "Features/Profile/Components/AccountMenuSheet.swift"
+            at: "Features/Profile/AccountMenuView.swift"
         )
         let equipmentComponentSource = try productionSource(
             at: "Features/Profile/Components/PersonalEquipmentSummaryCard.swift"
@@ -176,14 +176,14 @@ final class ProfileViewModelTests: XCTestCase {
 
         XCTAssertTrue(source.contains("TripBusinessComponents.TripCalendarCard("))
         XCTAssertTrue(source.contains("PersonalEquipmentSummaryCard("))
-        XCTAssertTrue(source.contains("AccountMenuSheet("))
-        XCTAssertTrue(source.contains("profile: account.profile"))
+        XCTAssertTrue(source.contains("onNavigate(.accountMenu)"))
         XCTAssertTrue(source.contains("avatarLabel: profile.nickname"))
-        XCTAssertTrue(source.contains("avatarImage: nil"))
-        XCTAssertTrue(source.contains("logoutError: viewModel.logoutErrorMessage"))
+        XCTAssertFalse(source.contains("fullScreenCover"), "头像入口不再弹覆盖层")
+        XCTAssertFalse(source.contains("AccountMenuSheet"), "AccountMenuSheet 已退役，承载迁至 AccountMenuView")
         XCTAssertTrue(calendarComponentSource.contains("TripBusinessComponents.HeatmapCalendar("))
         XCTAssertTrue(accountMenuSource.contains("AccountEquipmentBusinessComponents.ProfileIdentityHeader("))
         XCTAssertTrue(accountMenuSource.contains("SettingsListRow("))
+        XCTAssertTrue(accountMenuSource.contains("viewModel.logout()"), "退出登录在账户菜单页内转发")
         XCTAssertTrue(equipmentComponentSource.contains("summary.equipmentItemCount"))
         XCTAssertTrue(equipmentComponentSource.contains("summary.equipmentListCount"))
         XCTAssertTrue(equipmentComponentSource.contains("summary.knownTotalWeight.grams"))
@@ -202,13 +202,14 @@ final class ProfileViewModelTests: XCTestCase {
     func testProfileSourceKeepsTripsBehindCalendarAndRoutesLogoutToRoutesTab() throws {
         let source = try productionSource(at: "Features/Profile/ProfileView.swift")
         let rootSource = try productionSource(at: "App/RootView.swift")
+        let menuSource = try productionSource(at: "Features/Profile/AccountMenuView.swift")
         let calendarStart = try XCTUnwrap(source.range(of: "private var tripCalendarSection"))
         let equipmentStart = try XCTUnwrap(source.range(of: "private var equipmentSection"))
         let calendarSource = String(source[calendarStart.lowerBound..<equipmentStart.lowerBound])
 
         XCTAssertTrue(calendarSource.contains("onNavigate(.tripList)"))
         XCTAssertFalse(source.contains("我的全部行程"))
-        XCTAssertTrue(source.contains("case .accountSecurity: .accountSecurity"))
+        XCTAssertTrue(menuSource.contains("id: .accountSecurity"))
         XCTAssertTrue(rootSource.contains("shell.showRouteDiscovery()"))
     }
 

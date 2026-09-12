@@ -123,11 +123,17 @@ private struct HomeScene<Content: View>: View {
                 HomePageBackground()
                 HomeContrastOverlay()
                 HomeMountainSilhouette()
-                content
+                VStack(alignment: .leading, spacing: 0) {
+                    PageTitleBlock(title: "出发", description: "山野路线，整装待发")
+                        .padding(.horizontal, HomeLayout.sceneHorizontalPadding)
+                        .padding(.top, Spacing.sm)
+
+                    content
+                }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
-        .ignoresSafeArea(edges: [.top, .horizontal])
+        .ignoresSafeArea(edges: .horizontal)
         .background(AppColors.pageBase.ignoresSafeArea())
         .foregroundStyle(AppColors.textPrimary)
     }

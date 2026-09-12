@@ -41,6 +41,19 @@ final class RootNavigationTests: XCTestCase {
 
         XCTAssertEqual(sut.selectedTab, .routes)
         XCTAssertEqual(sut.path(for: .routes), [.routeList])
+        XCTAssertFalse(sut.routeListShowsBackEntry, "首页落点进入全部路线为任务栈根页，不显示返回入口")
+    }
+
+    func testRouteListBackEntryVisibilityIsOwnedByShell() {
+        var sut = AppShellState()
+
+        sut.routeListShowsBackEntry = true
+        sut.showRouteDiscovery()
+        XCTAssertFalse(sut.routeListShowsBackEntry, "回到发现页后来源上下文复位")
+
+        sut.routeListShowsBackEntry = true
+        sut.showRouteList()
+        XCTAssertFalse(sut.routeListShowsBackEntry, "无焦点落点进入不显示返回入口")
     }
 
     func testCreateSuccessReplacesCreateDestinationWithTripDetail() {
@@ -72,7 +85,6 @@ final class RootNavigationTests: XCTestCase {
     }
 
     func testCoreDestinationsRemainTypeSafeAndMappedToApprovedPages() {
-        XCTAssertEqual(AppDestination.login.pageID, "PAGE-LOGIN")
         XCTAssertEqual(AppDestination.routeList.pageID, "PAGE-ROUTE-LIST")
         XCTAssertEqual(AppDestination.routeSearch.pageID, "PAGE-SEARCH")
         XCTAssertEqual(AppDestination.routeDetail("route-1").pageID, "PAGE-ROUTE-DETAIL")
@@ -85,6 +97,7 @@ final class RootNavigationTests: XCTestCase {
         XCTAssertEqual(AppDestination.personalEquipment.pageID, "PAGE-MY-EQUIPMENT")
         XCTAssertEqual(AppDestination.equipmentEdit(equipmentID: nil).pageID, "PAGE-EQUIPMENT-EDIT")
         XCTAssertEqual(AppDestination.accountSecurity.pageID, "PAGE-ME")
+        XCTAssertEqual(AppDestination.accountMenu.pageID, "PAGE-ACCOUNT-MENU")
     }
 
     func testPendingAuthIntentPreservesRouteAndSourceContext() {
@@ -93,15 +106,25 @@ final class RootNavigationTests: XCTestCase {
         XCTAssertEqual(PendingAuthIntent.homeStart, .homeStart)
     }
 
-    func testAuthenticationGatePushesLoginWithoutDiscardingCurrentPath() {
+    func testAuthenticationGatePresentsLoginAsModalWithoutDiscardingCurrentPath() {
         var sut = AppShellState()
         sut.setPath([.routeDetail("route-1")], for: .routes)
 
-        sut.presentLogin(in: .routes)
+        sut.presentLogin()
 
-        XCTAssertEqual(sut.path(for: .routes), [.routeDetail("route-1"), .login])
-        sut.dismissLogin(in: .routes)
+        XCTAssertTrue(sut.isLoginPresented, "登录为 Modal 任务，全屏覆盖呈现")
+        XCTAssertEqual(sut.path(for: .routes), [.routeDetail("route-1")], "登录不进入任务栈")
+
+        sut.dismissLogin()
+
+        XCTAssertFalse(sut.isLoginPresented)
         XCTAssertEqual(sut.path(for: .routes), [.routeDetail("route-1")])
+    }
+
+    func testProductionRootPresentsLoginAsModalCover() throws {
+        let rootSource = try productionSource(at: "App/RootView.swift")
+        XCTAssertTrue(rootSource.contains("fullScreenCover(isPresented: $shell.isLoginPresented)"), "登录以全屏覆盖弹出")
+        XCTAssertFalse(rootSource.contains("case .login:"), "登录不再是任务栈目的地")
     }
 
     func testTripRevisionCanBePropagatedBackToDetailDestination() {

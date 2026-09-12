@@ -44,7 +44,7 @@ struct FocusTripSummary: View {
         GeometryReader { proxy in
             ScrollView {
                 content(horizontalPadding: horizontalPadding(for: proxy.size.width))
-                    .frame(minHeight: proxy.size.height, alignment: .topLeading)
+                    .frame(minHeight: proxy.size.height, alignment: .bottomLeading)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .contentShape(Rectangle())
@@ -58,20 +58,17 @@ struct FocusTripSummary: View {
     }
 
     private func content(horizontalPadding: CGFloat) -> some View {
-        // H2：三段独立锚定（顶部 58 / 指标底部 104 / 天气底部 26），不相互推挤。
-        ZStack(alignment: .bottomLeading) {
+        // 左侧单一信息块：沉底左下、全局一级导航之上；
+        // 路线名、一句话描述（起终点）、距离/爬升/用时、天气自上而下排列。
+        VStack(alignment: .leading, spacing: Spacing.lg) {
             routeIdentity
-                .frame(maxWidth: FocusTripLayout.routeIdentityMaxWidth, alignment: .leading)
-                .frame(maxHeight: .infinity, alignment: .top)
-                .padding(.top, FocusTripLayout.routeIdentityTop)
 
             MetricGroup(items: model.metrics, variant: .inline)
-                .padding(.bottom, FocusTripLayout.metricGroupBottom)
 
             WeatherSummary(model: resolvedWeather)
-                .padding(.bottom, FocusTripLayout.weatherBottom)
         }
         .padding(.horizontal, horizontalPadding)
+        .padding(.bottom, FocusTripLayout.contentBottomPadding)
         .foregroundStyle(AppColors.textPrimary)
     }
 
@@ -98,6 +95,7 @@ struct FocusTripSummary: View {
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: FocusTripLayout.routeIdentityMaxWidth, alignment: .leading)
     }
 
     private var accessibilitySummary: String {
@@ -118,10 +116,8 @@ struct FocusTripSummary: View {
 private enum FocusTripLayout {
     static let horizontalPadding: CGFloat = 18
     static let compactHorizontalPadding = Spacing.lg
-    static let routeIdentityTop: CGFloat = 58
     static let routeIdentityMaxWidth: CGFloat = 290
-    static let metricGroupBottom: CGFloat = 104
-    static let weatherBottom: CGFloat = 26
+    static let contentBottomPadding: CGFloat = 32
 }
 
 #if DEBUG

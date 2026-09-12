@@ -184,11 +184,12 @@ final class RouteDetailViewModelTests: XCTestCase {
         let componentCalls = [
             "RouteBusinessComponents.RouteSummary(",
             "RouteBusinessComponents.RouteIntroduction(",
-            "RouteBusinessComponents.ElevationProfile(",
             "RouteBusinessComponents.RouteReferenceDayList(",
             "RouteBusinessComponents.RouteSegmentList(",
             "RouteBusinessComponents.RoutePointSection(",
             "RouteBusinessComponents.RouteFactSection(",
+            // 海拔曲线固定在信息面最底部（信息面迭代）。
+            "RouteBusinessComponents.ElevationProfile(",
         ]
 
         let ranges = try componentCalls.map { call in

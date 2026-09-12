@@ -9,15 +9,25 @@ struct RootView: View {
     @State private var pendingAuthTab: AppTab?
     /// account-access：认证链路确认的焦点行程结果，execute(.homeStart) 只消费该结果。
     @State private var confirmedFocusTripExists: Bool?
-    @State private var routeListShowsBackButton = false
     @State private var authenticationGeneration = 0
     /// S5：搜索会话状态提升到 App 层，返回后再进 PAGE-SEARCH 恢复 query 与结果。
     @StateObject private var routeSearchModel: RouteDiscoveryViewModel
     @State private var routeSearchQuery = ""
+    /// 我的区域与账户菜单共享同一账号/退出状态，提升到 App 层。
+    @StateObject private var profileModel: ProfileViewModel
 
     init(appEnvironment: AppEnvironment) {
         _appEnvironment = ObservedObject(wrappedValue: appEnvironment)
         _routeSearchModel = StateObject(wrappedValue: RouteDiscoveryViewModel(service: appEnvironment.routeService))
+        _profileModel = StateObject(wrappedValue: ProfileViewModel(
+            accountService: appEnvironment.accountService,
+            tripService: appEnvironment.personalTripService,
+            equipmentService: appEnvironment.equipmentService,
+            clearCachedResponses: {
+                await appEnvironment.apiStorageGeneration.invalidate()
+                try? await appEnvironment.apiStorage.removeAll()
+            }
+        ))
     }
 
     var body: some View {
@@ -34,19 +44,11 @@ struct RootView: View {
                 .tabItem { Label(AppTab.profile.title, systemImage: AppTab.profile.systemImage) }
                 .tag(AppTab.profile)
         }
-        .toolbar(.hidden, for: .tabBar)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if shell.path(for: shell.selectedTab).isEmpty {
-                PrimaryTabBar(
-                    selectedTab: shell.selectedTab,
-                    onSelect: { shell.selectTab($0) }
-                )
-                .padding(.horizontal, Spacing.lg)
-                .padding(.top, Spacing.sm)
-                .padding(.bottom, Spacing.sm)
-            }
-        }
         .preferredColorScheme(.dark)
+        .fullScreenCover(isPresented: $shell.isLoginPresented) {
+            loginCover
+                .interactiveDismissDisabled()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .walkAuthenticationRequired)) { _ in
             requestAuthentication(.reauthenticate, in: shell.selectedTab, force: true)
         }
@@ -55,12 +57,32 @@ struct RootView: View {
         }
         .onChange(of: shell.selectedTab) { tab in
             guard tab == .routes, shell.path(for: .routes).isEmpty else { return }
-            routeListShowsBackButton = false
+            shell.routeListShowsBackEntry = false
         }
     }
 
     private var selectedTabBinding: Binding<AppTab> {
         Binding(get: { shell.selectedTab }, set: { shell.selectTab($0) })
+    }
+
+    /// PAGE-LOGIN：Modal 任务承载，全屏覆盖呈现，不进入任务栈。
+    private var loginCover: some View {
+        LoginView(
+            accountService: appEnvironment.accountService,
+            intent: pendingAuthIntent,
+            onConfirmFocusTrip: pendingAuthIntent == .homeStart
+                ? { [appEnvironment] in
+                    try await appEnvironment.personalTripService.focus().trip != nil
+                }
+                : nil,
+            onConfirmedFocusTrip: { confirmedFocusTripExists = $0 },
+            onAuthenticated: completeAuthentication,
+            onCancel: {
+                confirmedFocusTripExists = nil
+                pendingAuthIntent = nil
+                pendingAuthTab = nil
+            }
+        )
     }
 
     private func pathBinding(for tab: AppTab) -> Binding<[AppDestination]> {
@@ -74,7 +96,6 @@ struct RootView: View {
         NavigationStack(path: pathBinding(for: tab)) {
             root().navigationDestination(for: AppDestination.self, destination: destinationView)
         }
-        .toolbar(.hidden, for: .tabBar)
     }
 
     private var homeRoot: some View {
@@ -82,7 +103,6 @@ struct RootView: View {
             onAuthenticate: { requestAuthentication($0, in: .home) },
             onNavigate: { navigate($0, in: .home) },
             onNoFocus: {
-                routeListShowsBackButton = false
                 shell.showRouteList()
             },
             service: appEnvironment.personalTripService
@@ -94,7 +114,7 @@ struct RootView: View {
         RouteDiscoveryView(
             routeService: appEnvironment.routeService,
             onNavigate: { destination in
-                if destination == .routeList { routeListShowsBackButton = true }
+                if destination == .routeList { shell.routeListShowsBackEntry = true }
                 navigate(destination, in: .routes)
             }
         )
@@ -103,19 +123,17 @@ struct RootView: View {
 
     private var profileRoot: some View {
         ProfileView(
+            viewModel: profileModel,
             onNavigate: { navigate($0, in: .profile) },
             onAuthenticate: { requestAuthentication($0, in: .profile) },
-            accountService: appEnvironment.accountService,
-            tripService: appEnvironment.personalTripService,
-            equipmentService: appEnvironment.equipmentService,
-            apiStorage: appEnvironment.apiStorage,
-            storageGeneration: appEnvironment.apiStorageGeneration,
-            onLoggedOut: {
-                shell.showRouteDiscovery()
-                authenticationGeneration += 1
-            }
+            onLoggedOut: handleLoggedOut
         )
         .id(authenticationGeneration)
+    }
+
+    private func handleLoggedOut() {
+        shell.showRouteDiscovery()
+        authenticationGeneration += 1
     }
 
     private func requestAuthentication(
@@ -129,13 +147,13 @@ struct RootView: View {
         }
         pendingAuthIntent = intent
         pendingAuthTab = tab
-        shell.presentLogin(in: tab)
+        shell.presentLogin()
     }
 
     private func completeAuthentication() {
         let intent = pendingAuthIntent
         let tab = pendingAuthTab ?? shell.selectedTab
-        shell.dismissLogin(in: tab)
+        shell.dismissLogin()
         pendingAuthIntent = nil
         pendingAuthTab = nil
         authenticationGeneration += 1
@@ -153,7 +171,6 @@ struct RootView: View {
                 shell.setPath([], for: .home)
                 shell.selectTab(.home)
             } else {
-                routeListShowsBackButton = false
                 shell.showRouteList()
             }
         case .profile:
@@ -177,27 +194,10 @@ struct RootView: View {
     private func destinationView(for destination: AppDestination) -> some View {
         Group {
             switch destination {
-            case .login:
-                LoginView(
-                    accountService: appEnvironment.accountService,
-                    intent: pendingAuthIntent,
-                    onConfirmFocusTrip: pendingAuthIntent == .homeStart
-                        ? { [appEnvironment] in
-                            try await appEnvironment.personalTripService.focus().trip != nil
-                        }
-                        : nil,
-                    onConfirmedFocusTrip: { confirmedFocusTripExists = $0 },
-                    onAuthenticated: completeAuthentication,
-                    onCancel: {
-                        confirmedFocusTripExists = nil
-                        pendingAuthIntent = nil
-                        pendingAuthTab = nil
-                    }
-                )
             case .routeList:
                 RouteCollectionView(
                     routeService: appEnvironment.routeService,
-                    showsBackButton: routeListShowsBackButton,
+                    showsBackButton: shell.routeListShowsBackEntry,
                     onNavigate: { navigate($0, in: shell.selectedTab) }
                 )
             case .routeSearch:
@@ -218,12 +218,17 @@ struct RootView: View {
                 ProfileDetailsView(accountService: appEnvironment.accountService)
             case .accountSecurity:
                 AccountSecurityView(accountService: appEnvironment.accountService)
+            case .accountMenu:
+                AccountMenuView(
+                    viewModel: profileModel,
+                    onNavigate: { navigate($0, in: shell.selectedTab) },
+                    onLoggedOut: handleLoggedOut
+                )
             case .tripList:
                 TripListView(
                     service: appEnvironment.personalTripService,
                     onNavigate: { navigate($0, in: shell.selectedTab) },
                     onFindRoute: {
-                        routeListShowsBackButton = false
                         shell.showRouteList()
                     }
                 )
@@ -291,7 +296,7 @@ struct RootView: View {
                 )
             }
         }
-        // 系统 tab bar 始终隐藏；一级根页面由 RootView 的 PrimaryTabBar 承载。
+        // 系统tab bar 只在一级根页面可见；二级任务栈与 Modal 任务内隐藏。
         .toolbar(.hidden, for: .tabBar)
     }
 }

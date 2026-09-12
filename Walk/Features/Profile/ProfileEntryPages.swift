@@ -259,6 +259,7 @@ struct AboutView: View {
 }
 
 struct EntryFormPage<Content: View>: View {
+    @Environment(\.dismiss) private var dismiss
     let title: String
     let notice: String
     let guide: String?
@@ -283,21 +284,40 @@ struct EntryFormPage<Content: View>: View {
     }
 
     var body: some View {
-        UtilityPage {
-            PageTitleBlock(
-                title: pageTitle ?? title,
-                kicker: guide,
-                description: notice
-            )
+        UtilityPageContainer {
+            VStack(spacing: 0) {
+                UtilityNavigationHeader(
+                    title: title,
+                    leading: IconButtonConfiguration(
+                        systemName: "chevron.left",
+                        accessibilityLabel: "返回",
+                        action: { dismiss() }
+                    )
+                )
 
-            WalkPanel(variant: .default) {
-                VStack(alignment: .leading, spacing: fieldSpacing) {
-                    content
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Spacing.lg) {
+                        PageTitleBlock(
+                            title: pageTitle ?? title,
+                            kicker: guide,
+                            description: notice
+                        )
+
+                        WalkPanel(variant: .default) {
+                            VStack(alignment: .leading, spacing: fieldSpacing) {
+                                content
+                            }
+                        }
+                    }
+                    .frame(maxWidth: 600, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .padding(.horizontal, Spacing.pageHorizontal)
+                    .padding(.top, Spacing.lg)
+                    .padding(.bottom, Spacing.xxl)
                 }
             }
         }
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
     }
 }
 

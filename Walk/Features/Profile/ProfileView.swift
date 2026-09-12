@@ -7,36 +7,10 @@ enum ProfileLayout {
 }
 
 struct ProfileView: View {
-    @StateObject private var viewModel: ProfileViewModel
-    @State private var isSettingsPresented = false
-    @State private var settingsDestination: AppDestination?
+    @ObservedObject private var viewModel: ProfileViewModel
     private let onNavigate: (AppDestination) -> Void
     private let onAuthenticate: (PendingAuthIntent) -> Void
     private let onLoggedOut: () -> Void
-
-    init(
-        onNavigate: @escaping (AppDestination) -> Void = { _ in },
-        onAuthenticate: @escaping (PendingAuthIntent) -> Void = { _ in },
-        accountService: any AccountServicing,
-        tripService: any PersonalTripServicing,
-        equipmentService: any EquipmentServicing,
-        apiStorage: (any APIStorage)? = nil,
-        storageGeneration: APIStorageGeneration? = nil,
-        onLoggedOut: @escaping () -> Void = {}
-    ) {
-        self.onNavigate = onNavigate
-        self.onAuthenticate = onAuthenticate
-        self.onLoggedOut = onLoggedOut
-        _viewModel = StateObject(wrappedValue: ProfileViewModel(
-            accountService: accountService,
-            tripService: tripService,
-            equipmentService: equipmentService,
-            clearCachedResponses: {
-                await storageGeneration?.invalidate()
-                try? await apiStorage?.removeAll()
-            }
-        ))
-    }
 
     init(
         viewModel: ProfileViewModel,
@@ -44,7 +18,7 @@ struct ProfileView: View {
         onAuthenticate: @escaping (PendingAuthIntent) -> Void = { _ in },
         onLoggedOut: @escaping () -> Void = {}
     ) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+        self.viewModel = viewModel
         self.onNavigate = onNavigate
         self.onAuthenticate = onAuthenticate
         self.onLoggedOut = onLoggedOut
@@ -74,42 +48,21 @@ struct ProfileView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.loadProfile() }
-        .onChange(of: viewModel.isLoggedIn) { isLoggedIn in
-            if !isLoggedIn {
-                isSettingsPresented = false
-            }
-        }
-        .fullScreenCover(isPresented: $isSettingsPresented, onDismiss: completeSettingsNavigation) {
-            if let account = viewModel.account {
-                AccountMenuSheet(
-                    profile: account.profile,
-                    avatarImage: nil,
-                    isLoggingOut: viewModel.isLoggingOut,
-                    logoutError: viewModel.logoutErrorMessage,
-                    onDismiss: { isSettingsPresented = false },
-                    onSelectSetting: { settingID in
-                        settingsDestination = destination(for: settingID)
-                        isSettingsPresented = false
-                    },
-                    onLogout: {
-                        Task {
-                            await viewModel.logout()
-                            if !viewModel.isLoggedIn {
-                                isSettingsPresented = false
-                            }
-                        }
-                    }
-                )
-            }
-        }
     }
 
     private var signedInPageHeader: some View {
         HStack(alignment: .center, spacing: Spacing.lg) {
-            Text("我的")
-                .font(.pageTitle)
-                .foregroundStyle(AppColors.textPrimary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Text("我的")
+                    .font(.pageTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+
+                Text("行程、装备与账户，都在这里")
+                    .font(.appBody)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Spacer(minLength: Spacing.lg)
 
@@ -117,7 +70,7 @@ struct ProfileView: View {
                 avatarHeaderContent
             }
         }
-        .frame(minHeight: 44)
+        .frame(minHeight: 44, alignment: .center)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -135,7 +88,7 @@ struct ProfileView: View {
                 variant: .pageHeader,
                 accessibilityLabel: "打开个人与设置"
             ) {
-                isSettingsPresented = true
+                onNavigate(.accountMenu)
             }
         } else {
             AvatarButton(
@@ -203,26 +156,6 @@ struct ProfileView: View {
                 summary: summary,
                 onActivate: { onNavigate(.personalEquipment) }
             )
-        }
-    }
-
-    private func completeSettingsNavigation() {
-        if let destination = settingsDestination {
-            settingsDestination = nil
-            onNavigate(destination)
-        } else if !viewModel.isLoggedIn {
-            onLoggedOut()
-        }
-    }
-
-    private func destination(for settingID: AccountMenuSettingID) -> AppDestination {
-        switch settingID {
-        case .profile: .profileDetails
-        case .accountSecurity: .accountSecurity
-        case .notifications: .notificationSettings
-        case .privacy: .privacySettings
-        case .helpAndFeedback: .helpAndFeedback
-        case .about: .about
         }
     }
 }

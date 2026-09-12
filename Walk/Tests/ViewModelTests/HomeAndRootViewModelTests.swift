@@ -468,26 +468,26 @@ final class HomeAndRootViewModelTests: XCTestCase {
         XCTAssertEqual(HomeLayout.guestBottomPadding, 36)
     }
 
-    func testPrimaryTabBarVisibilityTracksTheSelectedNavigationPath() {
+    func testSystemTabBarVisibilityTracksTheSelectedNavigationPath() {
         var sut = AppShellState()
-        XCTAssertTrue(sut.showsPrimaryTabBar)
+        XCTAssertTrue(sut.showsGlobalNavigation)
 
         sut.setPath([.tripDetail("trip-1")], for: .home)
-        XCTAssertFalse(sut.showsPrimaryTabBar)
+        XCTAssertFalse(sut.showsGlobalNavigation)
 
         sut.selectTab(.routes)
-        XCTAssertTrue(sut.showsPrimaryTabBar)
+        XCTAssertTrue(sut.showsGlobalNavigation)
 
         sut.setPath([.routeList], for: .routes)
-        XCTAssertFalse(sut.showsPrimaryTabBar)
+        XCTAssertFalse(sut.showsGlobalNavigation)
     }
 
-    func testRootDisablesSystemTabBarWhenUsingPrimaryTabBar() throws {
+    func testRootUsesSystemTabBarOnlyOnRootPages() throws {
         let navigationSource = try productionSource(at: "App/RootNavigation.swift")
         let rootSource = try productionSource(at: "App/RootView.swift")
 
-        XCTAssertTrue(navigationSource.contains("UITabBar.appearance().isHidden = true"))
-        XCTAssertTrue(rootSource.contains("PrimaryTabBar("))
+        XCTAssertFalse(navigationSource.contains("UITabBar.appearance().isHidden = true"))
+        XCTAssertFalse(rootSource.contains("PrimaryTabBar("))
         XCTAssertTrue(rootSource.contains(".toolbar(.hidden, for: .tabBar)"))
     }
 

@@ -15,6 +15,9 @@ settings:
     CODE_SIGNING_ALLOWED: "YES"
 
 packages:
+  Lottie:
+    url: https://github.com/airbnb/lottie-ios
+    from: 4.4.3
   Alamofire:
     path: .swiftpm-packages/checkouts/Alamofire
   WalkData:
@@ -33,13 +36,16 @@ targets:
           - "Tests/**/*"
     dependencies:
       - package: Alamofire
+      - package: Lottie
       - package: WalkData
       - package: WalkDesignSystem
     info:
       path: Walk/Resources/Info.plist
       properties:
         CFBundleDisplayName: Walk
-        UILaunchScreen: {}
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+          UIImageName: LaunchImage
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSAppTransportSecurity:
