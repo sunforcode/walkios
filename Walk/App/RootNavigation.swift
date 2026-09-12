@@ -40,7 +40,6 @@ enum AppDestination: Hashable {
     case routeDetail(String)
     case profileDetails
     case accountSecurity
-    case accountMenu
     case notificationSettings
     case privacySettings
     case helpAndFeedback
@@ -61,7 +60,6 @@ enum AppDestination: Hashable {
         case .routeDetail: "PAGE-ROUTE-DETAIL"
         case .profileDetails, .accountSecurity, .notificationSettings, .privacySettings,
              .helpAndFeedback, .about: "PAGE-ME"
-        case .accountMenu: "PAGE-ACCOUNT-MENU"
         case .tripList: "PAGE-TRIPS"
         case .createTrip: "PAGE-TRIP-CREATE"
         case .tripDetail: "PAGE-TRIP-DETAIL"
@@ -89,6 +87,8 @@ struct AppShellState: Equatable {
     var routeListShowsBackEntry = false
     /// PAGE-LOGIN 为 Modal 任务，全屏覆盖呈现，不进入任务栈。
     var isLoginPresented = false
+    /// PAGE-ACCOUNT-MENU 为 Modal 任务，以模态 Sheet 呈现，不进入任务栈；设置项目标页由我的页任务栈承接。
+    var isAccountMenuPresented = false
 
     private var homePath: [AppDestination] = []
     private var routesPath: [AppDestination] = []
@@ -137,6 +137,14 @@ struct AppShellState: Equatable {
 
     mutating func dismissLogin() {
         isLoginPresented = false
+    }
+
+    mutating func presentAccountMenu() {
+        isAccountMenuPresented = true
+    }
+
+    mutating func dismissAccountMenu() {
+        isAccountMenuPresented = false
     }
 
     mutating func replaceTop(with destination: AppDestination, in tab: AppTab) {

@@ -176,7 +176,7 @@ final class ProfileViewModelTests: XCTestCase {
 
         XCTAssertTrue(source.contains("TripBusinessComponents.TripCalendarCard("))
         XCTAssertTrue(source.contains("PersonalEquipmentSummaryCard("))
-        XCTAssertTrue(source.contains("onNavigate(.accountMenu)"))
+        XCTAssertTrue(source.contains("onOpenAccountMenu("), "头像入口弹出账户菜单")
         XCTAssertTrue(source.contains("avatarLabel: profile.nickname"))
         XCTAssertFalse(source.contains("fullScreenCover"), "头像入口不再弹覆盖层")
         XCTAssertFalse(source.contains("AccountMenuSheet"), "AccountMenuSheet 已退役，承载迁至 AccountMenuView")
@@ -184,6 +184,8 @@ final class ProfileViewModelTests: XCTestCase {
         XCTAssertTrue(accountMenuSource.contains("AccountEquipmentBusinessComponents.ProfileIdentityHeader("))
         XCTAssertTrue(accountMenuSource.contains("SettingsListRow("))
         XCTAssertTrue(accountMenuSource.contains("viewModel.logout()"), "退出登录在账户菜单页内转发")
+        XCTAssertTrue(accountMenuSource.contains("ModalBottomSheet("), "账户菜单使用底部模态 Sheet 承载")
+        XCTAssertTrue(accountMenuSource.contains("onClose"), "关闭入口回到我的页")
         XCTAssertTrue(equipmentComponentSource.contains("summary.equipmentItemCount"))
         XCTAssertTrue(equipmentComponentSource.contains("summary.equipmentListCount"))
         XCTAssertTrue(equipmentComponentSource.contains("summary.knownTotalWeight.grams"))

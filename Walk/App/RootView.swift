@@ -49,6 +49,13 @@ struct RootView: View {
             loginCover
                 .interactiveDismissDisabled()
         }
+        .overlay {
+            if shell.isAccountMenuPresented {
+                accountMenuCover
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: shell.isAccountMenuPresented)
         .onReceive(NotificationCenter.default.publisher(for: .walkAuthenticationRequired)) { _ in
             requestAuthentication(.reauthenticate, in: shell.selectedTab, force: true)
         }
@@ -58,6 +65,13 @@ struct RootView: View {
         .onChange(of: shell.selectedTab) { tab in
             guard tab == .routes, shell.path(for: .routes).isEmpty else { return }
             shell.routeListShowsBackEntry = false
+        }
+        .onChange(of: shell.path(for: .profile)) { path in
+            // 账户菜单打开期间，父级（我的）任务栈一旦推入新页，Sheet 立即关闭：
+            // 设置项经父级任务栈承接，模态不残留覆盖在推入页之上。
+            if shell.isAccountMenuPresented && !path.isEmpty {
+                shell.dismissAccountMenu()
+            }
         }
     }
 
@@ -82,6 +96,21 @@ struct RootView: View {
                 pendingAuthIntent = nil
                 pendingAuthTab = nil
             }
+        )
+    }
+
+    /// PAGE-ACCOUNT-MENU：Modal 任务，以 App 层 overlay 呈现模态 Sheet；
+    /// Sheet 自带遮罩、把手、关闭入口，不进入任务栈。
+    private var accountMenuCover: some View {
+        AccountMenuView(
+            viewModel: profileModel,
+            onClose: { shell.dismissAccountMenu() },
+            onNavigate: { destination in
+                // 设置项经父级任务栈承接：先关闭 Sheet，再从我的页任务栈推入目标页。
+                shell.dismissAccountMenu()
+                navigate(destination, in: .profile)
+            },
+            onLoggedOut: handleLoggedOut
         )
     }
 
@@ -125,6 +154,7 @@ struct RootView: View {
         ProfileView(
             viewModel: profileModel,
             onNavigate: { navigate($0, in: .profile) },
+            onOpenAccountMenu: { shell.presentAccountMenu() },
             onAuthenticate: { requestAuthentication($0, in: .profile) },
             onLoggedOut: handleLoggedOut
         )
@@ -132,6 +162,7 @@ struct RootView: View {
     }
 
     private func handleLoggedOut() {
+        shell.dismissAccountMenu()
         shell.showRouteDiscovery()
         authenticationGeneration += 1
     }
@@ -218,12 +249,6 @@ struct RootView: View {
                 ProfileDetailsView(accountService: appEnvironment.accountService)
             case .accountSecurity:
                 AccountSecurityView(accountService: appEnvironment.accountService)
-            case .accountMenu:
-                AccountMenuView(
-                    viewModel: profileModel,
-                    onNavigate: { navigate($0, in: shell.selectedTab) },
-                    onLoggedOut: handleLoggedOut
-                )
             case .tripList:
                 TripListView(
                     service: appEnvironment.personalTripService,

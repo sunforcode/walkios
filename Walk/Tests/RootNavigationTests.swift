@@ -97,7 +97,21 @@ final class RootNavigationTests: XCTestCase {
         XCTAssertEqual(AppDestination.personalEquipment.pageID, "PAGE-MY-EQUIPMENT")
         XCTAssertEqual(AppDestination.equipmentEdit(equipmentID: nil).pageID, "PAGE-EQUIPMENT-EDIT")
         XCTAssertEqual(AppDestination.accountSecurity.pageID, "PAGE-ME")
-        XCTAssertEqual(AppDestination.accountMenu.pageID, "PAGE-ACCOUNT-MENU")
+    }
+
+    func testAccountMenuPresentsAsModalWithoutEnteringStack() {
+        var sut = AppShellState()
+        sut.setPath([.tripList], for: .profile)
+
+        sut.presentAccountMenu()
+
+        XCTAssertTrue(sut.isAccountMenuPresented, "账户菜单为 Modal 任务，以模态 Sheet 呈现")
+        XCTAssertEqual(sut.path(for: .profile), [.tripList], "账户菜单不进入任务栈")
+
+        sut.dismissAccountMenu()
+
+        XCTAssertFalse(sut.isAccountMenuPresented)
+        XCTAssertEqual(sut.path(for: .profile), [.tripList], "关闭后恢复我的页上下文")
     }
 
     func testPendingAuthIntentPreservesRouteAndSourceContext() {

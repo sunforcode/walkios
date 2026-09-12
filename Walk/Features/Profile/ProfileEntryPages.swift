@@ -283,8 +283,23 @@ struct EntryFormPage<Content: View>: View {
         self.content = content()
     }
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// 登录 modal 同款背景：山脊底色层 + 极光呼吸动画（Reduce Motion 时不渲染动画层）。
+    private var ridgeSceneBackground: some View {
+        ZStack {
+            NightRidgePaletteScene()
+
+            if !reduceMotion {
+                LoginAmbientAnimation()
+            }
+        }
+        .ignoresSafeArea()
+    }
+
     var body: some View {
-        UtilityPageContainer {
+        // 个人设置入口页与登录 modal 共用同一夜景山脊配色与极光呼吸层，观感完全对齐。
+        UtilityPageContainer(background: { ridgeSceneBackground }) {
             VStack(spacing: 0) {
                 UtilityNavigationHeader(
                     title: title,

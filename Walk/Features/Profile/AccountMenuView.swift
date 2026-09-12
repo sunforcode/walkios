@@ -2,72 +2,57 @@ import SwiftUI
 import WalkData
 import WalkDesignSystem
 
-/// PAGE-ACCOUNT-MENU：账户菜单页。头像入口推入承载，取代原 AccountMenuSheet 覆盖层。
+/// PAGE-ACCOUNT-MENU：账户菜单，以底部模态 Sheet（ModalBottomSheet）承载，不进入任务栈。
+/// 设置项经父级任务栈承接：onNavigate 前由宿主先关闭本模态。
 struct AccountMenuView: View {
-    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var viewModel: ProfileViewModel
+    private let onClose: () -> Void
     private let onNavigate: (AppDestination) -> Void
     private let onLoggedOut: () -> Void
 
     init(
         viewModel: ProfileViewModel,
+        onClose: @escaping () -> Void = {},
         onNavigate: @escaping (AppDestination) -> Void = { _ in },
         onLoggedOut: @escaping () -> Void = {}
     ) {
         self.viewModel = viewModel
+        self.onClose = onClose
         self.onNavigate = onNavigate
         self.onLoggedOut = onLoggedOut
     }
 
     var body: some View {
-        UtilityPageContainer {
-            VStack(spacing: 0) {
-                UtilityNavigationHeader(
-                    title: "账户菜单",
-                    leading: IconButtonConfiguration(
-                        systemName: "chevron.left",
-                        accessibilityLabel: "返回我的",
-                        action: { dismiss() }
-                    )
-                )
+        ModalBottomSheet(onDismiss: onClose, isCloseActionPresented: true) {
+            VStack(alignment: .leading, spacing: Spacing.lg) {
+                if let profile = viewModel.account?.profile {
+                    identityHeader(profile)
+                    settingsGroup(title: "账户与设置", items: accountSettings(profile))
+                    settingsGroup(title: "支持", items: supportSettings)
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: Spacing.lg) {
-                        if let profile = viewModel.account?.profile {
-                            identityHeader(profile)
-                            settingsGroup(title: "账户与设置", items: accountSettings(profile))
-                            settingsGroup(title: "支持", items: supportSettings)
-
-                            if let logoutError = viewModel.logoutErrorMessage {
-                                ErrorView(
-                                    message: logoutError,
-                                    title: "退出登录失败",
-                                    variant: .section
-                                )
-                                .padding(.top, Spacing.md)
-                            }
-
-                            DangerAction(
-                                title: "退出登录",
-                                systemImage: "rectangle.portrait.and.arrow.right",
-                                isLoading: viewModel.isLoggingOut,
-                                fillsWidth: true,
-                                action: {
-                                    Task { await viewModel.logout() }
-                                }
-                            )
-                            .padding(.top, Spacing.md)
-                        }
+                    if let logoutError = viewModel.logoutErrorMessage {
+                        ErrorView(
+                            message: logoutError,
+                            title: "退出登录失败",
+                            variant: .section
+                        )
+                        .padding(.top, Spacing.md)
                     }
-                    .frame(maxWidth: 600, alignment: .topLeading)
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    .padding(.horizontal, Spacing.pageHorizontal)
-                    .padding(.top, Spacing.lg)
-                    .padding(.bottom, 88)
+
+                    DangerAction(
+                        title: "退出登录",
+                        systemImage: "rectangle.portrait.and.arrow.right",
+                        isLoading: viewModel.isLoggingOut,
+                        fillsWidth: true,
+                        action: {
+                            Task { await viewModel.logout() }
+                        }
+                    )
+                    .padding(.top, Spacing.md)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .top)
         }
-        .toolbar(.hidden, for: .navigationBar)
         .task {
             if viewModel.account == nil {
                 await viewModel.loadProfile()
@@ -128,7 +113,8 @@ struct AccountMenuView: View {
                     )
                 }
             }
-            .background(AppColors.surfacePrimary)
+            // 色块嵌套最多两层：Sheet 表面为第一层，分组为第二层（浅色填充 + 细描边）。
+            .background(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).fill(AppColors.surfaceElevated))
             .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
@@ -161,17 +147,17 @@ extension AccountMenuView {
 }
 
 #if DEBUG
-#Preview("AccountMenuView.default") {
-    NavigationStack {
-        AccountMenuView(
-            viewModel: ProfileViewModel(
-                accountService: PreviewHelpers.accountService,
-                tripService: PreviewHelpers.personalTripService,
-                equipmentService: PreviewHelpers.equipmentService
-            ),
-            onNavigate: { _ in },
-            onLoggedOut: {}
-        )
-    }
+#Preview("AccountMenuView.modalSheet") {
+    AccountMenuView(
+        viewModel: ProfileViewModel(
+            accountService: PreviewHelpers.accountService,
+            tripService: PreviewHelpers.personalTripService,
+            equipmentService: PreviewHelpers.equipmentService
+        ),
+        onClose: {},
+        onNavigate: { _ in },
+        onLoggedOut: {}
+    )
+    .background(AppColors.pageBase)
 }
 #endif

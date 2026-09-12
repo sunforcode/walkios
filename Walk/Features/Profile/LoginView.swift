@@ -388,9 +388,9 @@ struct LoginView: View {
     }
 }
 
-/// PAGE-LOGIN 场景环境动画：极光呼吸光斑与缓升光点，Lottie 循环承载；
-/// 仅装饰，不拦截交互，Reduce Motion 时不渲染。
-private struct LoginAmbientAnimation: View {
+/// 登录与个人设置页共用的极光呼吸装饰层（Lottie 循环）；仅装饰，不拦截交互。
+/// 渲染与否由调用方根据 Reduce Motion 决定。
+struct LoginAmbientAnimation: View {
     var body: some View {
         LottieView(animation: .named("LoginRidgeAmbient"))
             .looping()
@@ -405,19 +405,7 @@ private struct LoginNightRidgeScene: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            AppColors.pageMiddle
-                .ignoresSafeArea()
-
-            Ellipse()
-                .fill(AppColors.interactionPrimary.opacity(0.16))
-                .frame(width: 300, height: 220)
-                .blur(radius: 70)
-                .offset(x: 28, y: -28)
-
-            LoginContourLayer()
-                .opacity(0.27)
-
-            LoginMountainLayer()
+            NightRidgePaletteScene()
 
             LoginRouteGlow(highlightsFinish: phase == .verificationCode)
                 .padding(.horizontal, 36)
@@ -436,6 +424,30 @@ private struct LoginNightRidgeScene: View {
             }
             .padding(.leading, 24)
             .padding(.top, 60)
+        }
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
+    }
+}
+
+/// 夜景山脊氛围底色：pageMiddle 底 + 薄荷光斑 + 等高线 + 双层山脊。
+/// 登录页与个人设置页共用的生产实现；登录页在此之上叠加 logo 与路线光效。
+struct NightRidgePaletteScene: View {
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            AppColors.pageMiddle
+                .ignoresSafeArea()
+
+            Ellipse()
+                .fill(AppColors.interactionPrimary.opacity(0.16))
+                .frame(width: 300, height: 220)
+                .blur(radius: 70)
+                .offset(x: 28, y: -28)
+
+            LoginContourLayer()
+                .opacity(0.27)
+
+            LoginMountainLayer()
         }
         .accessibilityHidden(true)
         .allowsHitTesting(false)

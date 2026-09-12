@@ -1052,8 +1052,8 @@ final class DesignSystemTests: XCTestCase {
         let accountMenu = try productionSource(at: "Features/Profile/AccountMenuView.swift")
         XCTAssertTrue(accountMenu.contains("maskedPhone"), "脱敏账号摘要在账户菜单页内")
         XCTAssertTrue(accountMenu.contains("关于 Walk"), "关于行文案在账户菜单页内")
-        XCTAssertFalse(profile.contains("fullScreenCover"), "头像入口推入账户菜单页，不弹覆盖层")
-        XCTAssertTrue(profile.contains("onNavigate(.accountMenu)"), "头像入口推入 PAGE-ACCOUNT-MENU")
+        XCTAssertFalse(profile.contains("fullScreenCover"), "模态承载在 RootView，我的页自身不弹覆盖层")
+        XCTAssertTrue(profile.contains("onOpenAccountMenu("), "头像入口弹出 PAGE-ACCOUNT-MENU 模态")
     }
 
     func testEquipmentListFollowsPageStructureSpec() throws {

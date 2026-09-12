@@ -9,17 +9,20 @@ enum ProfileLayout {
 struct ProfileView: View {
     @ObservedObject private var viewModel: ProfileViewModel
     private let onNavigate: (AppDestination) -> Void
+    private let onOpenAccountMenu: () -> Void
     private let onAuthenticate: (PendingAuthIntent) -> Void
     private let onLoggedOut: () -> Void
 
     init(
         viewModel: ProfileViewModel,
         onNavigate: @escaping (AppDestination) -> Void = { _ in },
+        onOpenAccountMenu: @escaping () -> Void = {},
         onAuthenticate: @escaping (PendingAuthIntent) -> Void = { _ in },
         onLoggedOut: @escaping () -> Void = {}
     ) {
         self.viewModel = viewModel
         self.onNavigate = onNavigate
+        self.onOpenAccountMenu = onOpenAccountMenu
         self.onAuthenticate = onAuthenticate
         self.onLoggedOut = onLoggedOut
     }
@@ -88,7 +91,7 @@ struct ProfileView: View {
                 variant: .pageHeader,
                 accessibilityLabel: "打开个人与设置"
             ) {
-                onNavigate(.accountMenu)
+                onOpenAccountMenu()
             }
         } else {
             AvatarButton(
