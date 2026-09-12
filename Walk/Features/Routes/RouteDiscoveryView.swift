@@ -5,7 +5,6 @@ import WalkDesignSystem
 
 enum RouteDiscoveryLayout {
     static let headerTop: CGFloat = 54
-    static let allRoutesTop: CGFloat = 148
     static let sceneHorizontalPadding: CGFloat = 20
     static let compactHorizontalPadding: CGFloat = 16
 
@@ -35,24 +34,25 @@ struct RouteDiscoveryView: View {
                 ZStack(alignment: .top) {
                     routeState(viewport: geometry.size)
 
-                    // 页面头：大标题 + 副标题，不拦截场景的分页手势。
-                    PageTitleBlock(title: "路线", description: "选一条想走的，看清了再出发")
-                        .padding(.top, RouteDiscoveryLayout.headerTop)
-                        .padding(.horizontal, horizontalPadding(for: geometry.size.width))
-                        .allowsHitTesting(false)
+                    // 页面头与全部路线入口同行：入口固定右上角，与页面头垂直居中对齐；
+                    // 页面头不拦截场景的分页手势。
+                    HStack(alignment: .center, spacing: Spacing.md) {
+                        PageTitleBlock(title: "路线", description: "选一条想走的，看清了再出发")
+                            .allowsHitTesting(false)
 
-                    SecondaryAction(title: "全部路线", variant: .overlayCompact) {
-                        onNavigate(.routeList)
+                        Spacer(minLength: Spacing.md)
+
+                        SecondaryAction(title: "全部路线", variant: .overlayCompact) {
+                            onNavigate(.routeList)
+                        }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(.top, RouteDiscoveryLayout.allRoutesTop)
-                    .padding(.trailing, horizontalPadding(for: geometry.size.width))
+                    .padding(.top, RouteDiscoveryLayout.headerTop)
+                    .padding(.horizontal, horizontalPadding(for: geometry.size.width))
                 }
             }
         }
         .task { await viewModel.loadRoutes() }
         .toolbar(.hidden, for: .navigationBar)
-        .ignoresSafeArea(edges: .top)
     }
 
     @ViewBuilder
