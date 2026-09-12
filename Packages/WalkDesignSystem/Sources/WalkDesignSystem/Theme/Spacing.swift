@@ -11,5 +11,8 @@ public enum Spacing {
      public static let xxxl: CGFloat = 48
 
      public static let pageHorizontal = lg
+
+     /// 分区式页面中 section 卡片之间、以及悬浮 section 卡片距屏幕左右边缘的间距。
+     public static let sectionGap: CGFloat = 10
      public static let navBarHeight: CGFloat = 44
 }

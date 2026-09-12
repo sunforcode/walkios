@@ -8,10 +8,10 @@ private enum RouteDetailLayout {
     static let bottomDetailMinimumHeight: CGFloat = 355
     /// 首屏信息区固定高度（分区式：屏幕分为地图区 + 信息区，信息区只装下标题/描述/标签/指标，剩余全给地图）。
     static let summarySectionHeight: CGFloat = 380
-    /// section 间距（空白 border 10，设计系统暂无对应 token）。
-    static let sectionSpacing: CGFloat = 10
-    /// section 卡片左右边距（悬浮卡样式，参考首屏单框左右露底 10，设计系统暂无对应 token）。
-    static let sectionHorizontalMargin: CGFloat = 10
+    /// section 间距（设计系统 token：`Spacing.sectionGap`）。
+    static let sectionSpacing = Spacing.sectionGap
+    /// section 卡片左右边距（悬浮卡样式，设计系统 token：`Spacing.sectionGap`）。
+    static let sectionHorizontalMargin = Spacing.sectionGap
     /// 纯地图底部 dock 的估算高度，用于地图镜头底部避让。
     static let pureMapDockHeight: CGFloat = 216
     /// 纯地图下选中区间信息卡的估算高度，用于定位按钮避让。
