@@ -878,24 +878,21 @@ enum BusinessComponentPreviewFixtures {
 
     static let routeSummary = RouteSummaryProjection(
         name: "贡嘎西南坡环线",
-        start: "上木居",
-        end: "草科",
+        introduction: "环绕贡嘎西南坡的经典徒步线路，翻越垭口远眺主峰，冰川、草甸与森林交替呈现。",
         tags: ["四川 · 甘孜", "进阶", "多日路线"],
         metrics: routeSummaryMetrics
     )
 
     static let routeSummaryPartial = RouteSummaryProjection(
         name: "河谷森林线",
-        start: nil,
-        end: "游客服务站",
+        introduction: nil,
         tags: ["中等"],
         metrics: [routeSummaryMetrics[0]]
     )
 
     static let routeSummaryLong = RouteSummaryProjection(
         name: "穿越原始森林、高山草甸与连续垭口的长距离环形徒步路线",
-        start: "高山村北侧徒步入口",
-        end: "河谷游客服务站",
+        introduction: "从高山村北侧徒步入口出发，沿河谷溯溪而上，穿越原始森林与连续垭口后下撤至河谷游客服务站。",
         tags: ["四川省甘孜藏族自治州", "高海拔进阶路线", "多日路线"],
         metrics: routeSummaryMetrics
     )
@@ -1766,6 +1763,44 @@ enum BusinessComponentPreviewFixtures {
             state: .stale
         ),
         importantImpacts: ["请结合逐日天气与实际现场条件判断。"]
+    )
+
+    static let routeSpanCardDay = RouteSpanCardProjection(
+        spanID: "day-1",
+        kind: .day(number: 1),
+        colorHex: "2F6FED",
+        headerTitle: "D1 · 下日乌且营地",
+        metrics: [
+            RouteSpanMetricProjection(label: "里程", value: "10.6 km"),
+            RouteSpanMetricProjection(label: "累计爬升", value: "+420 m", isEmphasized: true),
+            RouteSpanMetricProjection(label: "累计下降", value: "-180 m", isEmphasized: true),
+            RouteSpanMetricProjection(label: "最高海拔", value: "3520 m"),
+            RouteSpanMetricProjection(label: "最低海拔", value: "2720 m"),
+        ],
+        endpoints: "康定老榆林 → 下日乌且营地",
+        position: "全程 0 – 10.6 km",
+        duration: "参考用时 5 小时",
+        lifecycle: "住宿：下日乌且营地",
+        trait: nil,
+        caution: "垭口段午后天气多变，注意保暖。"
+    )
+
+    static let routeSpanCardSegment = RouteSpanCardProjection(
+        spanID: "segment-1",
+        kind: .segment(order: 1),
+        colorHex: "2F6FED",
+        headerTitle: "S1 · 进山段",
+        metrics: [
+            RouteSpanMetricProjection(label: "里程", value: "8.4 km"),
+            RouteSpanMetricProjection(label: "累计爬升", value: "+980 m", isEmphasized: true),
+            RouteSpanMetricProjection(label: "累计下降", value: "-60 m", isEmphasized: true),
+        ],
+        endpoints: "康定老榆林 → 下日乌且营地",
+        position: "距起点 0 km · 距终点 32.9 km",
+        duration: "徒步参考时长 4 小时",
+        lifecycle: nil,
+        trait: "难度：进阶 · 地形：碎石坡",
+        caution: nil
     )
 }
 #endif

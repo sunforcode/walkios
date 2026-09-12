@@ -56,16 +56,6 @@ extension RouteBusinessComponents {
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
 
-                    if !tags.isEmpty {
-                        RouteWrapLayout {
-                            ForEach(Array(tags.enumerated()), id: \.offset) { _, tag in
-                                InfoTag(title: tag, tone: .overlay)
-                            }
-                        }
-                        .padding(.top, Spacing.xl)
-                        .padding(.horizontal, Spacing.lg)
-                    }
-
                     VStack(alignment: .leading, spacing: Spacing.lg) {
                         Spacer(minLength: Spacing.xxl)
 
@@ -73,6 +63,14 @@ extension RouteBusinessComponents {
                             .font(.sceneTitle)
                             .foregroundStyle(AppColors.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
+
+                        if !tags.isEmpty {
+                            RouteWrapLayout {
+                                ForEach(Array(tags.enumerated()), id: \.offset) { _, tag in
+                                    InfoTag(title: tag, tone: .overlay)
+                                }
+                            }
+                        }
 
                         if !projection.metrics.isEmpty {
                             MetricGroup(items: projection.metrics, variant: .inline)

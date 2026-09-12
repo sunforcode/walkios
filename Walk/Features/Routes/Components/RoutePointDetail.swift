@@ -23,8 +23,41 @@ extension RouteBusinessComponents {
         let onDismiss: () -> Void
 
         var body: some View {
-            ModalBottomSheet(onDismiss: onDismiss) {
-                VStack(alignment: .leading, spacing: Spacing.md) {
+            ZStack {
+                Rectangle()
+                    .fill(AppColors.surfaceModalScrim)
+                    .background(AppColors.surfaceOverlay)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onDismiss)
+
+                popoverCard
+                    .padding(.horizontal, Spacing.pageHorizontal)
+                    .padding(.bottom, 148)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            }
+            .accessibilityAddTraits(.isModal)
+        }
+
+        /// Popover 式悬浮卡：不占满宽度，悬浮于地图下方区域之上。
+        private var popoverCard: some View {
+            let shape = RoundedRectangle(cornerRadius: Radius.xl, style: .continuous)
+            return ScrollView(.vertical, showsIndicators: false) {
+                popoverContent
+            }
+            .frame(maxHeight: 460)
+            .padding(Spacing.xl)
+            .frame(maxWidth: 360, alignment: .leading)
+            .background(AppColors.surfacePrimary)
+            .clipShape(shape)
+            .overlay {
+                shape.stroke(AppColors.interactionPrimary.opacity(0.2), lineWidth: 1)
+            }
+            .appShadow(AppShadow.overlay)
+        }
+
+        private var popoverContent: some View {
+            VStack(alignment: .leading, spacing: Spacing.md) {
                     HStack(alignment: .top, spacing: Spacing.md) {
                         Text(projection.name)
                             .font(.sectionTitle)
@@ -78,7 +111,6 @@ extension RouteBusinessComponents {
                             }
                         }
                     }
-                }
             }
         }
 

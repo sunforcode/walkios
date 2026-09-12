@@ -4,8 +4,7 @@ import WalkDesignSystem
 
 struct RouteSummaryProjection: Equatable {
     var name: String?
-    var start: String?
-    var end: String?
+    var introduction: String?
     var tags: [String]
     var metrics: [MetricItemModel]
 }
@@ -25,10 +24,11 @@ extension RouteBusinessComponents {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if let endpointText {
-                    Text(endpointText)
+                if let introduction = routeNonEmpty(projection.introduction) {
+                    Text(introduction)
                         .font(.appCaption)
                         .foregroundStyle(AppColors.textSecondary)
+                        .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, Spacing.sm)
                 }
@@ -49,13 +49,6 @@ extension RouteBusinessComponents {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .contain)
-        }
-
-        private var endpointText: String? {
-            let start = routeNonEmpty(projection.start)
-            let end = routeNonEmpty(projection.end)
-            if let start, let end { return "\(start) → \(end)" }
-            return start ?? end
         }
     }
 }

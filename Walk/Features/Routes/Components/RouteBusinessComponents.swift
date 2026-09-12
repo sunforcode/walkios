@@ -67,14 +67,9 @@ struct RouteBusinessSection<Content: View>: View {
 
             content
         }
-        .padding(15)
+        // 不自带 padding/背景/裁剪：详情页 sectionCard 已提供 Spacing.xl 内边距与卡片外观，
+        // 此处再加会双重缩进（内容偏右），保留 clipShape 则圆角弧线会裁掉贴边内容。
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppColors.surfacePrimary)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
-                .stroke(AppColors.borderSubtle, lineWidth: 1)
-        }
     }
 }
 

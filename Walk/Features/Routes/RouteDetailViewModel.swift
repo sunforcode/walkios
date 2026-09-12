@@ -58,6 +58,22 @@ struct RouteMapSegment: Identifiable {
     let coordinates: [CLLocationCoordinate2D]
 }
 
+/// 纯地图划分徽标投影：位于对应范围起点，发出 `selectSpan(spanID)`。
+struct RouteDivisionBadgeProjection: Equatable {
+    let spanID: String
+    let label: String
+    let colorHex: String
+    let coordinate: CLLocationCoordinate2D
+
+    static func == (lhs: RouteDivisionBadgeProjection, rhs: RouteDivisionBadgeProjection) -> Bool {
+        lhs.spanID == rhs.spanID
+            && lhs.label == rhs.label
+            && lhs.colorHex == rhs.colorHex
+            && lhs.coordinate.latitude == rhs.coordinate.latitude
+            && lhs.coordinate.longitude == rhs.coordinate.longitude
+    }
+}
+
 struct RouteSelectableSegment: Identifiable {
     let id: String
     let segment: PublicRouteSegment
@@ -267,8 +283,7 @@ struct RouteDetailPresentation: Equatable {
     var routeSummaryProjection: RouteSummaryProjection {
         RouteSummaryProjection(
             name: Self.nonEmpty(summary.name),
-            start: Self.nonEmpty(summary.start?.name),
-            end: Self.nonEmpty(summary.end?.name),
+            introduction: Self.nonEmpty(summary.introduction),
             tags: summaryTags,
             metrics: summaryMetrics.map {
                 MetricItemModel(id: $0.title, value: $0.value, label: $0.title)
@@ -801,7 +816,7 @@ struct RouteDetailPresentation: Equatable {
         nonEmpty(value).map { String($0.prefix(1)) } ?? "季"
     }
 
-    private static func nonEmpty(_ value: String?) -> String? {
+    static func nonEmpty(_ value: String?) -> String? {
         guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
         return value
     }
@@ -811,25 +826,25 @@ struct RouteDetailPresentation: Equatable {
         return values.isEmpty ? nil : values.joined(separator: " · ")
     }
 
-    private static func endpoint(start: String?, end: String?) -> String? {
+    static func endpoint(start: String?, end: String?) -> String? {
         let start = nonEmpty(start)
         let end = nonEmpty(end)
         if let start, let end { return "\(start) → \(end)" }
         return start ?? end
     }
 
-    private static func distance(_ meters: Double) -> String {
+    static func distance(_ meters: Double) -> String {
         if meters >= 1_000 {
             return "\((meters / 1_000).formatted(.number.precision(.fractionLength(0...1)))) km"
         }
         return Self.meters(meters)
     }
 
-    private static func meters(_ meters: Double) -> String {
+    static func meters(_ meters: Double) -> String {
         "\(meters.formatted(.number.precision(.fractionLength(0...1)))) m"
     }
 
-    private static func duration(_ seconds: Double) -> String {
+    static func duration(_ seconds: Double) -> String {
         let hours = seconds / 3_600
         if hours >= 24 {
             return "\((hours / 24).formatted(.number.precision(.fractionLength(0...1)))) 天"
@@ -1167,6 +1182,245 @@ final class RouteDetailViewModel: ObservableObject {
             return description
         }
         return "加载失败：\(error.localizedDescription)"
+    }
+}
+
+// MARK: - 纯地图模式（route-detail-map-mode）划分投影
+
+extension RouteDetailViewModel {
+    private var validMainTrack: PublicRouteMainTrack? {
+        guard route?.currentVersion.mainTrackAvailability == .valid else { return nil }
+        return route?.currentVersion.mainTrack
+    }
+
+    /// 主轨迹可用时才提供纯地图状态。
+    var pureMapAvailable: Bool { validMainTrack != nil }
+
+    /// 范围 → 全程累计距离区间。仅当海拔剖面采样数与主轨迹 path 位置数一一对应时成立，
+    /// 否则返回 nil（该划分不提供曲线区间与位置行，不做任何推断）。
+    private func cumulativeDistances(for range: PublicRouteMainTrackRange) -> (start: Double, end: Double)? {
+        guard let mainTrack = validMainTrack,
+              let profile = presentation?.elevationProfileProjection,
+              profile.samples.count == mainTrack.path.count else { return nil }
+        let samples = profile.samples
+
+        func distance(at position: PublicRoutePathPosition) -> Double? {
+            let index = position.precedingPositionIndex
+            guard samples.indices.contains(index) else { return nil }
+            let base = samples[index].distance
+            if index == samples.count - 1 {
+                return position.progressToNextPosition == nil ? base : nil
+            }
+            guard let progress = position.progressToNextPosition, progress >= 0, progress < 1 else { return nil }
+            return base + (samples[index + 1].distance - base) * progress
+        }
+
+        guard let start = distance(at: range.startPathPosition),
+              let end = distance(at: range.endPathPosition),
+              end > start else { return nil }
+        return (start, end)
+    }
+
+    func pureMapSpans(for division: RouteDivisionKind) -> [RouteDivisionSpanProjection] {
+        switch division {
+        case .day:
+            guard presentation?.summary.routeType == .multiDay else { return [] }
+            return (route?.currentVersion.referenceDays ?? []).map { day in
+                let distances = day.mainTrackRange.flatMap { cumulativeDistances(for: $0) }
+                return RouteDivisionSpanProjection(
+                    id: day.identity,
+                    label: "D\(day.dayNumber)",
+                    title: day.title,
+                    colorHex: RouteDivisionPalette.hex(for: max(day.dayNumber - 1, 0)),
+                    startDistance: distances?.start,
+                    endDistance: distances?.end
+                )
+            }
+        case .segment:
+            return (route?.currentVersion.segments ?? []).map { segment in
+                let distances = segment.mainTrackRange.flatMap { cumulativeDistances(for: $0) }
+                return RouteDivisionSpanProjection(
+                    id: segment.identity,
+                    label: "S\(segment.order)",
+                    title: segment.name,
+                    colorHex: RouteDivisionPalette.hex(for: max(segment.order - 1, 0)),
+                    startDistance: distances?.start,
+                    endDistance: distances?.end
+                )
+            }
+        }
+    }
+
+    var pureMapDockProjection: RouteMapDockProjection {
+        RouteMapDockProjection(
+            elevation: presentation?.elevationProfileProjection,
+            daySpans: pureMapSpans(for: .day),
+            segmentSpans: pureMapSpans(for: .segment)
+        )
+    }
+
+    /// 纯地图轨迹划分着色：只着色具有可靠范围事实的区间，缺失区间不着色划界。
+    func divisionMapSegments(for division: RouteDivisionKind) -> [RouteMapSegment] {
+        guard let mainTrack = validMainTrack else { return [] }
+        switch division {
+        case .day:
+            return (route?.currentVersion.referenceDays ?? []).compactMap { day in
+                guard let range = day.mainTrackRange,
+                      let coordinates = Self.coordinates(in: range, path: mainTrack.path) else { return nil }
+                return RouteMapSegment(
+                    id: day.identity,
+                    name: day.title ?? "第 \(day.dayNumber) 天",
+                    colorHex: RouteDivisionPalette.hex(for: max(day.dayNumber - 1, 0)),
+                    coordinates: coordinates
+                )
+            }
+        case .segment:
+            return (route?.currentVersion.segments ?? []).compactMap { segment in
+                guard let range = segment.mainTrackRange,
+                      let coordinates = Self.coordinates(in: range, path: mainTrack.path) else { return nil }
+                return RouteMapSegment(
+                    id: segment.identity,
+                    name: segment.name,
+                    colorHex: RouteDivisionPalette.hex(for: max(segment.order - 1, 0)),
+                    coordinates: coordinates
+                )
+            }
+        }
+    }
+
+    /// 划分徽标：位于对应范围起点，供地图层发出 selectSpan。
+    func divisionBadges(for division: RouteDivisionKind) -> [RouteDivisionBadgeProjection] {
+        guard let mainTrack = validMainTrack else { return [] }
+
+        func badge(spanID: String, label: String, colorHex: String, range: PublicRouteMainTrackRange?) -> RouteDivisionBadgeProjection? {
+            guard let range,
+                  let coordinate = Self.coordinate(at: range.startPathPosition, path: mainTrack.path) else { return nil }
+            return RouteDivisionBadgeProjection(spanID: spanID, label: label, colorHex: colorHex, coordinate: coordinate)
+        }
+
+        switch division {
+        case .day:
+            return (route?.currentVersion.referenceDays ?? []).compactMap { day in
+                badge(
+                    spanID: day.identity,
+                    label: "D\(day.dayNumber)",
+                    colorHex: RouteDivisionPalette.hex(for: max(day.dayNumber - 1, 0)),
+                    range: day.mainTrackRange
+                )
+            }
+        case .segment:
+            return (route?.currentVersion.segments ?? []).compactMap { segment in
+                badge(
+                    spanID: segment.identity,
+                    label: "S\(segment.order)",
+                    colorHex: RouteDivisionPalette.hex(for: max(segment.order - 1, 0)),
+                    range: segment.mainTrackRange
+                )
+            }
+        }
+    }
+
+    /// 曲线滑动定位 → 主轨迹沿线坐标。
+    func pathCoordinate(at position: PublicRoutePathPosition) -> CLLocationCoordinate2D? {
+        guard let mainTrack = validMainTrack else { return nil }
+        return Self.coordinate(at: position, path: mainTrack.path)
+    }
+
+    func spanCardProjection(spanID: String, division: RouteDivisionKind) -> RouteSpanCardProjection? {
+        switch division {
+        case .day:
+            guard presentation?.summary.routeType == .multiDay,
+                  let day = (route?.currentVersion.referenceDays ?? []).first(where: { $0.identity == spanID }) else {
+                return nil
+            }
+            return daySpanCardProjection(day)
+        case .segment:
+            guard let segment = (route?.currentVersion.segments ?? []).first(where: { $0.identity == spanID }) else {
+                return nil
+            }
+            return segmentSpanCardProjection(segment)
+        }
+    }
+
+    private func daySpanCardProjection(_ day: PublicRouteReferenceDay) -> RouteSpanCardProjection {
+        var metrics: [RouteSpanMetricProjection] = []
+        if let distance = day.distance?.meters {
+            metrics.append(RouteSpanMetricProjection(label: "里程", value: RouteDetailPresentation.distance(distance)))
+        }
+        if let ascent = day.ascent?.meters {
+            metrics.append(RouteSpanMetricProjection(label: "累计爬升", value: "+\(RouteDetailPresentation.meters(ascent))", isEmphasized: true))
+        }
+        if let descent = day.descent?.meters {
+            metrics.append(RouteSpanMetricProjection(label: "累计下降", value: "-\(RouteDetailPresentation.meters(descent))", isEmphasized: true))
+        }
+        // 最高与最低海拔同时缺失时该两项一并省略。
+        if let maximum = day.maxElevation?.meters, let minimum = day.minElevation?.meters {
+            metrics.append(RouteSpanMetricProjection(label: "最高海拔", value: RouteDetailPresentation.meters(maximum)))
+            metrics.append(RouteSpanMetricProjection(label: "最低海拔", value: RouteDetailPresentation.meters(minimum)))
+        }
+
+        var position: String?
+        var duration: String?
+        if let range = day.mainTrackRange, let distances = cumulativeDistances(for: range) {
+            position = "全程 \(RouteDetailPresentation.distance(distances.start)) – \(RouteDetailPresentation.distance(distances.end))"
+        }
+        if let estimatedDuration = day.estimatedDuration?.seconds {
+            duration = "参考用时 \(RouteDetailPresentation.duration(estimatedDuration))"
+        }
+
+        return RouteSpanCardProjection(
+            spanID: day.identity,
+            kind: .day(number: day.dayNumber),
+            colorHex: RouteDivisionPalette.hex(for: max(day.dayNumber - 1, 0)),
+            headerTitle: "D\(day.dayNumber) · \(day.title ?? "第 \(day.dayNumber) 天")",
+            metrics: metrics,
+            endpoints: RouteDetailPresentation.endpoint(start: day.start?.name, end: day.end?.name),
+            position: position,
+            duration: duration,
+            lifecycle: day.accommodation.flatMap(RouteDetailPresentation.nonEmpty).map { "住宿：\($0)" },
+            trait: nil,
+            caution: day.notes.flatMap(RouteDetailPresentation.nonEmpty)
+        )
+    }
+
+    private func segmentSpanCardProjection(_ segment: PublicRouteSegment) -> RouteSpanCardProjection {
+        var metrics: [RouteSpanMetricProjection] = []
+        if let distance = segment.distance?.meters {
+            metrics.append(RouteSpanMetricProjection(label: "里程", value: RouteDetailPresentation.distance(distance)))
+        }
+        if let ascent = segment.ascent?.meters {
+            metrics.append(RouteSpanMetricProjection(label: "累计爬升", value: "+\(RouteDetailPresentation.meters(ascent))", isEmphasized: true))
+        }
+        if let descent = segment.descent?.meters {
+            metrics.append(RouteSpanMetricProjection(label: "累计下降", value: "-\(RouteDetailPresentation.meters(descent))", isEmphasized: true))
+        }
+
+        var position: String?
+        var duration: String?
+        if let range = segment.mainTrackRange, let distances = cumulativeDistances(for: range) {
+            position = "全程 \(RouteDetailPresentation.distance(distances.start)) – \(RouteDetailPresentation.distance(distances.end))"
+        }
+        if let estimatedDuration = segment.estimatedDuration?.seconds {
+            duration = "徒步参考时长 \(RouteDetailPresentation.duration(estimatedDuration))"
+        }
+
+        let trait = [segment.difficulty.map { "难度：\($0)" }, segment.terrainOrRoadType.map { "地形：\($0)" }]
+            .compactMap { $0.flatMap(RouteDetailPresentation.nonEmpty) }
+            .joined(separator: " · ")
+
+        return RouteSpanCardProjection(
+            spanID: segment.identity,
+            kind: .segment(order: segment.order),
+            colorHex: RouteDivisionPalette.hex(for: max(segment.order - 1, 0)),
+            headerTitle: "S\(segment.order) · \(segment.name)",
+            metrics: metrics,
+            endpoints: RouteDetailPresentation.endpoint(start: segment.start?.name, end: segment.end?.name),
+            position: position,
+            duration: duration,
+            lifecycle: nil,
+            trait: trait.isEmpty ? nil : trait,
+            caution: segment.notes.flatMap(RouteDetailPresentation.nonEmpty)
+        )
     }
 }
 

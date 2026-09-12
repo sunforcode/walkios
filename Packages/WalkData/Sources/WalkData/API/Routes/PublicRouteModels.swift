@@ -469,9 +469,10 @@ public struct PublicRouteReferenceDay: Codable, Equatable, Identifiable {
      public let descent: RouteElevationLoss?
      public let maxElevation: RouteElevation?
      public let minElevation: RouteElevation?
-     public let accommodation: String?
-     public let notes: String?
-     public var id: String { identity }
+    public let accommodation: String?
+    public let notes: String?
+    public let mainTrackRange: PublicRouteMainTrackRange?
+    public var id: String { identity }
 
     public init(
         identity: String,
@@ -486,7 +487,8 @@ public struct PublicRouteReferenceDay: Codable, Equatable, Identifiable {
         maxElevation: RouteElevation?,
         minElevation: RouteElevation?,
         accommodation: String?,
-        notes: String?
+        notes: String?,
+        mainTrackRange: PublicRouteMainTrackRange? = nil
     ) {
         self.identity = identity
         self.dayNumber = dayNumber
@@ -501,6 +503,7 @@ public struct PublicRouteReferenceDay: Codable, Equatable, Identifiable {
         self.minElevation = minElevation
         self.accommodation = accommodation
         self.notes = notes
+        self.mainTrackRange = mainTrackRange
     }
 }
 
