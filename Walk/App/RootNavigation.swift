@@ -191,10 +191,21 @@ enum RootNavigation {
     }
 
     static func applyTabBarAppearance() {
-        UITabBar.appearance().scrollEdgeAppearance = makeTabBarAppearance()
+        // window 背景兜底：home indicator 底部安全区不跟随系统外观，
+        // 强制深色，避免浅色系统下最底部露出系统白底。
+        UIWindow.appearance().backgroundColor = UIColor(AppColors.pageBase)
+        // tab bar 两个状态都用显式深色不透明背景，脱离系统外观：
+        // .preferredColorScheme(.dark) 只约束 SwiftUI 视图树，UITabBar.appearance()
+        // 代理在浅色系统模式下会兜底成系统浅色材质（configureWithTransparentBackground
+        // 的"透明"在浅色下仍是浅色模糊），导致真机浅色模式 tab bar 露白。
+        let scrollEdge = makeTabBarAppearance()
+        scrollEdge.configureWithOpaqueBackground()
+        scrollEdge.backgroundColor = UIColor(AppColors.pageBase)
+        UITabBar.appearance().scrollEdgeAppearance = scrollEdge
 
         let standard = makeTabBarAppearance()
-        standard.configureWithDefaultBackground()
+        standard.configureWithOpaqueBackground()
+        standard.backgroundColor = UIColor(AppColors.pageBase)
         UITabBar.appearance().standardAppearance = standard
     }
 

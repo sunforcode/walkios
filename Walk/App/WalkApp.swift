@@ -42,7 +42,7 @@ struct WalkApp: App {
         WindowGroup {
             appRoot
                 .environmentObject(appEnvironment)
-                .preferredColorScheme(usesFixedPreviewEnvironment ? .dark : nil)
+                .preferredColorScheme(.dark)
                 .statusBarHidden(usesFixedPreviewEnvironment)
         }
     }

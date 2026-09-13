@@ -45,6 +45,8 @@ struct RootView: View {
                 .tag(AppTab.profile)
         }
         .preferredColorScheme(.dark)
+        .toolbarBackground(AppColors.pageBase, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
         .fullScreenCover(isPresented: $shell.isLoginPresented) {
             loginCover
                 .interactiveDismissDisabled()
