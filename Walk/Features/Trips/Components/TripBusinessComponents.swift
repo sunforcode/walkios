@@ -69,6 +69,8 @@ struct TripWeatherDayProjection: Identifiable, Equatable {
     let date: String
     let primaryStage: String
     var hikingDayNumber: Int?
+    /// 天气地点（冻结 placeContext）；缺失为 nil，不从行程其他位置推断。
+    var placeContext: String?
     let weather: TripWeatherProjection
 }
 
@@ -87,6 +89,13 @@ struct TripPointProjection: Identifiable, Equatable {
     var trailing: String?
 }
 
+struct TripDayResourceProjection: Identifiable, Equatable {
+    let id: String
+    let category: String
+    let name: String?
+    var distance: String?
+}
+
 struct TripDailyRouteSummaryProjection: Equatable {
     let title: String
     var endpoints: String?
@@ -101,6 +110,7 @@ struct TripDayProjection: Equatable {
     var hikingDayNumber: Int?
     let actions: [TripTimelineItemProjection]
     var points: [TripPointProjection]
+    var resources: [TripDayResourceProjection] = []
     let weather: TripWeatherProjection
     var dailyRouteSummary: TripDailyRouteSummaryProjection?
     var totalTrekDays: Int = 0

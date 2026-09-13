@@ -41,7 +41,7 @@ final class RootNavigationTests: XCTestCase {
 
         XCTAssertEqual(sut.selectedTab, .routes)
         XCTAssertEqual(sut.path(for: .routes), [.routeList])
-        XCTAssertFalse(sut.routeListShowsBackEntry, "首页落点进入全部路线为任务栈根页，不显示返回入口")
+        XCTAssertFalse(sut.routeListShowsBackEntry, "行程清单找路线落点为任务栈根页，不显示返回入口")
     }
 
     func testRouteListBackEntryVisibilityIsOwnedByShell() {
@@ -53,7 +53,7 @@ final class RootNavigationTests: XCTestCase {
 
         sut.routeListShowsBackEntry = true
         sut.showRouteList()
-        XCTAssertFalse(sut.routeListShowsBackEntry, "无焦点落点进入不显示返回入口")
+        XCTAssertFalse(sut.routeListShowsBackEntry, "任务栈根页进入不显示返回入口")
     }
 
     func testCreateSuccessReplacesCreateDestinationWithTripDetail() {
@@ -81,7 +81,7 @@ final class RootNavigationTests: XCTestCase {
     }
 
     func testProfileHeaderUsesStandardAvatarEntrySize() {
-        XCTAssertEqual(ProfileLayout.avatarSize, RootNavigation.minimumHitSize)
+        XCTAssertEqual(AvatarButtonVariant.pageHeader.size, RootNavigation.minimumHitSize)
     }
 
     func testCoreDestinationsRemainTypeSafeAndMappedToApprovedPages() {
@@ -90,28 +90,31 @@ final class RootNavigationTests: XCTestCase {
         XCTAssertEqual(AppDestination.routeDetail("route-1").pageID, "PAGE-ROUTE-DETAIL")
         XCTAssertEqual(AppDestination.createTrip(routeID: "route-1").pageID, "PAGE-TRIP-CREATE")
         XCTAssertEqual(AppDestination.tripDetail("trip-1").pageID, "PAGE-TRIP-DETAIL")
-        XCTAssertEqual(AppDestination.tripDay(tripID: "trip-1", initialDayID: "day-2").pageID, "PAGE-TRIP-DAY")
+        XCTAssertEqual(AppDestination.tripBrowse(tripID: "trip-1", dayNumber: 2).pageID, "PAGE-TRIP-BROWSE")
         XCTAssertEqual(AppDestination.tripWeather("trip-1").pageID, "PAGE-TRIP-WEATHER")
         XCTAssertEqual(AppDestination.tripEquipment("trip-1").pageID, "PAGE-TRIP-EQUIPMENT")
         XCTAssertEqual(AppDestination.tripList.pageID, "PAGE-TRIPS")
         XCTAssertEqual(AppDestination.personalEquipment.pageID, "PAGE-MY-EQUIPMENT")
         XCTAssertEqual(AppDestination.equipmentEdit(equipmentID: nil).pageID, "PAGE-EQUIPMENT-EDIT")
-        XCTAssertEqual(AppDestination.accountSecurity.pageID, "PAGE-ME")
     }
 
-    func testAccountMenuPresentsAsModalWithoutEnteringStack() {
+    func testSettingsEntriesPushIntoProfileStackWhileMenuStaysModal() {
         var sut = AppShellState()
-        sut.setPath([.tripList], for: .profile)
-
         sut.presentAccountMenu()
 
         XCTAssertTrue(sut.isAccountMenuPresented, "账户菜单为 Modal 任务，以模态 Sheet 呈现")
-        XCTAssertEqual(sut.path(for: .profile), [.tripList], "账户菜单不进入任务栈")
+        XCTAssertTrue(sut.path(for: .profile).isEmpty, "菜单本身不进入我的页任务栈")
 
+        // 设置项经我的页任务栈承接：先关闭 Sheet，再推入对应设置内容页。
         sut.dismissAccountMenu()
+        sut.setPath([.profileDetails], for: .profile)
 
-        XCTAssertFalse(sut.isAccountMenuPresented)
-        XCTAssertEqual(sut.path(for: .profile), [.tripList], "关闭后恢复我的页上下文")
+        XCTAssertFalse(sut.isAccountMenuPresented, "选择设置项后账户菜单关闭")
+        XCTAssertEqual(sut.path(for: .profile), [.profileDetails], "设置内容页推入我的页任务栈")
+        XCTAssertEqual(AppDestination.profileDetails.pageID, "PAGE-ME", "设置内容页不建立新 Page ID")
+
+        sut.setPath([], for: .profile)
+        XCTAssertNil(sut.path(for: .profile).first, "从设置内容页返回回到我的页")
     }
 
     func testPendingAuthIntentPreservesRouteAndSourceContext() {

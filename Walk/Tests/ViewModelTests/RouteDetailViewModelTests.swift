@@ -622,14 +622,67 @@ final class RouteDetailViewModelTests: XCTestCase {
         XCTAssertEqual(presentation.routeSegmentListProjection?.segments.first?.description, "保留备注")
         XCTAssertEqual(
             presentation.routePointSectionProjections.map(\.title),
-            ["关键点", "营地", "水源"]
+            ["关键点", "水源", "营地"]
         )
-        XCTAssertEqual(presentation.routePointSectionProjections[1].points.first?.type, "开放")
+        XCTAssertEqual(presentation.routePointSectionProjections[1].points.first?.description,
+                       "雨季稳定 · 建议处理后饮用 · 过滤 · 流量较小")
         XCTAssertEqual(
-            presentation.routePointSectionProjections[2].points.first?.description,
-            "雨季稳定 · 建议处理后饮用 · 过滤 · 流量较小"
+            presentation.routePointSectionProjections[2].points.first?.type,
+            "开放"
         )
         XCTAssertEqual(presentation.routeFactSectionProjections.map(\.title), ["通信与安全"])
+    }
+
+    func testPointGroupsPreserveFixedGroupAndCategoryOrder() {
+        let detail = Self.detail(
+            availability: .missing,
+            mainTrack: nil,
+            campsites: [
+                PublicRouteCampsite(
+                    identity: "camp-1",
+                    name: "河谷营地",
+                    positions: [],
+                    elevation: RouteElevation(meters: 3_100),
+                    details: "近水源",
+                    status: "开放"
+                )
+            ],
+            waterSources: [
+                PublicRouteWaterSource(
+                    identity: "water-1",
+                    name: "溪流",
+                    positions: [],
+                    elevation: nil,
+                    sourceType: "季节性溪流",
+                    seasonalReliability: "雨季稳定",
+                    treatmentRecommended: true,
+                    treatmentAdvice: "过滤",
+                    description: "流量较小"
+                )
+            ]
+        )
+
+        let presentation = RouteDetailPresentation(route: detail)
+
+        XCTAssertEqual(presentation.routePointGroupProjections.map(\.id), [.journey, .support])
+        XCTAssertEqual(presentation.routePointGroupProjections[0].sections.map(\.title), ["关键点"])
+        XCTAssertEqual(presentation.routePointGroupProjections[1].sections.map(\.title), ["水源", "营地"])
+    }
+
+    func testPointGroupsOmitMissingCategoriesAndEmptyGroups() {
+        let detail = Self.detail(
+            availability: .missing,
+            mainTrack: nil,
+            keyPoints: [],
+            interestPoints: [],
+            campsites: [],
+            overnightPlaces: [],
+            waterSources: []
+        )
+
+        let presentation = RouteDetailPresentation(route: detail)
+
+        XCTAssertTrue(presentation.routePointGroupProjections.isEmpty)
     }
 
     func testDetailProjectsOnlyApprovedPublicFacts() async {

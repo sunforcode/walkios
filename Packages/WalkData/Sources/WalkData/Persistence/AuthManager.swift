@@ -19,9 +19,17 @@ public final class AuthManager: AuthSession {
      public static let shared = AuthManager()
 
     private let keychainService = "com.walk.app"
-    private let tokenKey = "auth_token"
 
-    private init() {}
+    /// Keychain 账户键按数据源模式隔离：
+    /// mock 模式写入 auth_token_mock，避免覆盖 remote 模式的真实登录态。
+    private let tokenKey: String
+
+    private init() {
+        let rawMode = ProcessInfo.processInfo.environment["WALK_DATA_SOURCE_MODE"]
+            ?? (Bundle.main.infoDictionary?["WalkDataSourceMode"] as? String)
+            ?? ""
+        tokenKey = rawMode.lowercased() == "mock" ? "auth_token_mock" : "auth_token"
+    }
 
     /// 当前认证 Token
      public var currentToken: String? {

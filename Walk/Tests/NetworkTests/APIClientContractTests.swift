@@ -5,6 +5,22 @@ import WalkDesignSystem
 @testable import Walk
 
 final class APIClientContractTests: XCTestCase {
+    /// 回归：后端 `days[].weather.routeSectionContext` 是 `QualifiedValue<RouteSectionSnapshot>`（对象），
+    /// 曾被客户端误建为 `QualifiedString` 导致生成成功响应解码失败。
+    func testGenerationTripCreatedResponseDecodesBackendContract() throws {
+        let envelope: DataEnvelope<PersonalTripGenerationResult> = try Fixture.decode("trip-generation-trip-created")
+        guard case .tripCreated(let detail) = envelope.data else {
+            return XCTFail("Expected tripCreated generation result")
+        }
+        XCTAssertEqual(detail.trip.identity, "pt_1789298043459_vTjPf9Dn")
+        XCTAssertEqual(detail.days.count, 1)
+        let section = try XCTUnwrap(detail.days.first?.weather.routeSectionContext?.value)
+        XCTAssertEqual(section.name, "一渡-三皇山-五渡连穿 D1")
+        XCTAssertEqual(section.start.name, "起点")
+        XCTAssertEqual(section.end.name, "终点")
+        XCTAssertEqual(section.path?.count, 2)
+    }
+
     func testRouteDetailEnvelopeDecodesCompleteBackendContract() throws {
         let envelope: APIEnvelope<RouteDetailResponse> = try Fixture.decode("route-detail-route-1")
         let route = try envelope.unwrap()

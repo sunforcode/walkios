@@ -11,7 +11,7 @@ enum BaselinePageID: String, CaseIterable {
     case routeDetail = "PAGE-ROUTE-DETAIL"
     case tripCreate = "PAGE-TRIP-CREATE"
     case tripDetail = "PAGE-TRIP-DETAIL"
-    case tripDay = "PAGE-TRIP-DAY"
+    case tripBrowse = "PAGE-TRIP-BROWSE"
     case tripWeather = "PAGE-TRIP-WEATHER"
     case tripTransport = "PAGE-TRIP-TRANSPORT"
     case tripEquipment = "PAGE-TRIP-EQUIPMENT"
@@ -117,7 +117,7 @@ enum BaselineScenario: String, CaseIterable {
         case .pageTripDayDay1, .pageTripDayDay2, .pageTripDayPartial,
              .pageTripDayUnavailable, .pageTripDayWeatherExpired,
              .pageTripDayWeatherUnavailable, .pageTripDayTransportUnavailable:
-            return .tripDay
+            return .tripBrowse
         case .pageTripWeatherDefault, .pageTripWeatherExpired, .pageTripWeatherUnavailable:
             return .tripWeather
         case .pageTripTransportDefault, .pageTripTransportUnavailable:

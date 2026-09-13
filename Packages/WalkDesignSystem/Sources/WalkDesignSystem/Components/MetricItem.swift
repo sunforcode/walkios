@@ -37,6 +37,30 @@ public struct MetricItem: View {
     }
 
      public var body: some View {
+        Group {
+            if variant == .gridCompact {
+                content
+                    .padding(Spacing.sm)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        AppColors.surfaceSubtle,
+                        in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                            .stroke(AppColors.borderSubtle, lineWidth: 1)
+                    )
+            } else {
+                content
+                    .fixedSize(horizontal: variant == .inlineCompact, vertical: true)
+                    .frame(maxWidth: variant == .gridCompact ? .infinity : nil, alignment: .leading)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
                 Text(model.value ?? "—")
@@ -54,10 +78,6 @@ public struct MetricItem: View {
                 .font(labelFont)
                 .foregroundStyle(AppColors.textWeak)
         }
-        .fixedSize(horizontal: variant == .inlineCompact, vertical: true)
-        .frame(maxWidth: variant == .gridCompact ? .infinity : nil, alignment: .leading)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityText)
     }
 
     private var accessibilityText: String {

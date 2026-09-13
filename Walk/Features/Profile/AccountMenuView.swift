@@ -1,14 +1,18 @@
 import SwiftUI
+import PhotosUI
 import WalkData
 import WalkDesignSystem
 
 /// PAGE-ACCOUNT-MENU：账户菜单，以底部模态 Sheet（ModalBottomSheet）承载，不进入任务栈。
-/// 设置项经父级任务栈承接：onNavigate 前由宿主先关闭本模态。
+/// 只承载设置主页；选择设置项时关闭菜单，由我的页任务栈推入对应设置内容页。
 struct AccountMenuView: View {
     @ObservedObject private var viewModel: ProfileViewModel
     private let onClose: () -> Void
     private let onNavigate: (AppDestination) -> Void
     private let onLoggedOut: () -> Void
+
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var isAvatarPickerPresented = false
 
     init(
         viewModel: ProfileViewModel,
@@ -23,35 +27,8 @@ struct AccountMenuView: View {
     }
 
     var body: some View {
-        ModalBottomSheet(onDismiss: onClose, isCloseActionPresented: true) {
-            VStack(alignment: .leading, spacing: Spacing.lg) {
-                if let profile = viewModel.account?.profile {
-                    identityHeader(profile)
-                    settingsGroup(title: "账户与设置", items: accountSettings(profile))
-                    settingsGroup(title: "支持", items: supportSettings)
-
-                    if let logoutError = viewModel.logoutErrorMessage {
-                        ErrorView(
-                            message: logoutError,
-                            title: "退出登录失败",
-                            variant: .section
-                        )
-                        .padding(.top, Spacing.md)
-                    }
-
-                    DangerAction(
-                        title: "退出登录",
-                        systemImage: "rectangle.portrait.and.arrow.right",
-                        isLoading: viewModel.isLoggingOut,
-                        fillsWidth: true,
-                        action: {
-                            Task { await viewModel.logout() }
-                        }
-                    )
-                    .padding(.top, Spacing.md)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .top)
+        ModalBottomSheet(onDismiss: onClose) {
+            settingsHome
         }
         .task {
             if viewModel.account == nil {
@@ -62,30 +39,92 @@ struct AccountMenuView: View {
             guard !isLoggedIn else { return }
             onLoggedOut()
         }
+        .onChange(of: selectedPhoto) { item in
+            // 只选择图片；取消选择不关闭菜单，也不改变头像。
+            guard let item else { return }
+            Task {
+                guard let data = try? await item.loadTransferable(type: Data.self) else {
+                    viewModel.reportAvatarReadFailure()
+                    return
+                }
+                await viewModel.updateAvatar(data: data, contentType: "image/jpeg")
+            }
+        }
+        .photosPicker(
+            isPresented: $isAvatarPickerPresented,
+            selection: $selectedPhoto,
+            matching: .images
+        )
+    }
+
+    // MARK: - 设置主页
+
+    private var settingsHome: some View {
+        VStack(alignment: .leading, spacing: Spacing.lg) {
+            if let profile = viewModel.account?.profile {
+                identityHeader(profile)
+                settingsGroup(title: "账户与设置", items: accountSettings)
+                settingsGroup(title: "支持", items: supportSettings)
+
+                if let avatarError = viewModel.avatarErrorMessage {
+                    ErrorView(
+                        message: avatarError,
+                        title: "头像更新失败",
+                        variant: .section
+                    )
+                    .padding(.top, Spacing.md)
+                }
+
+                if let logoutError = viewModel.logoutErrorMessage {
+                    ErrorView(
+                        message: logoutError,
+                        title: "退出登录失败",
+                        variant: .section
+                    )
+                    .padding(.top, Spacing.md)
+                }
+
+                DangerAction(
+                    title: "退出登录",
+                    systemImage: "rectangle.portrait.and.arrow.right",
+                    isLoading: viewModel.isLoggingOut,
+                    fillsWidth: true,
+                    action: {
+                        Task { await viewModel.logout() }
+                    }
+                )
+                .padding(.top, Spacing.md)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
     }
 
     private func identityHeader(_ profile: ProfileProjection) -> some View {
-        AccountEquipmentBusinessComponents.ProfileIdentityHeader(profile: profile)
+        AccountEquipmentBusinessComponents.ProfileIdentityHeader(
+            profile: profile,
+            avatarState: avatarState,
+            onSelectAvatar: { isAvatarPickerPresented = true }
+        )
     }
 
-    private func accountSettings(_ profile: ProfileProjection) -> [SettingItem] {
+    private var avatarState: AccountEquipmentBusinessComponents.ProfileIdentityHeader.AvatarState {
+        if viewModel.isAvatarUpdating { return .updating }
+        if viewModel.avatarErrorMessage != nil { return .failed }
+        return .ready
+    }
+
+    private var accountSettings: [SettingItem] {
         [
-            SettingItem(id: .profile, label: "个人资料", action: .navigate(.profileDetails)),
-            SettingItem(
-                id: .accountSecurity,
-                label: "账号与安全",
-                description: profile.maskedPhone,
-                action: .navigate(.accountSecurity)
-            ),
-            SettingItem(id: .notifications, label: "通知设置", action: .navigate(.notificationSettings)),
-            SettingItem(id: .privacy, label: "隐私设置", action: .navigate(.privacySettings)),
+            SettingItem(id: .profile, label: "个人资料", destination: .profileDetails),
+            SettingItem(id: .notifications, label: "通知设置", destination: .notificationSettings),
+            SettingItem(id: .privacy, label: "隐私设置", destination: .privacySettings),
         ]
     }
 
     private var supportSettings: [SettingItem] {
         [
-            SettingItem(id: .helpAndFeedback, label: "帮助与反馈", action: .navigate(.helpAndFeedback)),
-            SettingItem(id: .about, label: "关于 Walk", action: .navigate(.about)),
+            SettingItem(id: .helpAndFeedback, label: "帮助与反馈", destination: .helpAndFeedback),
+            SettingItem(id: .about, label: "关于 Walk", destination: .about),
         ]
     }
 
@@ -106,9 +145,7 @@ struct AccountMenuView: View {
                         description: item.description,
                         showsDivider: index < items.count - 1,
                         onActivate: { _ in
-                            if case let .navigate(destination) = item.action {
-                                onNavigate(destination)
-                            }
+                            onNavigate(item.destination)
                         }
                     )
                 }
@@ -125,24 +162,19 @@ struct AccountMenuView: View {
 }
 
 extension AccountMenuView {
+    struct SettingItem: Identifiable {
+        let id: AccountMenuSettingID
+        let label: String
+        var description: String? = nil
+        let destination: AppDestination
+    }
+
     enum AccountMenuSettingID: String, Hashable, CaseIterable {
         case profile
-        case accountSecurity
         case notifications
         case privacy
         case helpAndFeedback
         case about
-    }
-
-    struct SettingItem: Identifiable {
-        enum Action {
-            case navigate(AppDestination)
-        }
-
-        let id: AccountMenuSettingID
-        let label: String
-        var description: String? = nil
-        var action: Action = .navigate(.profileDetails)
     }
 }
 

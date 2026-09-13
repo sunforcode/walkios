@@ -110,7 +110,7 @@ final class WalkComponentCatalogUITests: XCTestCase {
         "RouteFactSection", "RouteImageGallery", "RouteIntroduction", "RouteListRow",
         "RouteMap", "RoutePointDetail", "RoutePointSection", "RouteReferenceDayList", "RouteScene",
         "RouteSegmentList", "RouteSummary", "TripCalendarCard", "TripCoverHeader", "TripDayArrangement",
-        "TripDaySummaryCard", "TripEquipmentSummaryCard", "TripListRow", "TripRouteSummaryCard",
+        "TripDayOverviewEntry", "TripEquipmentSummaryCard", "TripListRow", "TripRouteSummaryCard",
         "TripStatusBadge", "TripWeatherSummaryCard", "WeatherOverview", "WeatherSummary",
     ]
 }

@@ -1057,6 +1057,17 @@ enum BusinessComponentPreviewFixtures {
         weather: weatherUnavailable
     )
 
+    /// 行程详情页每日天气摘要行 fixture：携带冻结天气地点，覆盖已知天气分支。
+    static let weatherDayRowKnown = TripWeatherDayProjection(
+        id: "trip-day-weather-row-known",
+        dayNumber: 2,
+        date: "2026-09-08",
+        primaryStage: "翻越北侧垭口",
+        hikingDayNumber: 1,
+        placeContext: "老榆林村",
+        weather: weatherKnown
+    )
+
     static let weatherDayLong = TripWeatherDayProjection(
         id: "trip-day-weather-long",
         dayNumber: 4,
@@ -1078,8 +1089,7 @@ enum BusinessComponentPreviewFixtures {
         startDate: "2026-09-07",
         endDate: "2026-09-10",
         totalDayCount: 4,
-        hikingDayCount: 3,
-        versionLabel: "2026 夏季版"
+        hikingDayCount: 3
     )
 
     static let tripCoverLongName = TripCoverHeaderProjection(
@@ -1090,7 +1100,6 @@ enum BusinessComponentPreviewFixtures {
         endDate: "2026-09-12",
         totalDayCount: 6,
         hikingDayCount: 5,
-        versionLabel: "2026 年雨季前公开核验版本",
         coverAvailable: false
     )
 
@@ -1140,6 +1149,11 @@ enum BusinessComponentPreviewFixtures {
         MetricItemModel(id: "day-duration", value: "7", unit: "小时", label: "预计用时"),
     ]
 
+    static let tripDayResources = [
+        TripDayResourceProjection(id: "point-1", category: "水源", name: "河谷水源点", distance: "2.2 km"),
+        TripDayResourceProjection(id: "point-2", category: "营地", name: "林线营地", distance: nil),
+    ]
+
     static let tripDayDefault = TripDayProjection(
         tripDayID: "trip-day-2",
         dayNumber: 2,
@@ -1148,6 +1162,7 @@ enum BusinessComponentPreviewFixtures {
         hikingDayNumber: 1,
         actions: tripDayActions,
         points: tripDayPoints,
+        resources: tripDayResources,
         weather: weatherKnown,
         dailyRouteSummary: TripDailyRouteSummaryProjection(
             title: "河谷入口至林线营地",
@@ -1236,235 +1251,24 @@ enum BusinessComponentPreviewFixtures {
     // MARK: - TripRouteMetricsSummary
 
     static let tripRouteMetricsDefault = TripRouteMetricsSummaryProjection(
-        distance: "42.5",
-        ascent: "2,300",
-        estimatedDuration: "约 3 天"
+        distance: "42.5 km",
+        ascent: "2,300 m",
+        descent: "2,180 m",
+        maxElevation: "4,980 m"
     )
 
     static let tripRouteMetricsPartial = TripRouteMetricsSummaryProjection(
-        distance: nil,
+        distance: "42.5 km",
         ascent: nil,
-        estimatedDuration: "约 2 天"
+        descent: nil,
+        maxElevation: nil
     )
 
     static let tripRouteMetricsLong = TripRouteMetricsSummaryProjection(
-        distance: "126.8",
-        ascent: "8,940",
-        estimatedDuration: "约 9 天 6 小时"
-    )
-
-    // MARK: - TripRouteVersionCard
-
-    static let tripRouteVersionCurrent = TripRouteVersionCardProjection(
-        adoptedVersionLabel: "2026 夏季版",
-        currentPublicVersionLabel: "2026 夏季版",
-        relationship: .current,
-        migrationEligible: false,
-        comparisonStatus: nil,
-        differences: [],
-        unavailableCategories: [],
-        otherRelevantChanges: [],
-        otherRelevantChangeStatus: nil,
-        differencesExpanded: false,
-        canViewCurrentRoute: true,
-        isMigrating: false,
-        migrationResult: nil
-    )
-
-    static let tripRouteVersionNewerCollapsed = TripRouteVersionCardProjection(
-        adoptedVersionLabel: "2026 夏季版",
-        currentPublicVersionLabel: "2026 秋季版",
-        relationship: .newerPublicVersionAvailable,
-        migrationEligible: true,
-        comparisonStatus: "最低五类仅部分可比较；保留已确认变化与全部不可比较类别。",
-        differences: [
-            TripRouteDifferenceProjection(
-                id: "difference-1",
-                label: "水源 · 修改",
-                changeType: .modified,
-                summary: "石壁溪流的季节性说明已更新",
-                before: "九月通常稳定",
-                after: "枯水季可能断流"
-            ),
-        ],
-        unavailableCategories: ["交通"],
-        otherRelevantChanges: ["林线以上路段补充雷雨暴露说明"],
-        otherRelevantChangeStatus: nil,
-        differencesExpanded: false,
-        canViewCurrentRoute: true,
-        isMigrating: false,
-        migrationResult: nil
-    )
-
-    static let tripRouteVersionNewerExpanded = TripRouteVersionCardProjection(
-        adoptedVersionLabel: "2026 夏季版",
-        currentPublicVersionLabel: "2026 秋季版",
-        relationship: .newerPublicVersionAvailable,
-        migrationEligible: true,
-        comparisonStatus: "最低五类比较完整；下方只列已确认的实际变化。",
-        differences: [
-            TripRouteDifferenceProjection(
-                id: "difference-1",
-                label: "水源 · 修改",
-                changeType: .modified,
-                summary: "石壁溪流的季节性说明已更新",
-                before: "九月通常稳定",
-                after: "枯水季可能断流"
-            ),
-            TripRouteDifferenceProjection(
-                id: "difference-2",
-                label: "营地 · 新增",
-                changeType: .added,
-                summary: "新增备用营地",
-                after: "南侧林线平台"
-            ),
-        ],
-        unavailableCategories: ["交通"],
-        otherRelevantChanges: ["林线以上路段补充雷雨暴露说明"],
-        otherRelevantChangeStatus: nil,
-        differencesExpanded: true,
-        canViewCurrentRoute: true,
-        isMigrating: false,
-        migrationResult: nil
-    )
-
-    static let tripRouteVersionNewerReadonly = TripRouteVersionCardProjection(
-        adoptedVersionLabel: "2026 夏季版",
-        currentPublicVersionLabel: "2026 秋季版",
-        relationship: .newerPublicVersionAvailable,
-        migrationEligible: false,
-        comparisonStatus: "最低五类比较完整；下方只列已确认的实际变化。",
-        differences: [
-            TripRouteDifferenceProjection(
-                id: "difference-1",
-                label: "水源 · 修改",
-                changeType: .modified,
-                summary: "石壁溪流的季节性说明已更新",
-                before: "九月通常稳定",
-                after: "枯水季可能断流"
-            ),
-        ],
-        unavailableCategories: [],
-        otherRelevantChanges: [],
-        otherRelevantChangeStatus: nil,
-        differencesExpanded: false,
-        canViewCurrentRoute: true,
-        isMigrating: false,
-        migrationResult: nil
-    )
-
-    static let tripRouteVersionUnavailable = TripRouteVersionCardProjection(
-        adoptedVersionLabel: "2026 夏季版",
-        currentPublicVersionLabel: nil,
-        relationship: .currentPublicVersionUnavailable,
-        migrationEligible: false,
-        comparisonStatus: nil,
-        differences: [],
-        unavailableCategories: [],
-        otherRelevantChanges: [],
-        otherRelevantChangeStatus: nil,
-        differencesExpanded: false,
-        canViewCurrentRoute: false,
-        isMigrating: false,
-        migrationResult: nil
-    )
-
-    static let tripRouteVersionMigrating = TripRouteVersionCardProjection(
-        adoptedVersionLabel: "2026 夏季版",
-        currentPublicVersionLabel: "2026 秋季版",
-        relationship: .newerPublicVersionAvailable,
-        migrationEligible: true,
-        comparisonStatus: "最低五类比较完整；下方只列已确认的实际变化。",
-        differences: [
-            TripRouteDifferenceProjection(
-                id: "difference-1",
-                label: "水源 · 修改",
-                changeType: .modified,
-                summary: "石壁溪流的季节性说明已更新",
-                before: "九月通常稳定",
-                after: "枯水季可能断流"
-            ),
-        ],
-        unavailableCategories: [],
-        otherRelevantChanges: [],
-        otherRelevantChangeStatus: nil,
-        differencesExpanded: true,
-        canViewCurrentRoute: true,
-        isMigrating: true,
-        migrationResult: nil
-    )
-
-    static let tripRouteVersionMigrationFailed = TripRouteVersionCardProjection(
-        adoptedVersionLabel: "2026 夏季版",
-        currentPublicVersionLabel: "2026 秋季版",
-        relationship: .newerPublicVersionAvailable,
-        migrationEligible: true,
-        comparisonStatus: "最低五类比较完整；下方只列已确认的实际变化。",
-        differences: [
-            TripRouteDifferenceProjection(
-                id: "difference-1",
-                label: "水源 · 修改",
-                changeType: .modified,
-                summary: "石壁溪流的季节性说明已更新",
-                before: "九月通常稳定",
-                after: "枯水季可能断流"
-            ),
-        ],
-        unavailableCategories: [],
-        otherRelevantChanges: [],
-        otherRelevantChangeStatus: nil,
-        differencesExpanded: true,
-        canViewCurrentRoute: true,
-        isMigrating: false,
-        migrationResult: TripNoticeProjection(
-            id: "migration-failed",
-            title: "迁移未完成",
-            message: "当前选择没有被写入，原行程路线依据保持不变。",
-            tone: .danger
-        )
-    )
-
-    static let tripRouteVersionLong = TripRouteVersionCardProjection(
-        adoptedVersionLabel: "2026 长距离多日徒步夏季初始公开版本",
-        currentPublicVersionLabel: "2026 长距离多日徒步秋季修正版",
-        relationship: .newerPublicVersionAvailable,
-        migrationEligible: true,
-        comparisonStatus: "最低五类仅部分可比较；保留已确认变化与全部不可比较类别。",
-        differences: [
-            TripRouteDifferenceProjection(
-                id: "difference-1",
-                label: "路线身份与结构 · 修改",
-                changeType: .modified,
-                summary: "主轨迹中段线位向北偏移，避开雨后碎石坡脚",
-                before: "沿南坡碎石带横切",
-                after: "改走北脊林线平台后再下降"
-            ),
-            TripRouteDifferenceProjection(
-                id: "difference-2",
-                label: "规划、沿途保障与安全 · 新增",
-                changeType: .added,
-                summary: "新增中途补给点与应急下撤点说明",
-                after: "中段垭口下方增设季节性补给点"
-            ),
-            TripRouteDifferenceProjection(
-                id: "difference-3",
-                label: "季节准备与装备建议 · 修改",
-                changeType: .modified,
-                summary: "秋雨季防雨与保温装备建议强化",
-                before: "建议携带轻量雨衣",
-                after: "建议携带全压胶雨衣与备用保暖层"
-            ),
-        ],
-        unavailableCategories: ["体量、难度与时间", "线路与轨迹"],
-        otherRelevantChanges: [
-            "新增跨县界通行登记提示",
-            "垭口附近通信覆盖说明更新为更保守的判断",
-        ],
-        otherRelevantChangeStatus: "暂不可确认",
-        differencesExpanded: true,
-        canViewCurrentRoute: true,
-        isMigrating: false,
-        migrationResult: nil
+        distance: "126.8 km",
+        ascent: "8,940 m",
+        descent: "8,410 m",
+        maxElevation: "5,220 m"
     )
 
     // MARK: - TripEquipmentOverview
@@ -1593,18 +1397,76 @@ enum BusinessComponentPreviewFixtures {
     )
 
     static let tripArrangementDefault = TripDayArrangementProjection(
-        day: tripDayDefault,
-        boundaryCue: "继续上滑查看下一天"
+        blocks: [
+            .transport(
+                tripDayDefault.outboundTransport ?? TripDayTransportSummaryProjection(
+                    direction: .outbound,
+                    title: "大交通与路线接驳",
+                    timeRange: nil,
+                    duration: nil,
+                    path: nil,
+                    modes: nil,
+                    notice: nil
+                ),
+                details: []
+            ),
+            .hike(
+                tripDayDefault.hikeSummary ?? TripDayHikeSummaryProjection(
+                    segment: "徒步段",
+                    distance: nil,
+                    ascent: nil,
+                    duration: nil,
+                    nodes: []
+                ),
+                details: tripDayDefault.actions,
+                points: tripDayDefault.points
+            ),
+            .weather(tripDayDefault.weather),
+        ]
     )
 
     static let tripArrangementTransportOnly = TripDayArrangementProjection(
-        day: tripDayTransportOnly,
-        boundaryCue: "继续上滑查看下一天"
+        blocks: [
+            .transport(
+                tripDayTransportOnly.outboundTransport ?? TripDayTransportSummaryProjection(
+                    direction: .outbound,
+                    title: "大交通与路线接驳",
+                    timeRange: nil,
+                    duration: nil,
+                    path: nil,
+                    modes: nil,
+                    notice: nil
+                ),
+                details: tripTransportActions
+            ),
+            .weather(tripDayTransportOnly.weather),
+        ]
     )
 
     static let tripArrangementWeatherUnavailable = TripDayArrangementProjection(
-        day: tripDayWeatherUnavailable,
-        boundaryCue: "已到行程最后一天"
+        blocks: [
+            .hike(
+                tripDayWeatherUnavailable.hikeSummary ?? TripDayHikeSummaryProjection(
+                    segment: "徒步段",
+                    distance: nil,
+                    ascent: nil,
+                    duration: nil,
+                    nodes: []
+                ),
+                details: tripDayWeatherUnavailable.actions,
+                points: tripDayWeatherUnavailable.points
+            ),
+            .weather(tripDayWeatherUnavailable.weather),
+        ]
+    )
+
+    static let tripDayOverviewEntryDefault = TripDayOverviewEntryProjection(
+        tripDayID: "trip-day-2",
+        dayNumber: 2,
+        date: "9月8日",
+        hikingDayNumber: 1,
+        totalTrekDays: 2,
+        subtitle: "老榆林 → 下日乌且营地"
     )
 
     static let tripEquipmentDefault = TripEquipmentSummaryProjection(
@@ -1682,34 +1544,44 @@ enum BusinessComponentPreviewFixtures {
     static let tripRouteEntryDefault = TripRouteSummaryProjection(
         routeName: "贡嘎西南坡环线",
         versionLabel: "2026 夏季版",
-        routeType: "多日路线",
-        region: "四川 · 甘孜",
-        start: "老榆林",
-        end: "草科",
-        direction: "顺时针环绕贡嘎西坡，自老榆林经上子梅村翻越日乌且垭口至草科结束。",
-        metrics: routeSummaryMetrics
+        routeOrientation: "顺时针环绕贡嘎西坡，自老榆林经上子梅村翻越日乌且垭口至草科结束。",
+        elevationSamples: [
+            FrozenRouteElevationSample(
+                distance: RouteDistance(meters: 0),
+                elevation: RouteElevation(meters: 3_800)
+            ),
+            FrozenRouteElevationSample(
+                distance: RouteDistance(meters: 15_000),
+                elevation: RouteElevation(meters: 4_500)
+            ),
+            FrozenRouteElevationSample(
+                distance: RouteDistance(meters: 32_000),
+                elevation: RouteElevation(meters: 4_980)
+            ),
+            FrozenRouteElevationSample(
+                distance: RouteDistance(meters: 55_000),
+                elevation: RouteElevation(meters: 3_300)
+            ),
+        ]
     )
 
     static let tripRouteEntryPartial = TripRouteSummaryProjection(
         routeName: "河谷森林线",
         versionLabel: nil,
-        routeType: nil,
-        region: "云南 · 香格里拉",
-        start: "上木居",
-        end: "游客服务站",
-        direction: nil,
-        metrics: [routeSummaryMetrics[0]]
+        routeOrientation: nil,
+        elevationSamples: nil
     )
 
     static let tripRouteEntryLong = TripRouteSummaryProjection(
         routeName: "四川省甘孜藏族自治州高海拔连续垭口环形路线",
         versionLabel: "2026 夏季高海拔连续垭口修正版",
-        routeType: "多日高海拔连续翻越路线",
-        region: "四川 · 甘孜藏族自治州 · 贡嘎山国家级风景名胜区外围保护区",
-        start: "康定市老榆林村徒步起点",
-        end: "石棉县草科藏族乡终点服务站",
-        direction: "顺时针环绕，连续翻越日乌且垭口、莫溪沟垭口与玉龙西垭口，途中沿河谷与林线交替行进，长距离缓升陡降交替。",
-        metrics: routeSummaryMetrics
+        routeOrientation: "顺时针环绕，连续翻越日乌且垭口、莫溪沟垭口与玉龙西垭口，途中沿河谷与林线交替行进，长距离缓升陡降交替。",
+        elevationSamples: (0...12).map { index in
+            FrozenRouteElevationSample(
+                distance: RouteDistance(meters: Double(index) * 12_500),
+                elevation: RouteElevation(meters: 3_200 + Double(index % 5) * 380)
+            )
+        }
     )
 
     static let tripWeatherDefault = TripWeatherSummaryProjection(

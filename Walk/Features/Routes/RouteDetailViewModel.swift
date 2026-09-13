@@ -148,6 +148,16 @@ enum RouteDetailSectionID: String, CaseIterable, Hashable {
     case imagery
 }
 
+enum RoutePointGroupID: Hashable {
+    case journey
+    case support
+}
+
+struct RoutePointGroupProjection: Identifiable, Equatable {
+    let id: RoutePointGroupID
+    let sections: [RoutePointSectionProjection]
+}
+
 struct RouteDetailSectionItem: Identifiable, Equatable {
     let id: String
     let bookmark: String?
@@ -466,8 +476,22 @@ struct RouteDetailPresentation: Equatable {
                 )
             }
         )
-        return [keyPoints, interestPoints, campsites, overnightPlaces, waterSources, supplyPoints]
+        return [keyPoints, interestPoints, waterSources, supplyPoints, campsites, overnightPlaces]
             .filter { !$0.points.isEmpty }
+    }
+
+    /// 点位资料按途中要点与保障与住宿两个稳定分组呈现，组内类别顺序固定，
+    /// 空类别整体省略，两组均空时不产生空分组（route-detail-point-presentation）。
+    var routePointGroupProjections: [RoutePointGroupProjection] {
+        let sectionsByTitle = Dictionary(uniqueKeysWithValues: routePointSectionProjections.map { ($0.title, $0) })
+        let groupDefinitions: [(id: RoutePointGroupID, titles: [String])] = [
+            (.journey, ["关键点", "兴趣点"]),
+            (.support, ["水源", "补给", "营地", "过夜点"]),
+        ]
+        return groupDefinitions.compactMap { group in
+            let sections = group.titles.compactMap { sectionsByTitle[$0] }
+            return sections.isEmpty ? nil : RoutePointGroupProjection(id: group.id, sections: sections)
+        }
     }
 
     var routeFactSectionProjections: [RouteFactSectionProjection] {

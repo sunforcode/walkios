@@ -41,17 +41,9 @@ extension TripBusinessComponents {
                         }
 
                         VStack(alignment: .leading, spacing: Spacing.xs) {
-                            Text(projection.knownTotalWeight)
-                                .font(.displayTitle)
+                            Text(weightSummaryLine)
+                                .font(.appCaption)
                                 .foregroundStyle(AppColors.textPrimary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text(weightDescription)
-                                .font(.appCaption)
-                                .foregroundStyle(AppColors.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text("数量基于本次行程清单，未确认不等于缺少")
-                                .font(.appCaption)
-                                .foregroundStyle(AppColors.textWeak)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
@@ -74,10 +66,12 @@ extension TripBusinessComponents {
             .accessibilityHint("进入行程装备")
         }
 
-        private var weightDescription: String {
-            projection.missingWeightItemCount == 0
-                ? "预计总重量"
-                : "已知重量 · \(projection.missingWeightItemCount) 项未计入"
+        /// 重量语义与同段范围说明合并为单行说明。
+        private var weightSummaryLine: String {
+            let weightPart = projection.missingWeightItemCount == 0
+                ? "预计总重量 \(projection.knownTotalWeight)"
+                : "已知重量 \(projection.knownTotalWeight) · \(projection.missingWeightItemCount) 项未计入"
+            return "\(weightPart) · 数量基于本次行程清单，未确认不等于缺少"
         }
     }
 }

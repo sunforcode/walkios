@@ -2,13 +2,6 @@ import SwiftUI
 import WalkData
 import WalkDesignSystem
 
-enum HomeLayout {
-    static let sceneHorizontalPadding: CGFloat = 18
-    static let guestHorizontalPadding: CGFloat = 28
-    static let guestBottomPadding: CGFloat = 36
-    static let maximumContentWidth: CGFloat = 360
-}
-
 @MainActor
 struct HomeView: View {
     let onAuthenticate: (PendingAuthIntent) -> Void
@@ -18,14 +11,12 @@ struct HomeView: View {
     init(
         onAuthenticate: @escaping (PendingAuthIntent) -> Void,
         onNavigate: @escaping (AppDestination) -> Void,
-        onNoFocus: @escaping () -> Void,
         service: any PersonalTripServicing
     ) {
         self.onAuthenticate = onAuthenticate
         self.onNavigate = onNavigate
         _viewModel = StateObject(wrappedValue: HomeViewModel(
-            service: service,
-            onNoFocus: onNoFocus
+            service: service
         ))
     }
 
@@ -40,29 +31,60 @@ struct HomeView: View {
     }
 
     var body: some View {
-        HomeScene {
-            switch viewModel.state {
-            case .guest:
-                GuestHomeContent { onAuthenticate(.homeStart) }
-            case .loading:
-                HomeLoadingContent()
-            case .error(let message):
-                ErrorView(message: message, variant: .scene) {
-                    Task { await viewModel.retry() }
-                }
-            case .ready:
-                if let trip = viewModel.focusedTrip {
-                    FocusTripSummary(
-                        model: focusSummary(for: trip),
-                        onOpen: { onNavigate(.tripDetail(trip.tripID)) }
-                    )
-                } else {
-                    HomeLoadingContent()
+        PageShell(
+            title: "出发",
+            description: "山野路线，整装待发",
+            background: {
+                ZStack {
+                    HomePageBackground()
+                    HomeContrastOverlay()
+                    HomeMountainSilhouette()
                 }
             }
+        ) {
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                homeContent
+                    .padding(.bottom, Spacing.safeAreaBottom + Spacing.lg)
+            }
+            // 整页触控打开焦点行程；子内容（按钮/摘要自身手势）优先，
+            // 非焦点状态此处为空操作。
+            .contentShape(Rectangle())
+            .onTapGesture { openFocusedTripIfNeeded() }
         }
         .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.load() }
+    }
+
+    @ViewBuilder
+    private var homeContent: some View {
+        switch viewModel.state {
+        case .guest:
+            GuestHomeContent { onAuthenticate(.homeStart) }
+        case .loading:
+            HomeLoadingContent()
+        case .error(let message):
+            ErrorView(message: message, variant: .scene) {
+                Task { await viewModel.retry() }
+            }
+        case .ready:
+            if let trip = viewModel.focusedTrip {
+                FocusTripSummary(
+                    model: focusSummary(for: trip),
+                    onOpen: { onNavigate(.tripDetail(trip.tripID)) }
+                )
+            } else {
+                NoFocusContent(
+                    // browseRoutes：首页空态主动进入全部路线（app-flow）
+                    onBrowseRoutes: { onNavigate(.routeList) }
+                )
+            }
+        }
+    }
+
+    private func openFocusedTripIfNeeded() {
+        guard case .ready = viewModel.state, let trip = viewModel.focusedTrip else { return }
+        onNavigate(.tripDetail(trip.tripID))
     }
 
     private func focusSummary(for trip: PersonalTripSummary) -> FocusTripSummaryModel {
@@ -110,35 +132,6 @@ struct HomeView: View {
     }
 }
 
-private struct HomeScene<Content: View>: View {
-    @ViewBuilder let content: Content
-
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-
-    var body: some View {
-        GeometryReader { proxy in
-            ZStack {
-                HomePageBackground()
-                HomeContrastOverlay()
-                HomeMountainSilhouette()
-                VStack(alignment: .leading, spacing: 0) {
-                    PageTitleBlock(title: "出发", description: "山野路线，整装待发")
-                        .padding(.horizontal, HomeLayout.sceneHorizontalPadding)
-                        .padding(.top, Spacing.sm)
-
-                    content
-                }
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height)
-        }
-        .ignoresSafeArea(edges: .horizontal)
-        .background(AppColors.pageBase.ignoresSafeArea())
-        .foregroundStyle(AppColors.textPrimary)
-    }
-}
-
 private struct GuestHomeContent: View {
     let onStart: () -> Void
 
@@ -147,9 +140,27 @@ private struct GuestHomeContent: View {
             Spacer()
             PrimaryAction(title: "开启一次新的徒步行程", variant: .compact, action: onStart)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-        .padding(.horizontal, HomeLayout.guestHorizontalPadding)
-        .padding(.bottom, HomeLayout.guestBottomPadding)
+        .frame(maxWidth: .infinity, minHeight: 440, alignment: .bottomLeading)
+        .padding(.horizontal, Spacing.pageHorizontal)
+        .padding(.bottom, Spacing.xl)
+    }
+}
+
+/// 无焦点空态：已登录但当前没有进行中的行程，停留在首页并提供去挑路线的主动入口。
+private struct NoFocusContent: View {
+    let onBrowseRoutes: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            Text("当前没有进行中的行程")
+                .font(.appCaption)
+                .foregroundStyle(AppColors.textSecondary)
+            PrimaryAction(title: "去挑一条路线", variant: .compact, action: onBrowseRoutes)
+        }
+        .frame(maxWidth: .infinity, minHeight: 440, alignment: .bottomLeading)
+        .padding(.horizontal, Spacing.pageHorizontal)
+        .padding(.bottom, Spacing.xl)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -225,6 +236,10 @@ private struct HomeMountainSilhouette: View {
 #if DEBUG
 #Preview("guest") {
     HomeView(viewModel: HomePreviewFixtures.homeViewModel(state: .guest))
+}
+
+#Preview("noFocus") {
+    HomeView(viewModel: HomePreviewFixtures.homeViewModel(state: .ready, trip: nil))
 }
 
 #Preview("focusComplete") {

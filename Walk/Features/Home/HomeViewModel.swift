@@ -23,26 +23,21 @@ final class HomeViewModel: ObservableObject {
 
     private let isLoggedIn: () -> Bool
     private let loadFocus: () async throws -> PersonalTripFocus
-    private let onNoFocus: () -> Void
 
     init(
         service: any PersonalTripServicing,
-        authSession: any AuthSession = AuthManager.shared,
-        onNoFocus: @escaping () -> Void = {}
+        authSession: any AuthSession = AuthManager.shared
     ) {
         self.isLoggedIn = { authSession.isLoggedIn }
         self.loadFocus = { try await service.focus() }
-        self.onNoFocus = onNoFocus
     }
 
     init(
         isLoggedIn: @escaping () -> Bool = { true },
-        loadFocus: @escaping () async throws -> PersonalTripFocus,
-        onNoFocus: @escaping () -> Void = {}
+        loadFocus: @escaping () async throws -> PersonalTripFocus
     ) {
         self.isLoggedIn = isLoggedIn
         self.loadFocus = loadFocus
-        self.onNoFocus = onNoFocus
     }
 
     init(
@@ -57,7 +52,6 @@ final class HomeViewModel: ObservableObject {
         self.refreshError = refreshError
         self.isLoggedIn = { staticState != .guest }
         self.loadFocus = { PersonalTripFocus(trip: focusedTrip) }
-        self.onNoFocus = {}
         self.isStatic = true
     }
 
@@ -80,10 +74,10 @@ final class HomeViewModel: ObservableObject {
 
         do {
             guard let trip = try await loadFocus().trip else {
+                // 无焦点行程：停留在首页空态，进入全部路线由用户主动发起（app-flow）。
                 focusedTrip = nil
                 weatherSummary = nil
-                state = .loading
-                onNoFocus()
+                state = .ready
                 return
             }
 

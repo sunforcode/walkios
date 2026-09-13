@@ -47,26 +47,206 @@ public struct PageHeroHeader: View {
     }
 }
 
-public struct UtilityPage<Content: View>: View {
-    private let content: Content
+/// 任务栈二级页唯一骨架（合同见 `docs/ui/components/common/utility-page/spec.md`）：
+/// 拥有背景承载、导航行（内嵌 `UtilityNavigationHeader`）、可选标题区（`PageTitleBlock`）、
+/// 内容滚动所有权与固定底部动作区（`FixedActionArea`）。
+/// 页面差异仅允许通过 background / hero / title & description / bottomFixed /
+/// showsBackEntry 五个插槽表达；返回控件形态、导航行结构、标题排版不可自定义。
+private struct UtilityPageScrollBounceModifier: ViewModifier {
+    /// 页面级滚动回弹开关：`scrollBounceBehavior(.basedOnSize)` 需要 iOS 16.4+，低版本无操作；
+    /// 内容不超出视口时不回弹，超出的长内容仍保留系统原生边界回弹。
+    let disabled: Bool
 
-     public init(showsIndicators _: Bool = false, @ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-
-     public var body: some View {
-        UtilityPageContainer {
+    func body(content: Content) -> some View {
+        if #available(iOS 16.4, *), disabled {
+            content.scrollBounceBehavior(.basedOnSize)
+        } else {
             content
         }
     }
 }
 
-public struct PageTitleBlock: View {
+public struct UtilityPage<Content: View>: View {
+    @Environment(\.dismiss) private var dismiss
+
+    private let title: String?
+    private let description: String?
+    private let showsBackEntry: Bool
+    private let leading: IconButtonConfiguration?
+    private let trailing: IconButtonConfiguration?
+    private let onBack: (() -> Void)?
+    private let background: AnyView?
+    private let hero: AnyView?
+    private let bottomFixed: AnyView?
+    private let disablesScrollBounce: Bool
+    private let content: Content
+
+    public init(
+        title: String? = nil,
+        description: String? = nil,
+        showsBackEntry: Bool = true,
+        leading: IconButtonConfiguration? = nil,
+        trailing: IconButtonConfiguration? = nil,
+        onBack: (() -> Void)? = nil,
+        disablesScrollBounce: Bool = false,
+        @ViewBuilder background: () -> some View = { EmptyView() },
+        @ViewBuilder hero: () -> some View = { EmptyView() },
+        @ViewBuilder bottomFixed: () -> some View = { EmptyView() },
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.description = description
+        self.showsBackEntry = showsBackEntry
+        self.leading = leading
+        self.trailing = trailing
+        self.onBack = onBack
+        self.disablesScrollBounce = disablesScrollBounce
+
+        let resolvedBackground = background()
+        self.background = Self.isEmptySlot(resolvedBackground) ? nil : AnyView(resolvedBackground)
+
+        let resolvedHero = hero()
+        self.hero = Self.isEmptySlot(resolvedHero) ? nil : AnyView(resolvedHero)
+
+        let resolvedBottomFixed = bottomFixed()
+        self.bottomFixed = Self.isEmptySlot(resolvedBottomFixed) ? nil : AnyView(resolvedBottomFixed)
+
+        self.content = content()
+    }
+
+    /// ViewBuilder 的条件分支（`if` 无 else）在条件为假时产出 `.none` Optional
+    /// 而非 `EmptyView`，需一并视为空插槽，避免空插槽仍渲染占位容器。
+    private static func isEmptySlot(_ view: some View) -> Bool {
+        if view is EmptyView { return true }
+        let mirror = Mirror(reflecting: view)
+        return mirror.displayStyle == .optional && mirror.children.isEmpty
+    }
+
+    /// 返回入口可见性由到达方式决定（`app-flow`）；缺省动作为任务栈 dismiss。
+    private var resolvedLeading: IconButtonConfiguration? {
+        guard showsBackEntry else { return nil }
+        if let leading { return leading }
+        return IconButtonConfiguration(
+            systemName: "chevron.left",
+            accessibilityLabel: "返回",
+            action: {
+                if let onBack {
+                    onBack()
+                } else {
+                    dismiss()
+                }
+            }
+        )
+    }
+
+    private var navRow: some View {
+        UtilityNavigationHeader(
+            leading: resolvedLeading,
+            trailing: trailing
+        )
+    }
+
+    /// 标题区随内容滚动，置于导航行下方；`title` 为空时标题由 hero 承载且全页唯一。
+    /// - Parameter topContentMargin: 滚动内容顶部留白——非 hero 页让出悬浮导航行高度；
+    ///   留白必须加在滚动内容上，不能加在 ScrollView 外，否则视口整体下移、
+    ///   退化为导航行独占布局，滚动内容无法从导航行下方穿过。
+    private func scrollArea(topContentMargin: CGFloat) -> some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: Spacing.lg) {
+                if let title {
+                    PageTitleBlock(title: title, description: description)
+                }
+                content
+            }
+            .frame(maxWidth: 600, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
+            .padding(.horizontal, Spacing.pageHorizontal)
+            .padding(.top, Spacing.md + topContentMargin)
+            .padding(.bottom, Spacing.xxl)
+        }
+        // 滚动所有权归壳：键盘随滚动交互收起对全部二级页统一生效。
+        .scrollDismissesKeyboard(.interactively)
+        .modifier(UtilityPageScrollBounceModifier(disabled: disablesScrollBounce))
+    }
+
+    public var body: some View {
+        UtilityPageContainer(background: { resolvedBackground }) {
+            // 导航行统一悬浮于内容之上：内容滚动时从导航行下方穿过；
+            // hero 沉浸页由 hero 占据顶部，标准页经内容留白自导航行下方起始。
+            ZStack(alignment: .top) {
+                if let hero {
+                    VStack(spacing: 0) {
+                        hero
+                        scrollArea(topContentMargin: 0)
+                    }
+                } else {
+                    scrollArea(topContentMargin: Spacing.navBarHeight)
+                }
+                if let hero {
+                    navRow
+                } else {
+                    navRow
+                        .background {
+                            // 悬浮导航行可读性遮罩：状态栏与导航行区域实色、向下渐隐，
+                            // 内容滚过时按钮不与正文混叠；hero 封面页保持透明悬浮。
+                            LinearGradient(
+                                stops: [
+                                    .init(color: AppColors.pageBase, location: 0),
+                                    .init(color: AppColors.pageBase, location: 0.55),
+                                    .init(color: AppColors.pageBase.opacity(0), location: 1),
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .ignoresSafeArea(edges: .top)
+                            .allowsHitTesting(false)
+                        }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if let bottomFixed {
+                    FixedActionArea { bottomFixed }
+                }
+            }
+            .toolbar(.hidden, for: .navigationBar)
+            .toolbar(.hidden, for: .tabBar)
+        }
+    }
+
+    @ViewBuilder
+    private var resolvedBackground: some View {
+        if let background {
+            background
+        } else {
+            LinearGradient(
+                colors: [AppColors.pageMiddle, AppColors.pageBase],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+    }
+}
+
+public struct PageTitleBlock<Trailing: View>: View {
      public let title: String
      public var kicker: String? = nil
      public var description: String? = nil
+     private let trailing: Trailing
 
-     public var body: some View {
+    public init(
+        title: String,
+        kicker: String? = nil,
+        description: String? = nil,
+        @ViewBuilder trailing: () -> Trailing = { EmptyView() }
+    ) {
+        self.title = title
+        self.kicker = kicker
+        self.description = description
+        self.trailing = trailing()
+    }
+
+    public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let kicker {
                 Text(kicker)
@@ -76,11 +256,20 @@ public struct PageTitleBlock: View {
                     .padding(.bottom, Spacing.sm)
             }
 
-            Text(title)
-                .font(.pageTitle)
-                .foregroundStyle(AppColors.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
+            HStack(alignment: .center, spacing: Spacing.md) {
+                Text(title)
+                    .font(.pageTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    // 标题行自带 44pt 触控目标高度：trailing 控件不反向决定页头高度，
+                    // 三个一级根 Page（首页/路线/我的）的标题与副标题起始位置保持一致。
+                    .frame(minHeight: 44, alignment: .leading)
+                    .accessibilityAddTraits(.isHeader)
+
+                Spacer(minLength: Spacing.md)
+
+                trailing
+            }
 
             if let description {
                 Text(description)
@@ -94,38 +283,143 @@ public struct PageTitleBlock: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
-
-    public init(
-        title: String,
-        kicker: String? = nil,
-        description: String? = nil
-    ) {
-        self.title = title
-        self.kicker = kicker
-        self.description = description
-    }
 }
 
-public struct UtilityPageContainer<Content: View>: View {
+public struct UtilityPageContainer<Background: View, Content: View>: View {
+    private let background: Background
     private let content: Content
 
-     public init(@ViewBuilder content: () -> Content) {
+    public init(
+        @ViewBuilder background: () -> Background,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.background = background()
         self.content = content()
     }
 
-     public var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [AppColors.pageMiddle, AppColors.pageBase],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+    public var body: some View {
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // 背景用 .background 垫底，不参与布局：内容始终在安全区内排布，
+            // 背景自身再延伸出安全区。
+            .background {
+                background
+                    .ignoresSafeArea()
+            }
+            .foregroundStyle(AppColors.textPrimary)
+    }
+}
+
+/// 首页 / 路线 / 我的 统一页面骨架：背景固定 + 标题在流内 + 内容自然滚动。
+/// 背景经 `.background` 垫底，不参与布局：内容始终在安全区内排布，
+/// 背景自身再延伸出安全区；自然尺寸不受控的背景（如位图）不会撑爆容器。
+/// `PageTitleBlock` 在滚动内容顶部左下，跟随内容一起滚动；
+/// 内容区由调用者自行决定布局（沉底信息块、列表、全屏卡片均可）。
+public struct PageShell<Background: View, Content: View, TitleTrailing: View>: View {
+    private let title: String
+    private let description: String?
+    private let background: Background
+    private let content: Content
+    private let titleTrailing: TitleTrailing
+
+    @State private var pinnedSafeAreaInsets = EdgeInsets()
+
+    public init(
+        title: String,
+        description: String? = nil,
+        @ViewBuilder background: () -> Background,
+        @ViewBuilder titleTrailing: () -> TitleTrailing = { EmptyView() },
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.description = description
+        self.background = background()
+        self.titleTrailing = titleTrailing()
+        self.content = content()
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            PageTitleBlock(title: title, description: description, trailing: { titleTrailing })
+                .padding(.top, pinnedSafeAreaInsets.top)
+                .padding(.horizontal, Spacing.pageHorizontal)
+                .padding(.bottom, Spacing.lg)
 
             content
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.bottom, pinnedSafeAreaInsets.bottom)
+        // 布局不再消费动态安全区：push/pop 转场期间系统会临时插回导航栏高度，
+        // 顶部 inset 尖峰（实测 62→168→116）会把页头与沉底内容顶跳。根页面的
+        // 窗口安全区在运行期恒定（竖屏 iPhone），固定为常量后布局对转场完全免疫；
+        // 背景仍通过 .background 垫底并延伸出屏幕。
+        .ignoresSafeArea()
+        .background {
+            background
+                .ignoresSafeArea()
         }
         .foregroundStyle(AppColors.textPrimary)
+        // 窗口安全区常量在视图挂载后解析：视图 init / body 求值事务内读
+        // UIWindow 会在 iOS 26 触发 AttributeGraph 循环锁死更新管道。
+        // 首帧以零 inset 布局（push 首帧在屏幕外，用户不可见），onAppear 后
+        // 一次性修正为常量；State 保留使后续转场不再重算。
+        .onAppear {
+            if pinnedSafeAreaInsets == EdgeInsets() {
+                pinnedSafeAreaInsets = PinnedWindowSafeAreaInsets.current
+            }
+        }
+    }
+
+    /// 首次布局时的窗口安全区。只取窗口级 inset（状态栏/tab 栏），键盘等
+    /// SwiftUI 动态 inset 不在此列，不会影响根页面布局。
+    /// 实现共享于 `PinnedWindowSafeAreaInsets`。
+    private static var windowSafeAreaInsets: EdgeInsets { PinnedWindowSafeAreaInsets.current }
+}
+
+/// 固定窗口安全区常量：push/pop 转场期间系统会临时插回导航栏高度，动态安全区
+/// 尖峰（实测 62→168→116）会把顶部锚定内容顶跳。根页面的窗口安全区在运行期
+/// 恒定（竖屏 iPhone），根容器在首次布局取一次常量后不再跟随动态安全区变化。
+/// 只取窗口级 inset（状态栏/tab 栏）；键盘等 SwiftUI 动态 inset 不在此列。
+/// 读值只能在视图生命周期回调（onAppear/task）中调用，严禁在视图 init 或
+/// body 求值事务中调用：iOS 26 上在 SwiftUI 更新事务内访问 UIWindow 层级
+/// 会触发 AttributeGraph 循环，锁死整个更新管道（实测 @State mutation
+/// 不再触发任何视图重算）。
+public enum PinnedWindowSafeAreaInsets {
+    public static var current: EdgeInsets {
+        let insets = UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
+            .first?
+            .safeAreaInsets ?? .zero
+        return EdgeInsets(top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right)
+    }
+}
+
+/// 我的页已登录态背景：底部渐变叠加层，用于图片之上渐变过渡到页面底色。
+/// 收归于设计系统组件，避免 Feature 文件自建渐变。
+public struct MePageBackgroundOverlay: View {
+    public init() {}
+
+    public var body: some View {
+        LinearGradient(
+            colors: [AppColors.pageBase.opacity(0), AppColors.pageBase],
+            startPoint: .init(x: 0.5, y: 0.72),
+            endPoint: .bottom
+        )
+    }
+}
+
+extension UtilityPageContainer where Background == LinearGradient {
+    public init(@ViewBuilder content: () -> Content) {
+        self.init(
+            background: {
+                LinearGradient(
+                    colors: [AppColors.pageMiddle, AppColors.pageBase],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            },
+            content: content
+        )
     }
 }
 

@@ -110,12 +110,12 @@
       <EnvironmentVariables>
          <EnvironmentVariable
             key = "WALK_API_BASE_URL"
-            value = "https://api.example.invalid/walkbg/api/v1"
+            value = "https://vialu.cn/walkbg/api/v1"
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "WALK_DATA_SOURCE_MODE"
-            value = "mock"
+            value = "remote"
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable

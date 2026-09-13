@@ -66,24 +66,12 @@ struct EquipmentEditView: View {
     }
 
     var body: some View {
-        UtilityPageContainer {
-            VStack(spacing: 0) {
-                UtilityNavigationHeader(
-                    title: mode == .create ? "新增个人装备" : "编辑个人装备",
-                    leading: IconButtonConfiguration(
-                        systemName: "chevron.left",
-                        accessibilityLabel: "返回",
-                        action: requestDismissal
-                    )
-                )
-                pageContent
-            }
-        }
-        .toolbar(.hidden, for: .navigationBar)
-        .navigationBarBackButtonHidden(true)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if isFormAvailable {
-                FixedActionArea {
+        UtilityPage(
+            title: mode == .create ? "新增一件装备" : "更新装备",
+            description: "本页只维护装备名称、实际拥有数量和可选的单件重量。",
+            onBack: requestDismissal,
+            bottomFixed: {
+                if isFormAvailable {
                     PrimaryAction(
                         title: mutationIntent == .save && viewModel.isMutating ? "正在保存" : "保存",
                         isLoading: mutationIntent == .save && viewModel.isMutating,
@@ -93,7 +81,10 @@ struct EquipmentEditView: View {
                     )
                 }
             }
+        ) {
+            pageContent
         }
+        .navigationBarBackButtonHidden(true)
         .interactiveDismissDisabled(isDirty)
         .background(
             InteractiveDismissAttemptObserver(isDisabled: isDirty) {
@@ -145,31 +136,13 @@ struct EquipmentEditView: View {
         case .edit:
             switch viewModel.editLoadState {
             case .idle, .loading:
-                ScrollView {
-                    VStack(alignment: .leading, spacing: Spacing.lg) {
-                        pageTitleBlock
-                        LoadingView(message: "正在加载装备", variant: .section)
-                            .frame(minHeight: 320)
-                    }
-                    .frame(maxWidth: 600, alignment: .topLeading)
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    .padding(.horizontal, Spacing.pageHorizontal)
-                    .padding(.top, Spacing.md)
-                }
+                LoadingView(message: "正在加载装备", variant: .section)
+                    .frame(minHeight: 320)
             case .failed:
-                ScrollView {
-                    VStack(alignment: .leading, spacing: Spacing.lg) {
-                        pageTitleBlock
-                        ErrorView(message: viewModel.errorMessage ?? "装备加载失败", variant: .section) {
-                            Task { await loadEquipmentIfNeeded() }
-                        }
-                        .frame(minHeight: 320)
-                    }
-                    .frame(maxWidth: 600, alignment: .topLeading)
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    .padding(.horizontal, Spacing.pageHorizontal)
-                    .padding(.top, Spacing.md)
+                ErrorView(message: viewModel.errorMessage ?? "装备加载失败", variant: .section) {
+                    Task { await loadEquipmentIfNeeded() }
                 }
+                .frame(minHeight: 320)
             case .loaded:
                 formPage
             }
@@ -177,42 +150,25 @@ struct EquipmentEditView: View {
     }
 
     private var formPage: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.lg) {
-                pageTitleBlock
-                PersonalEquipmentForm(
-                    projection: PersonalEquipmentFormProjection(
-                        name: name,
-                        ownedQuantity: quantityText,
-                        unitWeight: unitWeightGrams,
-                        nameError: nameFieldError,
-                        ownedQuantityError: quantityFieldError,
-                        unitWeightError: weightFieldError,
-                        saveError: saveErrorMessage,
-                        isDisabled: viewModel.isMutating
-                    ),
-                    onChangeField: updateFormField
-                )
+        VStack(alignment: .leading, spacing: Spacing.lg) {
+            PersonalEquipmentForm(
+                projection: PersonalEquipmentFormProjection(
+                    name: name,
+                    ownedQuantity: quantityText,
+                    unitWeight: unitWeightGrams,
+                    nameError: nameFieldError,
+                    ownedQuantityError: quantityFieldError,
+                    unitWeightError: weightFieldError,
+                    saveError: saveErrorMessage,
+                    isDisabled: viewModel.isMutating
+                ),
+                onChangeField: updateFormField
+            )
 
-                if mode != .create {
-                    editOnlyDangerZone
-                }
+            if mode != .create {
+                editOnlyDangerZone
             }
-            .frame(maxWidth: 600, alignment: .topLeading)
-            .frame(maxWidth: .infinity, alignment: .top)
-            .padding(.horizontal, Spacing.pageHorizontal)
-            .padding(.top, Spacing.md)
-            .padding(.bottom, 108)
         }
-        .scrollDismissesKeyboard(.interactively)
-    }
-
-    private var pageTitleBlock: some View {
-        PageTitleBlock(
-            title: mode == .create ? "新增一件装备" : "更新装备",
-            kicker: "写入长期个人资产",
-            description: "本页只维护装备名称、实际拥有数量和可选的单件重量。"
-        )
     }
 
     private func updateFormField(_ field: PersonalEquipmentFormField, _ value: String) {

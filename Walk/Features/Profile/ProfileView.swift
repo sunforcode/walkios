@@ -2,10 +2,6 @@ import SwiftUI
 import WalkData
 import WalkDesignSystem
 
-enum ProfileLayout {
-    static let avatarSize = RootNavigation.minimumHitSize
-}
-
 struct ProfileView: View {
     @ObservedObject private var viewModel: ProfileViewModel
     private let onNavigate: (AppDestination) -> Void
@@ -28,53 +24,39 @@ struct ProfileView: View {
     }
 
     var body: some View {
-        UtilityPageContainer {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: Spacing.lg) {
+        PageShell(
+            title: "我的",
+            description: viewModel.isLoggedIn ? "行程、装备与账户，都在这里" : "登录后管理行程与徒步装备",
+            background: {
+                ZStack {
+                    AppColors.pageMiddle
                     if viewModel.isLoggedIn {
-                        signedInPageHeader
-                        signedInContent
-                    } else {
-                        PageTitleBlock(
-                            title: "我的",
-                            description: "登录后管理行程与徒步装备"
-                        )
-                        guestContent
+                        Image("MePageBackground")
+                            .resizable()
+                            .scaledToFill()
+                        MePageBackgroundOverlay()
                     }
                 }
-                .frame(maxWidth: 600, alignment: .topLeading)
-                .frame(maxWidth: .infinity, alignment: .top)
-                .padding(.horizontal, Spacing.pageHorizontal)
-                .padding(.top, Spacing.lg)
+            },
+            titleTrailing: {
+                avatarHeaderContent
+            }
+        ) {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    if viewModel.isLoggedIn {
+                        signedInContent
+                    } else {
+                        guestContent
+                            .frame(maxWidth: .infinity)
+                    }
+                }
                 .padding(.bottom, 88)
             }
+            .scrollDismissesKeyboard(.interactively)
         }
         .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.loadProfile() }
-    }
-
-    private var signedInPageHeader: some View {
-        HStack(alignment: .center, spacing: Spacing.lg) {
-            VStack(alignment: .leading, spacing: Spacing.xs) {
-                Text("我的")
-                    .font(.pageTitle)
-                    .foregroundStyle(AppColors.textPrimary)
-                    .lineLimit(1)
-
-                Text("行程、装备与账户，都在这里")
-                    .font(.appBody)
-                    .foregroundStyle(AppColors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: Spacing.lg)
-
-            if viewModel.isLoggedIn {
-                avatarHeaderContent
-            }
-        }
-        .frame(minHeight: 44, alignment: .center)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -112,14 +94,18 @@ struct ProfileView: View {
             actionTitle: "登录",
             action: { onAuthenticate(.profile) }
         )
-        .frame(maxWidth: .infinity, minHeight: 440)
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 440)
     }
 
     private var signedInContent: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
-            tripCalendarSection
-            equipmentSection
+        VStack(alignment: .leading, spacing: Spacing.lg) {
+            VStack(alignment: .leading, spacing: Spacing.md) {
+                tripCalendarSection
+                equipmentSection
+            }
         }
+        .padding(.horizontal, Spacing.pageHorizontal)
     }
 
     @ViewBuilder

@@ -1,13 +1,8 @@
 import SwiftUI
-import UIKit
 import WalkData
 import WalkDesignSystem
 
 enum RouteDiscoveryLayout {
-    static let headerTop: CGFloat = 54
-    static let sceneHorizontalPadding: CGFloat = 20
-    static let compactHorizontalPadding: CGFloat = 16
-
     static func cardHeight(for viewportHeight: CGFloat) -> CGFloat {
         max(0, viewportHeight - (2 * Spacing.sm))
     }
@@ -16,6 +11,10 @@ enum RouteDiscoveryLayout {
 struct RouteDiscoveryView: View {
     @StateObject private var viewModel: RouteDiscoveryViewModel
     private let onNavigate: (AppDestination) -> Void
+    /// 固定窗口安全区常量：与 PageShell 同源（PinnedWindowSafeAreaInsets），
+    /// 转场期间动态安全区尖峰不再顶跳页头与场景。
+    /// 只能在 onAppear 解析（视图事务内读 UIWindow 会锁死 iOS 26 更新管道）。
+    @State private var pinnedInsets = EdgeInsets()
 
     init(
         routeService: RouteService,
@@ -25,65 +24,91 @@ struct RouteDiscoveryView: View {
         _viewModel = StateObject(wrappedValue: RouteDiscoveryViewModel(service: routeService))
     }
 
-    @State private var currentRouteIndex = 0
-    @State private var lastAnnouncedIndex: Int?
-
     var body: some View {
-        GeometryReader { geometry in
-            ImmersivePageContainer {
-                ZStack(alignment: .top) {
-                    routeState(viewport: geometry.size)
+        ZStack(alignment: .topLeading) {
+            // 场景层：铺满整个页面可用区域，向上延伸至顶部安全区之后。
+            routeState
+                .padding(.top, pinnedInsets.top)
 
-                    // 页面头与全部路线入口同行：入口固定右上角，与页面头垂直居中对齐；
-                    // 页面头不拦截场景的分页手势。
-                    HStack(alignment: .center, spacing: Spacing.md) {
-                        PageTitleBlock(title: "路线", description: "选一条想走的，看清了再出发")
-                            .allowsHitTesting(false)
-
-                        Spacer(minLength: Spacing.md)
-
-                        SecondaryAction(title: "全部路线", variant: .overlayCompact) {
-                            onNavigate(.routeList)
-                        }
-                    }
-                    .padding(.top, RouteDiscoveryLayout.headerTop)
-                    .padding(.horizontal, horizontalPadding(for: geometry.size.width))
-                }
+            // 页面头浮层：叠加在场景层上，位于系统顶部安全区下方。
+            pageHeaderOverlay
+                .padding(.top, pinnedInsets.top)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // 顶部用 pin 常量（转场期间动态顶部 inset 有 62→168→116 尖峰，会顶跳页头）；
+        // 底部继续消费动态安全区：TabView 的 tab bar safeAreaInset（34+49=83）
+        // 不在 UIWindow inset 内，pin 常量拿不到它，且实测转场期间恒定不跳。
+        .ignoresSafeArea(edges: .top)
+        .background {
+            RadialGradient(
+                colors: [AppColors.pageOuter, AppColors.pageMiddle, AppColors.pageBase],
+                center: .top,
+                startRadius: 0,
+                endRadius: 700
+            )
+            .ignoresSafeArea()
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        // 窗口安全区常量在视图挂载后解析（同 PageShell）：首帧在屏幕外不可见。
+        .onAppear {
+            if pinnedInsets == EdgeInsets() {
+                pinnedInsets = PinnedWindowSafeAreaInsets.current
             }
         }
         .task { await viewModel.loadRoutes() }
-        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    /// 页面头浮层：标题 + 副标题 + 固定右上 allRoutes，底部对比遮罩保证浮层在场景图上可读。
+    private var pageHeaderOverlay: some View {
+        PageTitleBlock(
+            title: "路线",
+            description: "选一条想走的，看清了再出发",
+            trailing: {
+                SecondaryAction(title: "全部路线", variant: .overlayCompact) {
+                    onNavigate(.routeList)
+                }
+            }
+        )
+        .padding(.horizontal, Spacing.pageHorizontal)
+        .background(alignment: .top) {
+            LinearGradient(
+                colors: [AppColors.pageBase, AppColors.pageBase.opacity(0)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 260)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
     }
 
     @ViewBuilder
-    private func routeState(viewport: CGSize) -> some View {
+    private var routeState: some View {
         if viewModel.isLoading && viewModel.routes.isEmpty {
             RouteSceneSkeleton()
-                .frame(width: viewport.width, height: viewport.height)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.bottom, Spacing.xxl)
         } else if let message = viewModel.errorMessage, viewModel.routes.isEmpty {
-            RouteSceneState {
-                ErrorView(
-                    message: "不会用缓存猜测替代真实路线资料。",
-                    title: "暂时无法加载路线",
-                    variant: .scene
-                ) {
-                    Task { await viewModel.retry() }
-                }
+            ErrorView(
+                message: "不会用缓存猜测替代真实路线资料。",
+                title: "暂时无法加载路线",
+                variant: .scene
+            ) {
+                Task { await viewModel.retry() }
             }
-            .frame(width: viewport.width, height: viewport.height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if viewModel.routes.isEmpty {
-            RouteSceneState {
-                EmptyStateView(
-                    title: "暂无路线",
-                    message: "当前暂无可发现路线",
-                    icon: "route",
-                    variant: .default
-                )
-            }
-            .frame(width: viewport.width, height: viewport.height)
+            EmptyStateView(
+                title: "暂无路线",
+                message: "当前暂无可发现路线",
+                icon: "route",
+                variant: .default
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            ScrollView(.vertical) {
-                LazyVStack(spacing: 0) {
+            GeometryReader { proxy in
+                TabView {
                     ForEach(viewModel.routes) { route in
                         RouteBusinessComponents.RouteScene(
                             projection: RouteSceneProjection(
@@ -122,65 +147,17 @@ struct RouteDiscoveryView: View {
                         ) {
                             RouteDeterministicImageSurface(style: .forest)
                         }
-                        .frame(width: viewport.width, height: viewport.height)
+                        .frame(width: proxy.size.width, height: RouteDiscoveryLayout.cardHeight(for: proxy.size.height))
                     }
                 }
-                .background(RoutePagingConfigurator())
-                .background(
-                    GeometryReader { proxy in
-                        AppColors.surfacePrimary.opacity(0)
-                            .preference(
-                            key: RoutePagingOffsetKey.self,
-                            value: proxy.frame(in: .named("routePaging")).minY
-                        )
-                    }
-                )
+                .tabViewStyle(.page(indexDisplayMode: .never))
             }
-            .coordinateSpace(name: "routePaging")
-            .scrollIndicators(.hidden)
-            .onPreferenceChange(RoutePagingOffsetKey.self) { offset in
-                guard !viewModel.routes.isEmpty else { return }
-                let index = max(
-                    0,
-                    min(
-                        viewModel.routes.count - 1,
-                        Int(round(-offset / viewport.height))
-                    )
-                )
-                guard index != currentRouteIndex else { return }
-                currentRouteIndex = index
-                announcePage(at: index)
-            }
+            .ignoresSafeArea(edges: .top)
         }
-    }
-
-    /// R3：换页公告。首尾用边界文案，中段用「{路线身份}，第 X 条，共 N 条」；
-    /// 单条路线不暴露相邻切换，不做公告。
-    private func announcePage(at index: Int) {
-        let count = viewModel.routes.count
-        guard count > 1, lastAnnouncedIndex != index else { return }
-        lastAnnouncedIndex = index
-        let route = viewModel.routes[index]
-        let message: String
-        if index == 0 {
-            message = "已到第一条路线"
-        } else if index == count - 1 {
-            message = "已到最后一条路线"
-        } else {
-            message = "\(route.name)，第 \(index + 1) 条，共 \(count) 条"
-        }
-        UIAccessibility.post(notification: .announcement, argument: message)
-    }
-
-    private func horizontalPadding(for width: CGFloat) -> CGFloat {
-        width < 390
-            ? RouteDiscoveryLayout.compactHorizontalPadding
-            : RouteDiscoveryLayout.sceneHorizontalPadding
     }
 }
 
 struct RouteCollectionView: View {
-    @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: RouteCollectionViewModel
     private let showsBackButton: Bool
     private let onNavigate: (AppDestination) -> Void
@@ -196,43 +173,28 @@ struct RouteCollectionView: View {
     }
 
     var body: some View {
-        UtilityPageContainer {
-            VStack(spacing: 0) {
-                UtilityNavigationHeader(
-                    title: "全部路线",
-                    leading: showsBackButton
-                        ? IconButtonConfiguration(
-                            systemName: "chevron.left",
-                            accessibilityLabel: "返回",
-                            action: { dismiss() }
-                        )
-                        : nil,
-                    trailing: IconButtonConfiguration(
-                        systemName: "magnifyingglass",
-                        accessibilityLabel: "搜索路线",
-                        action: { onNavigate(.routeSearch) }
-                    )
-                )
+        UtilityPage(
+            title: "全部路线",
+            showsBackEntry: showsBackButton,
+            trailing: IconButtonConfiguration(
+                systemName: "magnifyingglass",
+                accessibilityLabel: "搜索路线",
+                action: { onNavigate(.routeSearch) }
+            )
+        ) {
+            VStack(alignment: .leading, spacing: Spacing.lg) {
+                Text("快速扫描和比较 Walk 当前提供的路线")
+                    .font(.appCaption)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: Spacing.lg) {
-                        Text("快速扫描和比较 Walk 当前提供的路线")
-                            .font(.appCaption)
-                            .foregroundStyle(AppColors.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        collectionState
-                            .frame(maxWidth: .infinity)
-                    }
-                    .frame(maxWidth: 600, alignment: .topLeading)
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    .padding(Spacing.lg)
-                }
+                collectionState
+                    .frame(maxWidth: .infinity)
             }
+            .frame(maxWidth: 600, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
         .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
         .task { await viewModel.loadRoutes() }
     }
 
@@ -286,7 +248,6 @@ struct RouteCollectionView: View {
 }
 
 struct RouteSearchView: View {
-    @Environment(\.dismiss) private var dismiss
     /// S5：会话状态由 App 层持有，返回后再进恢复 query 与结果；预览/独立使用时用 convenience init 自建。
     @ObservedObject private var viewModel: RouteDiscoveryViewModel
     @Binding private var query: String
@@ -320,33 +281,24 @@ struct RouteSearchView: View {
     }
 
     var body: some View {
-        UtilityPageContainer {
-            VStack(spacing: 0) {
-                UtilityNavigationHeader(
-                    title: "路线搜索",
-                    leading: IconButtonConfiguration(
-                        systemName: "chevron.left",
-                        accessibilityLabel: "返回全部路线",
-                        action: { dismiss() }
-                    )
-                )
-
-                searchInputRegion
-
-                ScrollView(.vertical, showsIndicators: false) {
-                    searchState
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 320, alignment: .top)
-                        .frame(maxWidth: 600, alignment: .topLeading)
-                        .padding(.horizontal, Spacing.lg)
-                        .padding(.bottom, Spacing.xxl)
+        UtilityPage(
+            // 标题与 sticky 输入区由 hero 固定头部承载，结果列表是唯一滚动区
+            // （PAGE-SEARCH：不让结果滚动带走输入区）。
+            hero: {
+                VStack(alignment: .leading, spacing: 0) {
+                    PageTitleBlock(title: "路线搜索")
+                    searchInputRegion
                 }
-                .scrollDismissesKeyboard(.interactively)
+                .padding(.top, Spacing.navBarHeight)
             }
+        ) {
+            searchState
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 320, alignment: .top)
+                .frame(maxWidth: 600, alignment: .topLeading)
+                .padding(.bottom, Spacing.xxl)
         }
         .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
         .task(id: boundQuery.wrappedValue) {
             await viewModel.search(query: normalizedQueryIsEmpty(boundQuery.wrappedValue) ? nil : boundQuery.wrappedValue)
         }
@@ -366,13 +318,10 @@ struct RouteSearchView: View {
                 .foregroundStyle(AppColors.textWeak)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: 600, alignment: .topLeading)
-        .frame(maxWidth: .infinity, alignment: .top)
-        .padding(.horizontal, Spacing.lg)
-        .padding(.top, Spacing.md)
+        .padding(.horizontal, Spacing.pageHorizontal)
+        .padding(.top, Spacing.sm)
         .padding(.bottom, Spacing.lg)
         .background(AppColors.pageBase.opacity(0.96))
-        .zIndex(2)
     }
 
     @ViewBuilder
@@ -499,42 +448,6 @@ private extension UIView {
     }
 }
 
-private struct RoutePagingOffsetKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
-private struct RoutePagingConfigurator: UIViewRepresentable {
-    func makeUIView(context: Context) -> PagingConfigurationView {
-        PagingConfigurationView()
-    }
-
-    func updateUIView(_ view: PagingConfigurationView, context: Context) {
-        view.applyPagingBehavior()
-    }
-
-    final class PagingConfigurationView: UIView {
-        override func layoutSubviews() {
-            super.layoutSubviews()
-            applyPagingBehavior()
-        }
-
-        func applyPagingBehavior() {
-            var ancestor = superview
-            while let view = ancestor {
-                if let scrollView = view as? UIScrollView {
-                    scrollView.isPagingEnabled = true
-                    scrollView.decelerationRate = .fast
-                    return
-                }
-                ancestor = view.superview
-            }
-        }
-    }
-}
-
 private struct RouteSceneSkeleton: View {
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -557,25 +470,10 @@ private struct RouteSceneSkeleton: View {
                     }
                 }
             }
-            .padding(.horizontal, RouteDiscoveryLayout.sceneHorizontalPadding)
-            .padding(.bottom, 36)
+            .padding(.horizontal, Spacing.pageHorizontal)
+            .padding(.bottom, Spacing.xl)
         }
         .accessibilityLabel("路线加载中")
-    }
-}
-
-private struct RouteSceneState<Content: View>: View {
-    @ViewBuilder let content: Content
-
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-
-    var body: some View {
-        content
-            .frame(maxWidth: 320)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, Spacing.xl)
     }
 }
 

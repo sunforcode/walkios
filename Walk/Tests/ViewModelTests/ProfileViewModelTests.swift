@@ -184,8 +184,11 @@ final class ProfileViewModelTests: XCTestCase {
         XCTAssertTrue(accountMenuSource.contains("AccountEquipmentBusinessComponents.ProfileIdentityHeader("))
         XCTAssertTrue(accountMenuSource.contains("SettingsListRow("))
         XCTAssertTrue(accountMenuSource.contains("viewModel.logout()"), "退出登录在账户菜单页内转发")
+        XCTAssertTrue(accountMenuSource.contains("onNavigate"), "设置项经我的页任务栈承接：先关闭菜单再推入目标页")
         XCTAssertTrue(accountMenuSource.contains("ModalBottomSheet("), "账户菜单使用底部模态 Sheet 承载")
         XCTAssertTrue(accountMenuSource.contains("onClose"), "关闭入口回到我的页")
+        XCTAssertFalse(accountMenuSource.contains("isCloseActionPresented"), "设置 Modal 不再显示右上角叉号")
+        XCTAssertFalse(accountMenuSource.contains("accountSecurity"), "账号与安全已从设置任务移除")
         XCTAssertTrue(equipmentComponentSource.contains("summary.equipmentItemCount"))
         XCTAssertTrue(equipmentComponentSource.contains("summary.equipmentListCount"))
         XCTAssertTrue(equipmentComponentSource.contains("summary.knownTotalWeight.grams"))
@@ -211,8 +214,60 @@ final class ProfileViewModelTests: XCTestCase {
 
         XCTAssertTrue(calendarSource.contains("onNavigate(.tripList)"))
         XCTAssertFalse(source.contains("我的全部行程"))
-        XCTAssertTrue(menuSource.contains("id: .accountSecurity"))
+        XCTAssertFalse(menuSource.contains("id: .accountSecurity"), "账号与安全不再可达")
         XCTAssertTrue(rootSource.contains("shell.showRouteDiscovery()"))
+    }
+
+    func testAccountMenuUpdatesAvatarThroughSharedProfileState() async throws {
+        let session = AuthSessionStub(isLoggedIn: true)
+        let original = AccountResponse(
+            account: AccountProjection(identity: "account-1"),
+            profile: ProfileProjection(identity: "profile-1", maskedPhone: "+86 138****8000", nickname: "行者", avatar: nil)
+        )
+        let updated = ProfileProjection(identity: "profile-1", maskedPhone: "+86 138****8000", nickname: "行者", avatar: "media-avatar-2")
+        var receivedUpdate: ProfileUpdate?
+        let sut = ProfileViewModel(
+            authSession: session,
+            loadAccount: { original },
+            loadCalendar: { Self.emptyCalendar },
+            loadEquipment: { Self.emptyEquipment },
+            uploadAvatar: { _, _ in AvatarMediaResponse(mediaReference: "media-avatar-2") },
+            updateProfile: { update in
+                receivedUpdate = update
+                return ProfileResponse(profile: ProfileProjection(identity: "profile-1", maskedPhone: "+86 138****8000", nickname: "行者", avatar: "media-avatar-2"))
+            }
+        )
+        await sut.loadProfile()
+        XCTAssertNil(sut.account?.profile.avatar)
+
+        await sut.updateAvatar(data: Data("image".utf8), contentType: "image/jpeg")
+
+        XCTAssertEqual(receivedUpdate?.avatar, .value("media-avatar-2"), "头像更新先上传取得 mediaReference 再写入 Profile")
+        XCTAssertEqual(sut.account?.profile, updated, "头像更新成功后共享账号状态立即刷新")
+        XCTAssertNil(sut.avatarErrorMessage)
+        XCTAssertFalse(sut.isAvatarUpdating)
+    }
+
+    func testAccountMenuKeepsAvatarOnFailureAndExposesError() async {
+        let session = AuthSessionStub(isLoggedIn: true)
+        let original = AccountResponse(
+            account: AccountProjection(identity: "account-1"),
+            profile: ProfileProjection(identity: "profile-1", maskedPhone: "+86 138****8000", nickname: "行者", avatar: nil)
+        )
+        let sut = ProfileViewModel(
+            authSession: session,
+            loadAccount: { original },
+            loadCalendar: { Self.emptyCalendar },
+            loadEquipment: { Self.emptyEquipment },
+            uploadAvatar: { _, _ in throw APIClientError.invalidResponse }
+        )
+        await sut.loadProfile()
+
+        await sut.updateAvatar(data: Data("image".utf8), contentType: "image/jpeg")
+
+        XCTAssertEqual(sut.account?.profile, original.profile, "上传失败保留原头像")
+        XCTAssertNotNil(sut.avatarErrorMessage, "失败暴露给当前 Modal 可见错误")
+        XCTAssertFalse(sut.isAvatarUpdating)
     }
 
     func testCalendarFailureDoesNotDiscardAccountOrEquipmentSummary() async {

@@ -3,17 +3,15 @@ import WalkData
 import WalkDesignSystem
 
 struct TripDetailView: View {
-    @Environment(\.dismiss) private var dismiss
     let tripID: String
     let reloadRevision: String?
     @StateObject private var viewModel: TripDetailViewModel
+    @Environment(\.dismiss) private var dismiss
     @State private var isCancelConfirmationPresented = false
-    @State private var isMigrationConfirmationPresented = false
-    @State private var showsVersionDifferences = false
     private let onOpenRoute: (String) -> Void
     private let onOpenEquipment: () -> Void
-    private let onOpenDay: (String) -> Void
     private let onOpenWeather: () -> Void
+    private let onOpenBrowse: (Int) -> Void
     private let baselinePresentation: TripDetailBaselinePresentation?
 
     init(
@@ -22,15 +20,15 @@ struct TripDetailView: View {
         reloadRevision: String? = nil,
         onOpenRoute: @escaping (String) -> Void,
         onOpenEquipment: @escaping () -> Void,
-        onOpenDay: @escaping (String) -> Void,
-        onOpenWeather: @escaping () -> Void
+        onOpenWeather: @escaping () -> Void,
+        onOpenBrowse: @escaping (Int) -> Void = { _ in }
     ) {
         self.tripID = tripID
         self.reloadRevision = reloadRevision
         self.onOpenRoute = onOpenRoute
         self.onOpenEquipment = onOpenEquipment
-        self.onOpenDay = onOpenDay
         self.onOpenWeather = onOpenWeather
+        self.onOpenBrowse = onOpenBrowse
         self.baselinePresentation = nil
         _viewModel = StateObject(wrappedValue: TripDetailViewModel(service: service))
     }
@@ -41,47 +39,44 @@ struct TripDetailView: View {
         reloadRevision: String? = nil,
         onOpenRoute: @escaping (String) -> Void = { _ in },
         onOpenEquipment: @escaping () -> Void = {},
-        onOpenDay: @escaping (String) -> Void = { _ in },
         onOpenWeather: @escaping () -> Void = {},
+        onOpenBrowse: @escaping (Int) -> Void = { _ in },
         baselinePresentation: TripDetailBaselinePresentation? = nil
     ) {
         self.tripID = tripID
         self.reloadRevision = reloadRevision
         self.onOpenRoute = onOpenRoute
         self.onOpenEquipment = onOpenEquipment
-        self.onOpenDay = onOpenDay
         self.onOpenWeather = onOpenWeather
+        self.onOpenBrowse = onOpenBrowse
         self.baselinePresentation = baselinePresentation
         _viewModel = StateObject(wrappedValue: viewModel)
-        _showsVersionDifferences = State(
-            initialValue: baselinePresentation?.showsVersionDifferences == true
-        )
     }
 
     var body: some View {
-        ZStack {
-            AppColors.pageBase.ignoresSafeArea()
+        // PAGE-TRIP-DETAIL 自定义承载（不经统一二级页壳）：
+        // 沉浸封面通到屏顶并随正文在同一滚动流内整体上滑，返回入口悬浮于封面顶部，
+        // 标题由封面身份区唯一承载。
+        ZStack(alignment: .top) {
+            AppColors.pageBase
+                .ignoresSafeArea()
 
-            stateContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .toolbar(.hidden, for: .navigationBar)
-        .overlay(alignment: .topLeading) {
-            if viewModel.trip == nil {
-                IconButton(
-                    systemName: "chevron.left",
-                    accessibilityLabel: "返回",
-                    variant: .overlay,
-                    action: { dismiss() }
-                )
-                .padding(.leading, Spacing.pageHorizontal)
-                .padding(.top, Spacing.sm)
+            ScrollView {
+                stateContent
             }
+            .ignoresSafeArea(edges: .top)
+            // 下拉刷新由本页自有滚动容器承担。
+            .refreshable { await viewModel.loadTrip(id: tripID) }
+
+            navOverlay
         }
-        .overlay(alignment: .topTrailing) {
-            maintenanceMenuOverlay
+        // 自定义悬浮导航承载系统返回：隐藏 NavigationStack 系统导航栏与 tab 栏，
+        // 否则系统返回钮与本页 navOverlay 双钮并存，且安全区被导航栏下推、封面无法通到屏顶。
+        .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
+        .task {
+            await viewModel.loadTrip(id: tripID)
         }
-        .task { await viewModel.loadTrip(id: tripID) }
         .onChange(of: reloadRevision) { revision in
             guard let revision, revision != viewModel.trip?.revision else { return }
             Task { await viewModel.loadTrip(id: tripID) }
@@ -98,18 +93,6 @@ struct TripDetailView: View {
         } message: {
             Text("取消后行程会保留，但只能只读查看。")
         }
-        .confirmationDialog(
-            "确认整体迁移到当前公开新版？",
-            isPresented: $isMigrationConfirmationPresented,
-            titleVisibility: .visible
-        ) {
-            Button("整体迁移") {
-                Task { await viewModel.migrateTrip(id: tripID) }
-            }
-            Button("返回", role: .cancel) {}
-        } message: {
-            Text("路线依据、逐日安排、天气、点位和装备快照将作为一个完整结果切换。")
-        }
         .alert("操作未完成", isPresented: mutationErrorBinding) {
             Button("知道了") { viewModel.errorMessage = nil }
         } message: {
@@ -117,25 +100,43 @@ struct TripDetailView: View {
         }
     }
 
+    /// 悬浮导航承载：返回入口悬浮于封面顶部（顶部安全区下方统一位置）；
+    /// planned 行程的取消行程入口同在导航行右侧，不随内容滚动。
+    private var navOverlay: some View {
+        UtilityNavigationHeader(
+            leading: IconButtonConfiguration(
+                systemName: "chevron.left",
+                accessibilityLabel: "返回",
+                action: { dismiss() }
+            )
+        )
+        .overlay(alignment: .trailing) {
+            maintenanceMenuOverlay
+        }
+    }
+
     @ViewBuilder
     private var maintenanceMenuOverlay: some View {
         if let detail = viewModel.trip, detail.trip.status == .planned {
-            Menu {
-                Button("取消行程", role: .destructive) {
-                    isCancelConfirmationPresented = true
-                }
+            Button {
+                isCancelConfirmationPresented = true
             } label: {
-                IconButton(
-                    systemName: "ellipsis.circle",
-                    accessibilityLabel: "行程维护",
-                    variant: .overlay,
-                    action: {}
-                )
+                Text("取消行程")
+                    .font(.listTitle)
+                    .foregroundStyle(AppColors.danger)
             }
             .disabled(viewModel.isMutating)
-            .padding(.trailing, Spacing.pageHorizontal)
-            .padding(.top, Spacing.sm)
         }
+    }
+
+    /// 封面投影：行程与自然日就绪后可用；加载/错误态无封面，封面身份区即页面主标题。
+    private var resolvedPresentation: TripDetailPresentation? {
+        guard let detail = viewModel.trip, let days = viewModel.days else { return nil }
+        return TripDetailPresentation(
+            detail: detail,
+            days: days,
+            routeVersionStatus: viewModel.routeVersionStatus ?? detail.routeVersionStatus
+        )
     }
 
     @ViewBuilder
@@ -147,108 +148,88 @@ struct TripDetailView: View {
                 variant: .page,
                 retry: { Task { await viewModel.loadTrip(id: tripID) } }
             )
-        } else if let detail = viewModel.trip,
-                  let days = viewModel.days {
-            tripDetailContent(TripDetailPresentation(
-                detail: detail,
-                days: days,
-                routeVersionStatus: viewModel.routeVersionStatus ?? detail.routeVersionStatus
-            ))
+            .padding(.top, Spacing.navBarHeight)
+            .frame(maxWidth: .infinity, minHeight: 420, alignment: .center)
+        } else if let presentation = resolvedPresentation {
+            tripDetailContent(presentation)
         } else {
             LoadingView(message: "正在加载个人行程", variant: .page)
+                .padding(.top, Spacing.navBarHeight)
+                .frame(maxWidth: .infinity, minHeight: 420, alignment: .center)
         }
     }
 
     private func tripDetailContent(_ presentation: TripDetailPresentation) -> some View {
-        ImmersivePageContainer {
-            VStack(spacing: 0) {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: Spacing.xl) {
-                            TripBusinessComponents.TripCoverHeader(
-                                projection: presentation.coverProjection,
-                                onNavigateBack: { dismiss() }
-                            ) {
-                                TripDeterministicCoverSurface()
-                            }
-                            .id("baseline-trip-detail-top")
-
-                            TripBusinessComponents.TripRouteVersionCard(
-                                projection: routeVersionProjection(
-                                    detail: presentation.detail,
-                                    versionStatus: presentation.routeVersionStatus,
-                                    differencesExpanded: showsVersionDifferences,
-                                    isMigrating: viewModel.isMutating,
-                                    migrationErrorMessage: viewModel.migrationErrorMessage
-                                ),
-                                onViewCurrentRoute: { onOpenRoute(presentation.detail.routeReference.routeID) },
-                                onToggleDifferences: { showsVersionDifferences.toggle() },
-                                onRequestMigration: { isMigrationConfirmationPresented = true }
-                            )
-                            .padding(.horizontal, Spacing.pageHorizontal)
-
-                            TripBusinessComponents.TripRouteMetricsSummary(
-                                projection: routeMetricsProjection(presentation.detail.trip.frozenRouteBasis)
-                            )
-                            .padding(.horizontal, Spacing.pageHorizontal)
-
-                            daysSection(presentation.dayProjections)
-
-                            TripBusinessComponents.TripRouteSummaryCard(
-                                projection: routeEntryProjection(presentation.detail),
-                                onActivate: { onOpenRoute(presentation.detail.routeReference.routeID) }
-                            )
-                            .padding(.horizontal, Spacing.pageHorizontal)
-                            .id("baseline-trip-detail-bottom")
-
-                            if let weatherSummaryProjection = presentation.weatherSummaryProjection {
-                                TripBusinessComponents.TripWeatherSummaryCard(
-                                    projection: weatherSummaryProjection,
-                                    onActivate: onOpenWeather
-                                )
-                                .padding(.horizontal, Spacing.pageHorizontal)
-                                .id("baseline-trip-detail-weather")
-                            } else if viewModel.isWeatherUnavailable {
-                                UnavailableStateView(
-                                    title: "行程天气暂不可用",
-                                    message: "天气关联尚未形成完整投影，其他行程内容不受影响。",
-                                    icon: "cloud.sun",
-                                    actionTitle: "重试",
-                                    action: { Task { await viewModel.loadTrip(id: tripID) } },
-                                    variant: .block
-                                )
-                                .padding(.horizontal, Spacing.pageHorizontal)
-                                .id("baseline-trip-detail-weather")
-                            }
-                            TripBusinessComponents.TripEquipmentSummaryCard(
-                                projection: presentation.equipmentSummaryProjection,
-                                onActivate: onOpenEquipment
-                            )
-                            .padding(.horizontal, Spacing.pageHorizontal)
-                            .id("baseline-trip-detail-equipment")
-                            if !presentation.notices.isEmpty {
-                                noticesSection(presentation.notices)
-                            }
-                        }
-                        .frame(maxWidth: 600, alignment: .topLeading)
-                        .frame(maxWidth: .infinity, alignment: .top)
-                        .padding(.bottom, Spacing.xxl)
-                    }
-                    .accessibilityIdentifier("baseline.trip-detail.scroll")
-                    .refreshable { await viewModel.loadTrip(id: tripID) }
-                    .onChange(of: viewModel.trip?.revision) { revision in
-                        guard revision != nil else { return }
-                        scrollToBaselinePosition(using: proxy)
-                    }
+        ScrollViewReader { proxy in
+            LazyVStack(alignment: .leading, spacing: 0) {
+                TripBusinessComponents.TripCoverHeader(projection: presentation.coverProjection) {
+                    TripDeterministicCoverSurface()
                 }
+                // 封面通到屏顶整幅出血，随正文在同一滚动流内整体上滑。
+                .ignoresSafeArea(edges: .top)
+                .id("baseline-trip-detail-cover")
+
+                // 页面自定义承载自持水平边距与最大宽度（原由统一壳持有）。
+                VStack(alignment: .leading, spacing: Spacing.xl) {
+                    overviewSection(presentation)
+
+                routeSection(presentation)
+
+                if !presentation.weatherDayProjections.isEmpty {
+                    weatherSection(presentation.weatherDayProjections)
+                } else if viewModel.isWeatherUnavailable {
+                    UnavailableStateView(
+                        title: "行程天气暂不可用",
+                        message: "天气关联尚未形成完整投影，其他行程内容不受影响。",
+                        icon: "cloud.sun",
+                        actionTitle: "重试",
+                        action: { Task { await viewModel.loadTrip(id: tripID) } },
+                        variant: .block
+                    )
+                    .id("baseline-trip-detail-weather")
+                }
+                TripBusinessComponents.TripEquipmentSummaryCard(
+                    projection: presentation.equipmentSummaryProjection,
+                    onActivate: onOpenEquipment
+                )
+                .id("baseline-trip-detail-equipment")
+                if !presentation.notices.isEmpty {
+                    noticesSection(presentation.notices)
+                }
+                    Spacer(minLength: 0)
+                        .frame(height: 1)
+                        .id("baseline-trip-detail-bottom")
+                }
+                .padding(.horizontal, Spacing.pageHorizontal)
+                .padding(.top, Spacing.lg)
+                .padding(.bottom, Spacing.xxl)
+                .frame(maxWidth: 600)
+                .frame(maxWidth: .infinity, alignment: .top)
+            }
+            .onChange(of: viewModel.trip?.revision) { revision in
+                guard revision != nil else { return }
+                scrollToBaselinePosition(using: proxy)
             }
         }
     }
 
-    private func daysSection(_ dayProjections: [TripDayProjection]) -> some View {
-        ContentSection(title: "完整行程安排") {
+    /// 行程概览区：整体色块（标题 + 冻结概述 + 自然日入口分块），逐日进入逐日阅读页。
+    private func overviewSection(_ presentation: TripDetailPresentation) -> some View {
+        WalkCard {
             VStack(alignment: .leading, spacing: Spacing.md) {
-                if dayProjections.isEmpty {
+                Text("行程概览")
+                    .font(.sectionTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let introduction = tripNonEmpty(presentation.detail.trip.frozenRouteBasis.introduction) {
+                    Text(introduction)
+                        .font(.appBody)
+                        .foregroundStyle(AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if presentation.dayOverviewEntries.isEmpty {
                     UnavailableStateView(
                         title: "逐日安排暂不可用",
                         message: "不会根据日期范围或默认模板补造自然日。",
@@ -256,18 +237,88 @@ struct TripDetailView: View {
                         variant: .section
                     )
                 } else {
-                    ForEach(dayProjections, id: \.tripDayID) { day in
-                        TripBusinessComponents.TripDaySummaryCard(
-                            day: day,
-                            onActivate: { _ in onOpenDay(day.tripDayID) }
+                    ForEach(Array(presentation.dayOverviewEntries.enumerated()), id: \.element.id) { index, entry in
+                        if index > 0 {
+                            Divider()
+                        }
+                        TripBusinessComponents.TripDayOverviewEntry(
+                            projection: entry,
+                            onActivate: { onOpenBrowse(entry.dayNumber) }
                         )
-                        .id("baseline-trip-detail-day-\(day.dayNumber)")
-                        .accessibilityIdentifier("baseline.trip-detail.day.\(day.dayNumber)")
+                        .id("baseline-trip-detail-overview-day-\(entry.dayNumber)")
+                        .accessibilityIdentifier("baseline.trip-detail.overview.day.\(entry.dayNumber)")
                     }
                 }
             }
         }
-        .padding(.horizontal, Spacing.pageHorizontal)
+        // 页面水平边距由统一壳持有。
+        .id("baseline-trip-detail-overview")
+    }
+
+    /// 路线介绍区：整体色块（标题 + 走向文字卡 + 冻结指标摘要分块）。
+    private func routeSection(_ presentation: TripDetailPresentation) -> some View {
+        WalkCard {
+            VStack(alignment: .leading, spacing: Spacing.md) {
+                Text("路线介绍")
+                    .font(.sectionTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                TripBusinessComponents.TripRouteSummaryCard(
+                    projection: routeEntryProjection(presentation),
+                    onActivate: {
+                        onOpenRoute(presentation.detail.routeReference.routeID)
+                    }
+                )
+                .id("baseline-trip-detail-route-entry")
+            }
+        }
+        // 页面自定义承载自持水平边距。
+        .id("baseline-trip-detail-route")
+    }
+
+    /// 走向文字卡投影：只消费冻结事实（路线名、走向摘要、冻结指标、冻结海拔剖面）。
+    private func routeEntryProjection(_ presentation: TripDetailPresentation) -> TripRouteSummaryProjection {
+        let basis = presentation.detail.trip.frozenRouteBasis
+        return TripRouteSummaryProjection(
+            routeName: basis.routeName,
+            versionLabel: tripNonEmpty(basis.versionLabel),
+            routeOrientation: tripNonEmpty(basis.routeOrientation),
+            elevationSamples: basis.elevationProfile?.samples,
+            metrics: TripRouteMetricsSummaryProjection(
+                distance: basis.distance.map { tripDistanceText($0) },
+                ascent: basis.ascent.map { "\(Int($0.meters.rounded())) m" },
+                descent: basis.descent.map { "\(Int($0.meters.rounded())) m" },
+                maxElevation: basis.maxElevation.map { "\(Int($0.meters.rounded())) m" }
+            )
+        )
+    }
+
+    /// 行程天气区：整体色块（标题 + 每日摘要行，D 序 + 日期 + 冻结天气地点｜状况 + 温度），
+    /// 点按任一日进入天气页查看四字段明细；摘要行间用分隔线，对齐概览入口节奏。
+    private func weatherSection(_ days: [TripWeatherDayProjection]) -> some View {
+        WalkCard {
+            VStack(alignment: .leading, spacing: Spacing.md) {
+                Text("行程天气")
+                    .font(.sectionTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                ForEach(days) { day in
+                    Button(action: onOpenWeather) {
+                        TripBusinessComponents.DailyWeatherSummaryRow(day: day)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("进入行程天气")
+
+                    if day.id != days.last?.id {
+                        Divider()
+                    }
+                }
+            }
+        }
+        .id("baseline-trip-detail-weather")
     }
 
     private func noticesSection(_ notices: [PersonalTripImportantNotice]) -> some View {
@@ -283,7 +334,6 @@ struct TripDetailView: View {
                 }
             }
         }
-        .padding(.horizontal, Spacing.pageHorizontal)
     }
 
     private var mutationErrorBinding: Binding<Bool> {
@@ -301,7 +351,7 @@ struct TripDetailView: View {
         let target: String?
         switch baselinePresentation?.scrollPosition {
         case .middle:
-            target = "baseline-trip-detail-day-2"
+            target = "baseline-trip-detail-overview"
         case .bottom:
             target = "baseline-trip-detail-bottom"
         case .top, .none:
@@ -312,126 +362,6 @@ struct TripDetailView: View {
             proxy.scrollTo(target, anchor: .top)
         }
     }
-
-}
-
-private func routeVersionProjection(
-    detail: PersonalTripDetail,
-    versionStatus: PersonalTripRouteVersionStatus,
-    differencesExpanded: Bool,
-    isMigrating: Bool,
-    migrationErrorMessage: String?
-) -> TripRouteVersionCardProjection {
-    let route = detail.trip.frozenRouteBasis
-    let adoptedVersionLabel = versionStatus.adoptedVersion.versionLabel
-        ?? route.versionLabel
-        ?? "采用版本"
-    let currentVersionLabel = versionStatus.currentPublicVersion.flatMap { $0.versionLabel }
-        ?? "当前公开版本"
-    let relationship = versionRelationship(versionStatus.versionRelationship)
-    let difference = versionStatus.difference
-    let canViewCurrentRoute = relationship != .currentPublicVersionUnavailable
-    let migrationEligible = detail.trip.status == .planned
-        && versionStatus.currentPublicVersion != nil
-        && relationship == .newerPublicVersionAvailable
-    return TripRouteVersionCardProjection(
-        adoptedVersionLabel: adoptedVersionLabel,
-        currentPublicVersionLabel: versionStatus.currentPublicVersion.flatMap { $0.versionLabel },
-        relationship: relationship,
-        migrationEligible: migrationEligible,
-        comparisonStatus: difference.map(comparisonStatusText),
-        differences: difference?.differences.map(versionDifference) ?? [],
-        unavailableCategories: difference?.unavailableCategories.map { $0.title } ?? [],
-        otherRelevantChanges: difference?.otherRelevantChanges ?? [],
-        otherRelevantChangeStatus: difference?.otherRelevantChangeStatus == .unknown
-            ? "暂不可确认"
-            : nil,
-        differencesExpanded: differencesExpanded,
-        canViewCurrentRoute: canViewCurrentRoute,
-        isMigrating: isMigrating,
-        migrationResult: migrationErrorMessage.map {
-            TripNoticeProjection(
-                id: "migration-error",
-                title: "迁移未完成",
-                message: $0,
-                tone: .danger
-            )
-        }
-    )
-}
-
-private func routeMetricsProjection(_ route: FrozenRouteBasis) -> TripRouteMetricsSummaryProjection {
-    TripRouteMetricsSummaryProjection(
-        distance: route.distance.map(tripDistanceText),
-        ascent: route.ascent.map { "\(Int($0.meters.rounded())) m" },
-        estimatedDuration: tripDurationText(route.estimatedDuration.seconds)
-    )
-}
-
-private func routeEntryProjection(_ detail: PersonalTripDetail) -> TripRouteSummaryProjection {
-    let route = detail.trip.frozenRouteBasis
-    return TripRouteSummaryProjection(
-        routeName: route.routeName,
-        versionLabel: route.versionLabel,
-        routeType: routeNonEmpty(route.routeType),
-        region: route.region,
-        start: route.start.name,
-        end: route.end.name,
-        direction: routeNonEmpty(route.direction),
-        metrics: routeSummaryEntryMetrics(route)
-    )
-}
-
-private func routeSummaryEntryMetrics(_ route: FrozenRouteBasis) -> [MetricItemModel] {
-    var items: [MetricItemModel] = []
-    if let distance = route.distance {
-        items.append(MetricItemModel(id: "entry-distance", value: tripDistanceText(distance), unit: nil, label: "距离"))
-    }
-    if let ascent = route.ascent {
-        items.append(MetricItemModel(id: "entry-ascent", value: "\(Int(ascent.meters.rounded()))", unit: "m", label: "累计爬升"))
-    }
-    items.append(MetricItemModel(id: "entry-duration", value: tripDurationText(route.estimatedDuration.seconds), unit: nil, label: "预计用时"))
-    return items
-}
-
-private func versionRelationship(_ relationship: PersonalTripVersionRelationship) -> TripRouteVersionRelationship {
-    switch relationship {
-    case .current: .current
-    case .newerPublicVersionAvailable: .newerPublicVersionAvailable
-    case .currentPublicVersionUnavailable: .currentPublicVersionUnavailable
-    }
-}
-
-private func comparisonStatusText(_ difference: PersonalTripRouteVersionDifference) -> String {
-    switch difference.minimumComparisonStatus {
-    case .unavailable:
-        "五类最低差异整体不可用，不能据此判断无变化。"
-    case .partial:
-        "最低五类仅部分可比较；下方保留已确认变化与全部不可比较类别。"
-    case .complete where !difference.differences.isEmpty:
-        "最低五类比较完整；下方只列已确认的实际变化。"
-    case .complete:
-        "最低五类比较完整，未发现影响本次行程理解或准备的路线内容变化。"
-    }
-}
-
-private func versionDifference(_ item: PersonalTripRouteVersionDifferenceItem) -> TripRouteDifferenceProjection {
-    TripRouteDifferenceProjection(
-        id: item.id,
-        label: "\(item.category.title) · \(item.changeType.title)",
-        changeType: differenceChangeType(item.changeType),
-        summary: item.summary,
-        before: item.before?.value,
-        after: item.after?.value
-    )
-}
-
-private func differenceChangeType(_ type: PersonalTripRouteDifferenceChangeType) -> TripRouteDifferenceChangeType {
-    switch type {
-    case .added: .added
-    case .noLongerProvided: .noLongerProvided
-    case .modified: .modified
-    }
 }
 
 private func tripDistanceText(_ distance: RouteDistance) -> String {
@@ -439,11 +369,4 @@ private func tripDistanceText(_ distance: RouteDistance) -> String {
     return meters >= 1_000
         ? "\((meters / 1_000).formatted(.number.precision(.fractionLength(0...1)))) km"
         : "\(Int(meters.rounded())) m"
-}
-
-private func tripDurationText(_ seconds: Double) -> String {
-    let hours = seconds / 3_600
-    return hours >= 24
-        ? "\((hours / 24).formatted(.number.precision(.fractionLength(0...1)))) 天"
-        : "\(hours.formatted(.number.precision(.fractionLength(0...1)))) 小时"
 }

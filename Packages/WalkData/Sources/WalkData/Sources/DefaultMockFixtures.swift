@@ -67,6 +67,7 @@ public enum DefaultMockFixtures {
             PersonalTripAPI.Weather(tripID: "trip-1").identifier: personalTripWeatherData,
             PersonalTripAPI.RouteVersionStatus(tripID: "trip-1").identifier: personalTripRouteVersionStatusData,
             PersonalTripAPI.GenerationContext(routeID: "route-1").identifier: personalTripGenerationContextData,
+            PersonalTripAPI.GenerationContext(routeID: "quye-141").identifier: quyeGenerationContextData,
         ]
         if let create {
             fixtures[create.identifier] = personalTripCreatedData
@@ -168,11 +169,11 @@ public enum DefaultMockFixtures {
     """
 
     private static let personalTripDay2WeatherJSON = """
-    {"condition":{"value":"阴转小雨","confidence":{"status":"verified","category":"dynamic_external_information"}},"temperatureRange":{"value":{"low":3,"high":12},"confidence":{"status":"verified","category":"dynamic_external_information"}},"precipitation":{"value":"午后垭口附近可能有雨夹雪","confidence":{"status":"pending_verification","category":"dynamic_external_information"}},"wind":{"value":"山脊西风 4-5 级","confidence":{"status":"verified","category":"dynamic_external_information"}},"placeContext":{"value":"老榆林至下日乌且营地","confidence":{"status":"verified"}},"routeSectionContext":{"value":"老榆林至下日乌且","confidence":{"status":"verified"}},"source":{"value":"高原气象服务","confidence":{"status":"verified"}},"updatedAt":{"value":"2026-08-24 20:00","confidence":{"status":"verified"}}}
+    {"condition":{"value":"阴转小雨","confidence":{"status":"verified","category":"dynamic_external_information"}},"temperatureRange":{"value":{"low":3,"high":12},"confidence":{"status":"verified","category":"dynamic_external_information"}},"precipitation":{"value":"午后垭口附近可能有雨夹雪","confidence":{"status":"pending_verification","category":"dynamic_external_information"}},"wind":{"value":"山脊西风 4-5 级","confidence":{"status":"verified","category":"dynamic_external_information"}},"placeContext":{"value":"老榆林至下日乌且营地","confidence":{"status":"verified"}},"routeSectionContext":{"value":{"name":"老榆林至下日乌且","start":{"name":"老榆林"},"end":{"name":"下日乌且"}},"confidence":{"status":"verified"}},"source":{"value":"高原气象服务","confidence":{"status":"verified"}},"updatedAt":{"value":"2026-08-24 20:00","confidence":{"status":"verified"}}}
     """
 
     private static let personalTripDay3WeatherJSON = """
-    {"condition":{"value":"晴间多云","confidence":{"status":"verified","category":"dynamic_external_information"}},"temperatureRange":{"value":{"low":-2,"high":10},"confidence":{"status":"verified","category":"dynamic_external_information"}},"precipitation":{"value":"垭口降水概率 20%","confidence":{"status":"verified","category":"dynamic_external_information"}},"wind":{"value":"垭口阵风 6 级，信息可能变化","confidence":{"status":"stale","category":"dynamic_external_information"}},"placeContext":{"value":"下日乌且、日乌且垭口、草科","confidence":{"status":"verified"}},"routeSectionContext":{"value":"下日乌且至草科","confidence":{"status":"verified"}},"source":{"value":"高原气象服务","confidence":{"status":"verified"}},"updatedAt":{"value":"2026-08-24 20:00","confidence":{"status":"verified"}}}
+    {"condition":{"value":"晴间多云","confidence":{"status":"verified","category":"dynamic_external_information"}},"temperatureRange":{"value":{"low":-2,"high":10},"confidence":{"status":"verified","category":"dynamic_external_information"}},"precipitation":{"value":"垭口降水概率 20%","confidence":{"status":"verified","category":"dynamic_external_information"}},"wind":{"value":"垭口阵风 6 级，信息可能变化","confidence":{"status":"stale","category":"dynamic_external_information"}},"placeContext":{"value":"下日乌且、日乌且垭口、草科","confidence":{"status":"verified"}},"routeSectionContext":{"value":{"name":"下日乌且至草科","start":{"name":"下日乌且"},"end":{"name":"草科"}},"confidence":{"status":"verified"}},"source":{"value":"高原气象服务","confidence":{"status":"verified"}},"updatedAt":{"value":"2026-08-24 20:00","confidence":{"status":"verified"}}}
     """
 
     private static let personalTripDay1JSON = """
@@ -211,7 +212,7 @@ public enum DefaultMockFixtures {
     """
 
     private static let personalTripDetailJSON = """
-    {"revision":"revision-1","trip":{"identity":"trip-1","name":"贡嘎环线三日计划","firstGeneratedAt":"2026-08-01T10:00:00Z","status":"planned","departureCity":"成都","startDate":"2026-08-25","endDate":"2026-08-27","totalDayCount":3,"hikingDayCount":2,"frozenRouteBasis":{"routeName":"贡嘎环线","routeType":"multi_day","region":"四川甘孜","start":{"name":"老榆林","position":{"latitude":29.60,"longitude":101.80,"referenceSystem":"WGS84"}},"end":{"name":"草科","position":{"latitude":29.635,"longitude":101.985,"referenceSystem":"WGS84"}},"estimatedDuration":{"seconds":259200},"mainTrackPath":[{"latitude":29.60,"longitude":101.80,"referenceSystem":"WGS84"},{"latitude":29.62,"longitude":101.82,"referenceSystem":"WGS84"},{"latitude":29.645,"longitude":101.84,"referenceSystem":"WGS84"},{"latitude":29.66,"longitude":101.87,"referenceSystem":"WGS84"},{"latitude":29.68,"longitude":101.90,"referenceSystem":"WGS84"},{"latitude":29.70,"longitude":101.92,"referenceSystem":"WGS84"},{"latitude":29.72,"longitude":101.95,"referenceSystem":"WGS84"},{"latitude":29.635,"longitude":101.985,"referenceSystem":"WGS84"}],"versionLabel":"初始公开版本","direction":"环线","distance":{"meters":42500},"ascent":{"meters":2300},"descent":{"meters":2200},"maxElevation":{"meters":4850}},"weatherOverview":{"summary":{"value":"首日多云转阵雨，垭口日风大且低温","confidence":{"status":"pending_verification","category":"dynamic_external_information"}}},"importantNotices":[{"sequence":1,"type":"altitude","content":{"value":"最高海拔约 4850 米，出发前确认高反应对方案","confidence":{"status":"verified"}}},{"sequence":2,"type":"weather","content":{"value":"日乌且垭口午后易起雾并伴随强风，建议尽早通过","confidence":{"status":"pending_verification"}}},{"sequence":3,"type":"safety","content":{"value":"营地附近曾有熊踪，食物与有气味物品需悬挂保存","confidence":{"status":"verified"}}}]},"routeReference":{"routeId":"route-1","adoptedRouteVersionId":"route-1-v1"},"days":[\(personalTripDaysJSON)],"equipmentSnapshot":{"snapshotId":"equipment-snapshot-1","summary":\(personalTripEquipmentSummaryJSON)},"routeVersionStatus":\(personalTripRouteVersionStatusJSON)}
+    {"revision":"revision-1","trip":{"identity":"trip-1","name":"贡嘎环线三日计划","firstGeneratedAt":"2026-08-01T10:00:00Z","status":"planned","departureCity":"成都","startDate":"2026-08-25","endDate":"2026-08-27","totalDayCount":3,"hikingDayCount":2,"frozenRouteBasis":{"routeName":"贡嘎环线","routeType":"multi_day","region":"四川甘孜","start":{"name":"老榆林","position":{"latitude":29.60,"longitude":101.80,"referenceSystem":"WGS84"}},"end":{"name":"草科","position":{"latitude":29.635,"longitude":101.985,"referenceSystem":"WGS84"}},"estimatedDuration":{"seconds":259200},"mainTrackPath":[{"latitude":29.60,"longitude":101.80,"referenceSystem":"WGS84"},{"latitude":29.62,"longitude":101.82,"referenceSystem":"WGS84"},{"latitude":29.645,"longitude":101.84,"referenceSystem":"WGS84"},{"latitude":29.66,"longitude":101.87,"referenceSystem":"WGS84"},{"latitude":29.68,"longitude":101.90,"referenceSystem":"WGS84"},{"latitude":29.70,"longitude":101.92,"referenceSystem":"WGS84"},{"latitude":29.72,"longitude":101.95,"referenceSystem":"WGS84"},{"latitude":29.635,"longitude":101.985,"referenceSystem":"WGS84"}],"versionLabel":"初始公开版本","direction":"环线","distance":{"meters":42500},"ascent":{"meters":2300},"descent":{"meters":2200},"maxElevation":{"meters":4850},"elevationProfile":{"minElevation":{"meters":1900},"maxElevation":{"meters":4850},"samples":[{"distance":{"meters":0},"elevation":{"meters":3200}},{"distance":{"meters":5000},"elevation":{"meters":3520}},{"distance":{"meters":12500},"elevation":{"meters":3520}},{"distance":{"meters":18000},"elevation":{"meters":4200}},{"distance":{"meters":22800},"elevation":{"meters":4850}},{"distance":{"meters":30000},"elevation":{"meters":3600}},{"distance":{"meters":37000},"elevation":{"meters":2600}},{"distance":{"meters":42500},"elevation":{"meters":1900}}]}},"weatherOverview":{"summary":{"value":"首日多云转阵雨，垭口日风大且低温","confidence":{"status":"pending_verification","category":"dynamic_external_information"}}},"importantNotices":[{"sequence":1,"type":"altitude","content":{"value":"最高海拔约 4850 米，出发前确认高反应对方案","confidence":{"status":"verified"}}},{"sequence":2,"type":"weather","content":{"value":"日乌且垭口午后易起雾并伴随强风，建议尽早通过","confidence":{"status":"pending_verification"}}},{"sequence":3,"type":"safety","content":{"value":"营地附近曾有熊踪，食物与有气味物品需悬挂保存","confidence":{"status":"verified"}}}]},"routeReference":{"routeId":"route-1","adoptedRouteVersionId":"route-1-v1"},"days":[\(personalTripDaysJSON)],"equipmentSnapshot":{"snapshotId":"equipment-snapshot-1","summary":\(personalTripEquipmentSummaryJSON)},"routeVersionStatus":\(personalTripRouteVersionStatusJSON)}
     """
 
     private static let personalTripDetailData = Data(
@@ -241,10 +242,52 @@ public enum DefaultMockFixtures {
     )
 
     private static let personalTripGenerationContextData = Data(
-        """
-        {"data":{"route":{"routeId":"route-1","currentPublicRouteVersionId":"route-1-v1","routeType":"multi_day","generationEligibility":{"eligible":true},"versionLabel":"初始公开版本","name":"贡嘎环线","region":"四川甘孜","start":{"name":"老榆林"},"end":{"name":"草科"},"difficulty":"中等","distance":{"meters":42500},"estimatedDuration":{"seconds":259200}},"personalEquipmentSummary":{"equipmentItemCount":8,"equipmentListCount":1,"knownTotalWeight":{"grams":7200},"missingWeightItemCount":1},"equipmentLists":[{"equipmentListId":"equipment-list-1","name":"贡嘎三日轻装清单","summary":{"itemCount":8,"knownTotalWeight":{"grams":7200},"missingWeightItemCount":1}}]}}
-        """.utf8
+        Self.generationContextJSON(
+            routeID: "route-1",
+            routeVersionID: "route-1-v1",
+            routeName: "贡嘎环线",
+            region: "四川甘孜",
+            start: "老榆林",
+            end: "草科",
+            routeType: "multi_day",
+            difficulty: "中等",
+            distanceMeters: 42500,
+            durationSeconds: 259200
+        ).utf8
     )
+
+    /// mock 公开路线「长海子」（quye-141）详情页 eligible，从「立即出发」进入生成行程页时提供对应上下文。
+    private static let quyeGenerationContextData = Data(
+        Self.generationContextJSON(
+            routeID: "quye-141",
+            routeVersionID: "quye-141-v1",
+            routeName: "长海子",
+            region: "四川省甘孜藏族自治州",
+            start: "起点",
+            end: "终点",
+            routeType: "one_day",
+            difficulty: "2.48",
+            distanceMeters: 12378.12,
+            durationSeconds: 19620
+        ).utf8
+    )
+
+    private static func generationContextJSON(
+        routeID: String,
+        routeVersionID: String,
+        routeName: String,
+        region: String,
+        start: String,
+        end: String,
+        routeType: String,
+        difficulty: String,
+        distanceMeters: Double,
+        durationSeconds: Double
+    ) -> String {
+        """
+        {"data":{"route":{"routeId":"\(routeID)","currentPublicRouteVersionId":"\(routeVersionID)","routeType":"\(routeType)","generationEligibility":{"eligible":true},"versionLabel":"初始公开版本","name":"\(routeName)","region":"\(region)","start":{"name":"\(start)"},"end":{"name":"\(end)"},"difficulty":"\(difficulty)","distance":{"meters":\(distanceMeters)},"estimatedDuration":{"seconds":\(durationSeconds)}},"personalEquipmentSummary":{"equipmentItemCount":8,"equipmentListCount":1,"knownTotalWeight":{"grams":7200},"missingWeightItemCount":1},"equipmentLists":[{"equipmentListId":"equipment-list-1","name":"贡嘎三日轻装清单","summary":{"itemCount":8,"knownTotalWeight":{"grams":7200},"missingWeightItemCount":1}}]}}
+        """
+    }
 
     private static func load(_ name: String, bundle: Bundle) -> Data? {
         let url = bundle.url(forResource: name, withExtension: "json", subdirectory: "MockAPI")

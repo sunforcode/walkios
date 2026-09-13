@@ -291,6 +291,7 @@ struct CreateTripView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
         .onAppear { Task { await viewModel.handleAppearance() } }
         .onChange(of: viewModel.createdTripID) { tripID in
             if let tripID { onTripCreated(tripID) }
@@ -310,115 +311,86 @@ struct CreateTripView: View {
     }
 
     private var initialStatePage: some View {
-        UtilityPageContainer {
-            VStack(spacing: 0) {
-                navigationHeader
-                Group {
-                    if viewModel.isLoading {
-                        LoadingView(message: "正在准备生成上下文", variant: .page)
-                    } else if viewModel.errorMessage != nil {
-                        ErrorView(
-                            message: "没有把失败当作空装备或不可生成路线。",
-                            title: "暂时无法准备生成",
-                            variant: .page,
-                            retry: { Task { await viewModel.load() } }
-                        )
-                    }
+        UtilityPage(title: "生成行程") {
+            Group {
+                if viewModel.isLoading {
+                    LoadingView(message: "正在准备生成上下文", variant: .page)
+                } else if viewModel.errorMessage != nil {
+                    ErrorView(
+                        message: "没有把失败当作空装备或不可生成路线。",
+                        title: "暂时无法准备生成",
+                        variant: .page,
+                        retry: { Task { await viewModel.load() } }
+                    )
                 }
-                .frame(maxWidth: 600, maxHeight: .infinity)
-                .padding(.horizontal, Spacing.pageHorizontal)
             }
+            .frame(maxWidth: 600, minHeight: 320)
         }
     }
 
     private func ineligiblePage(context: PersonalTripGenerationContext) -> some View {
-        UtilityPageContainer {
-            VStack(spacing: 0) {
-                navigationHeader
-                ScrollView {
-                    VStack(alignment: .leading, spacing: Spacing.md) {
-                        RouteBusinessComponents.GenerationRouteSummaryCard(
-                            projection: CreateTripRouteSummaryPresentation(route: context.route).componentProjection
-                        )
-                        ForEach(Array((context.route.generationEligibility.missingReasons ?? []).enumerated()), id: \.offset) { _, reason in
-                            NoticeView(
-                                message: generationMissingReasonText(reason),
-                                title: "路线暂不可生成",
-                                tone: .warning
-                            )
-                        }
-                    }
-                    .frame(maxWidth: 600, alignment: .topLeading)
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    .padding(Spacing.xl)
+        UtilityPage(title: "生成行程") {
+            VStack(alignment: .leading, spacing: Spacing.md) {
+                RouteBusinessComponents.GenerationRouteSummaryCard(
+                    projection: CreateTripRouteSummaryPresentation(route: context.route).componentProjection
+                )
+                ForEach(Array((context.route.generationEligibility.missingReasons ?? []).enumerated()), id: \.offset) { _, reason in
+                    NoticeView(
+                        message: generationMissingReasonText(reason),
+                        title: "路线暂不可生成",
+                        tone: .warning
+                    )
                 }
             }
+            .frame(maxWidth: 600, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
     }
 
     private func inputPage(context: PersonalTripGenerationContext) -> some View {
-        UtilityPageContainer {
-            VStack(spacing: 0) {
-                navigationHeader
+        UtilityPage(
+            title: "生成行程",
+            bottomFixed: {
+                PrimaryAction(
+                    title: submitTitle,
+                    isDisabled: !viewModel.canSubmit,
+                    fillsWidth: true,
+                    action: { Task { await viewModel.submit() } }
+                )
+            }
+        ) {
+            VStack(alignment: .leading, spacing: Spacing.xl) {
+                RouteBusinessComponents.GenerationRouteSummaryCard(
+                    projection: CreateTripRouteSummaryPresentation(route: context.route).componentProjection
+                )
+                requiredInputs(routeType: context.route.routeType)
+                equipmentSection(context)
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: Spacing.xl) {
-                        RouteBusinessComponents.GenerationRouteSummaryCard(
-                            projection: CreateTripRouteSummaryPresentation(route: context.route).componentProjection
-                        )
-                        requiredInputs(routeType: context.route.routeType)
-                        equipmentSection(context)
-
-                        if let selection = viewModel.transportSelection {
-                            transportSection(selection)
-                        }
-
-                        if viewModel.isVersionConflict {
-                            versionConflictRegion
-                            if let error = viewModel.errorMessage {
-                                ErrorView(
-                                    message: error,
-                                    title: "暂时无法读取最新版本",
-                                    variant: .form
-                                )
-                            }
-                        } else if let error = viewModel.errorMessage {
-                            ErrorView(
-                                message: "\(error)\n已保留本次填写内容。",
-                                title: "生成未完成",
-                                variant: .form,
-                                retry: { Task { await viewModel.submit() } }
-                            )
-                        }
-                    }
-                    .frame(maxWidth: 600, alignment: .topLeading)
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    .padding(.horizontal, Spacing.pageHorizontal)
-                    .padding(.top, Spacing.lg)
-                    .padding(.bottom, 108)
+                if let selection = viewModel.transportSelection {
+                    transportSection(selection)
                 }
 
-                FixedActionArea {
-                    PrimaryAction(
-                        title: submitTitle,
-                        isDisabled: !viewModel.canSubmit,
-                        fillsWidth: true,
-                        action: { Task { await viewModel.submit() } }
+                if viewModel.isVersionConflict {
+                    versionConflictRegion
+                    if let error = viewModel.errorMessage {
+                        ErrorView(
+                            message: error,
+                            title: "暂时无法读取最新版本",
+                            variant: .form
+                        )
+                    }
+                } else if let error = viewModel.errorMessage {
+                    ErrorView(
+                        message: "\(error)\n已保留本次填写内容。",
+                        title: "生成未完成",
+                        variant: .form,
+                        retry: { Task { await viewModel.submit() } }
                     )
                 }
             }
+            .frame(maxWidth: 600, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
-    }
-
-    private var navigationHeader: some View {
-        UtilityNavigationHeader(
-            title: "生成个人行程",
-            leading: IconButtonConfiguration(
-                systemName: "chevron.left",
-                accessibilityLabel: "返回路线详情",
-                action: { dismiss() }
-            )
-        )
     }
 
     private func requiredInputs(routeType: String) -> some View {

@@ -47,7 +47,7 @@
 | `PAGE-ROUTE-DETAIL` | `RouteDetailView` | `Walk/Features/Routes/RouteDetailView.swift` |
 | `PAGE-TRIP-CREATE` | `CreateTripView` | `Walk/Features/Trips/CreateTripView.swift` |
 | `PAGE-TRIP-DETAIL` | `TripDetailView` | `Walk/Features/Trips/TripDetailView.swift` |
-| `PAGE-TRIP-DAY` | `TripDayView` | `Walk/Features/Trips/TripDayWeatherViews.swift` |
+| `PAGE-TRIP-BROWSE` | `TripBrowseView` | `Walk/Features/Trips/TripBrowseView.swift` |
 | `PAGE-TRIP-WEATHER` | `TripWeatherView` | `Walk/Features/Trips/TripDayWeatherViews.swift` |
 | `PAGE-TRIP-EQUIPMENT` | `TripEquipmentView` | `Walk/Features/Trips/TripEquipment.swift` |
 | `PAGE-TRIPS` | `TripListView` | `Walk/Features/Trips/TripListView.swift` |
@@ -59,6 +59,16 @@
 导航承载与 Page ID 转换位于 `Walk/App/RootNavigation.swift` 和 `Walk/App/RootView.swift`。它们只负责 iOS 导航，不拥有页面范围或跨页面业务结果。
 
 二级导航行为统一（任务栈推入、唯一返回入口及其可见性、覆盖层边界）由根仓 Change `unify-navigation-behavior` 定义；iOS 承载决策：全部二级页复用根仓 `AppDestination` 路径推入，返回入口统一由 `dismiss` 语义承载，`routeListShowsBackEntry` 等返回可见性状态归入路径来源语义，不在各 Feature 页内自行决定返回行为。例外：`PAGE-LOGIN` 为 Modal 任务，由 `AppShellState.isLoginPresented` 驱动的 `fullScreenCover` 全屏承载，不进入任务栈。
+
+二级页统一悬浮导航承载（承接根仓 Change `unify-secondary-page-navigation-and-titles`）：`UtilityNavigationHeader` 以悬浮形态承载（无固定底色与下边界线、`IconButton.overlay` 圆形返回、可选标题），全部任务栈二级页与 `PAGE-TRIP-DETAIL` 封面返回使用同一形态与顶部左上角统一位置；`PAGE-ROUTE-LIST` 返回可见性由到达方式决定（复用 `routeListShowsBackEntry`）；任务栈二级页不再输出宣传性 kicker（`PageTitleBlock` 不传 kicker），`PAGE-TRIPS` 正文不再重复页面标题块，页面标题只呈现一次。
+
+### PAGE-ACCOUNT-MENU 承载登记（承接根仓 Change `revamp-account-settings-modal`）
+
+- 模态承载：`AccountMenuView` 由 `AppShellState.isAccountMenuPresented` 驱动，在 `RootView` 以 overlay 呈现 `ModalBottomSheet`，不进入任何任务栈；不启用 Sheet 右上角 CloseAction。
+- 关闭边界：`ModalBottomSheet` 支持向下拖拽跟手、超过关闭距离/速度关闭、未达阈值回位，且仅内容处于滚动顶部时接管拖动手势；遮罩点击与拖拽关闭共用同一 `onDismiss`。
+- 设置项承接：设置主页 `AccountMenuView` 只承载入口；选择任一设置项（个人资料/通知/隐私/帮助与反馈/关于 Walk）由 `RootView.onNavigate` 先关闭菜单再推入我的页任务栈（`AppDestination.profileDetails/.notificationSettings/.privacySettings/.helpAndFeedback/.about` 均映射 `PAGE-ME`），返回经 `dismiss` 回到我的页；不新增 Page ID，二级内容合同由根仓 `PAGE-ACCOUNT-MENU/spec.md` 定义。
+- 二级页壳：`SettingsDetailPage`（悬浮 `IconButton` 返回 + 内容区标题）与 `SurfaceElevated` / `EntrySettingsRow`（左右行 + `AppColors.surfaceDivider` 横线）位于 `Walk/Features/Profile/ProfileEntryPages.swift`；五个设置二级页共享同一生产内容实现。
+- 头像更新：`ProfileViewModel.updateAvatar(data:contentType:)` 先上传头像媒体取得 `mediaReference` 再写入 Profile，成功刷新共享 `account.profile`；照片来源为系统相册（`photosPicker(isPresented:)`）。
 
 ## Component 映射
 
@@ -86,6 +96,7 @@
 | `modal-bottom-sheet` | `ModalBottomSheet` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/ModalBottomSheet.swift` |
 | `notice` | `NoticeView` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
 | `page-title-block` | `PageTitleBlock` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
+| `page-shell` | `PageShell` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
 | `panel` | `WalkPanel` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
 | `primary-action` | `PrimaryAction` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
 | `quantity-stepper` | `QuantityStepper` | `Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift` |
@@ -144,9 +155,7 @@
 | `trip-calendar-card` | L2b 业务独立 | `TripCalendarCard` | `Walk/Features/Trips/Components/TripCalendarCard.swift` |
 | `trip-cover-header` | L2b 业务独立 | `TripCoverHeader` | `Walk/Features/Trips/Components/TripCoverHeader.swift` |
 | `trip-day-arrangement` | L2c 业务组合 | `TripDayArrangement` | `Walk/Features/Trips/Components/TripDayArrangement.swift` |
-| `trip-day-hike-summary` | L2c 业务组合 | `TripDayHikeSummary` | `Walk/Features/Trips/Components/TripDayHikeSummary.swift` |
-| `trip-day-summary-card` | L2c 业务组合 | `TripDaySummaryCard` | `Walk/Features/Trips/Components/TripDaySummaryCard.swift` |
-| `trip-day-transport-summary` | L2c 业务组合 | `TripDayTransportSummary` | `Walk/Features/Trips/Components/TripDayTransportSummary.swift` |
+| `trip-day-overview-entry` | L2b 业务独立 | `TripDayOverviewEntry` | `Walk/Features/Trips/Components/TripDayOverviewEntry.swift` |
 | `trip-equipment-gear-rings` | L2c 业务组合 | `TripEquipmentGearRings` | `Walk/Features/Trips/Components/TripEquipmentGearRings.swift` |
 | `trip-equipment-item-row` | L2b 业务独立 | `TripEquipmentItemRow` | `Walk/Features/Trips/Components/TripEquipmentItemRow.swift` |
 | `trip-equipment-overview` | L2b 业务独立 | `TripEquipmentOverview` | `Walk/Features/Trips/Components/TripEquipmentOverview.swift` |

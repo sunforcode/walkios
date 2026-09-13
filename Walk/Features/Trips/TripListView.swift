@@ -3,7 +3,6 @@ import WalkData
 import WalkDesignSystem
 
 struct TripListView: View {
-    @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: TripListViewModel
     private let onNavigate: (AppDestination) -> Void
     private let onFindRoute: () -> Void
@@ -29,31 +28,13 @@ struct TripListView: View {
     }
 
     var body: some View {
-        UtilityPageContainer {
-            VStack(spacing: 0) {
-                UtilityNavigationHeader(
-                    title: "我的全部行程",
-                    leading: IconButtonConfiguration(
-                        systemName: "chevron.left",
-                        accessibilityLabel: "返回我的",
-                        action: { dismiss() }
-                    )
-                )
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: Spacing.xl) {
-                        tripsTitleBlock
-                        stateContent
-                    }
-                    .frame(maxWidth: 600, alignment: .topLeading)
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    .padding(.horizontal, Spacing.pageHorizontal)
-                    .padding(.top, Spacing.lg)
-                    .padding(.bottom, Spacing.xxl)
-                }
+        UtilityPage(title: "我的全部行程") {
+            VStack(alignment: .leading, spacing: Spacing.xl) {
+                stateContent
             }
+            .frame(maxWidth: 600, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
-        .toolbar(.hidden, for: .navigationBar)
         .task {
             guard viewModel.automaticallyLoads else { return }
             await viewModel.loadTrips()
@@ -96,23 +77,6 @@ struct TripListView: View {
                 emptyText: "暂无历史行程"
             )
         }
-    }
-
-    /// TripsTitleBlock（非组件）：kicker + 页面大标题 + 副标题，
-    /// 与导航头标题并存（原型证据：iOS 大标题形态）。
-    private var tripsTitleBlock: some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
-            Text("个人行程找回")
-                .font(.label)
-                .foregroundStyle(AppColors.interactionPrimary)
-            Text("我的全部行程")
-                .font(.displayTitle)
-                .foregroundStyle(AppColors.textPrimary)
-            Text("当前行程和历史行程在同一页面分组展示。")
-                .font(.appCaption)
-                .foregroundStyle(AppColors.textSecondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var loadingRows: some View {

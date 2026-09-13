@@ -21,6 +21,18 @@ extension TripBusinessComponents {
                                 .foregroundStyle(AppColors.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
 
+                            if let place = tripNonEmpty(day.placeContext) {
+                                HStack(alignment: .center, spacing: Spacing.xs) {
+                                    Image(systemName: "mappin.and.ellipse")
+                                        .font(.micro)
+                                    Text(place)
+                                        .font(.micro)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .foregroundStyle(AppColors.textWeak)
+                                .accessibilityElement(children: .combine)
+                            }
+
                             if let hikingDayNumber = day.hikingDayNumber {
                                 Text("徒步第 \(hikingDayNumber) 天")
                                     .font(.micro)

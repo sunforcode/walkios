@@ -2,21 +2,28 @@ import SwiftUI
 import WalkData
 import WalkDesignSystem
 
+/// 路线指标投影：只读本次行程冻结的 FrozenRouteBasis；
+/// 缺失用 missing 语义表达，不补 0、不用当前公共路线替代。
 struct TripRouteMetricsSummaryProjection: Equatable {
-    let distance: String?
-    let ascent: String?
-    let estimatedDuration: String
+    var distance: String?
+    var ascent: String?
+    var descent: String?
+    var maxElevation: String?
 
     var metrics: [MetricItemModel] {
         [
             MetricItemModel(id: "distance", value: distance, unit: nil, label: "徒步距离"),
             MetricItemModel(id: "ascent", value: ascent, unit: nil, label: "累计爬升"),
-            MetricItemModel(id: "estimated-duration", value: estimatedDuration, unit: nil, label: "预计徒步用时"),
+            MetricItemModel(id: "descent", value: descent, unit: nil, label: "累计下降"),
+            MetricItemModel(id: "max-elevation", value: maxElevation, unit: nil, label: "最高海拔"),
         ]
     }
 }
 
 extension TripBusinessComponents {
+    /// 业务独立 TripRouteMetricsSummary（L2b）：路线介绍区冻结指标摘要，
+    /// 固定顺序「徒步距离 → 累计爬升 → 累计下降 → 最高海拔」。
+    /// 合同见 docs/ui/components/business/components/trip-route-metrics-summary/spec.md。
     struct TripRouteMetricsSummary: View {
         let projection: TripRouteMetricsSummaryProjection
 

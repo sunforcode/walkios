@@ -16,8 +16,7 @@ settings:
 
 packages:
   Lottie:
-    url: https://github.com/airbnb/lottie-ios
-    from: 4.4.3
+    path: .swiftpm-packages/checkouts/lottie-ios
   Alamofire:
     path: .swiftpm-packages/checkouts/Alamofire
   WalkData:
@@ -164,8 +163,8 @@ schemes:
     run:
       config: Debug
       environmentVariables:
-        WALK_API_BASE_URL: "https://api.example.invalid/walkbg/api/v1"
-        WALK_DATA_SOURCE_MODE: mock
+        WALK_API_BASE_URL: "https://vialu.cn/walkbg/api/v1"
+        WALK_DATA_SOURCE_MODE: remote
         WALK_ENVIRONMENT: development
     test:
       config: Debug

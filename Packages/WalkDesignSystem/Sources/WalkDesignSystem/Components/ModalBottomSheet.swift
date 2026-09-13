@@ -5,6 +5,11 @@ public struct ModalBottomSheet<Content: View>: View {
     private let isCloseActionPresented: Bool
     private let content: Content
 
+    @State private var dragOffset: CGFloat = 0
+    @State private var isDragFollowing = false
+    @State private var dragStartTime: Date?
+    @State private var scrollOffset: CGFloat = 0
+
      public init(
         onDismiss: @escaping () -> Void,
         isCloseActionPresented: Bool = false,
@@ -26,6 +31,10 @@ public struct ModalBottomSheet<Content: View>: View {
                     .onTapGesture(perform: onDismiss)
 
                 sheet(maxHeight: max(proxy.size.height - 54, 0), bottomInset: proxy.safeAreaInsets.bottom)
+                    // 表面覆盖到屏幕底边：安全区只由内部 bottomInset 垫高内容，不在 Sheet 下方露出遮罩间距。
+                    .ignoresSafeArea(edges: .bottom)
+                    .offset(y: dragOffset)
+                    .simultaneousGesture(dragToDismissGesture)
             }
         }
         .accessibilityAddTraits(.isModal)
@@ -47,11 +56,22 @@ public struct ModalBottomSheet<Content: View>: View {
                 ScrollView(.vertical, showsIndicators: false) {
                     content
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            // 在滚动内容坐标系内测量偏移：0 表示内容处于顶部，负值表示已向上滚动。
+                            GeometryReader { scrollProxy in
+                                Color.clear.preference(
+                                    key: SheetScrollOffsetKey.self,
+                                    value: scrollProxy.frame(in: .named("modalBottomSheetScroll")).minY
+                                )
+                            }
+                        )
                 }
+                .coordinateSpace(name: "modalBottomSheetScroll")
                 .scrollBounceBehaviorBasedOnSizeIfAvailable()
                 .frame(maxHeight: maxHeight)
             }
         }
+        .onPreferenceChange(SheetScrollOffsetKey.self) { scrollOffset = $0 }
         .padding(.top, Spacing.sm)
         .padding(.horizontal, Spacing.lg)
         .padding(.bottom, Spacing.xl + bottomInset)
@@ -82,6 +102,41 @@ public struct ModalBottomSheet<Content: View>: View {
         .appShadow(AppShadow.overlay)
     }
 
+    /// 交互式下拉关闭：向下拖动跟手；仅当内容处于滚动顶部时接管手势，避免与内部滚动冲突。
+    /// 松手时超过关闭距离或速度则 dismiss，否则回位到原位。
+    private var dragToDismissGesture: some Gesture {
+        DragGesture(minimumDistance: 10)
+            .onChanged { value in
+                guard value.translation.height > 0 else { return }
+                // 只在内容顶部（或已开始跟随）时接管；已向上滚动的内容让位给 ScrollView。
+                guard isDragFollowing || scrollOffset >= -1 else { return }
+                if !isDragFollowing {
+                    isDragFollowing = true
+                    dragStartTime = Date()
+                }
+                dragOffset = value.translation.height
+            }
+            .onEnded { value in
+                guard isDragFollowing else { return }
+                isDragFollowing = false
+
+                let elapsed = dragStartTime.map { Date().timeIntervalSince($0) } ?? 0
+                let velocity = elapsed > 0 ? value.translation.height / CGFloat(elapsed) : 0
+                let shouldDismiss = value.translation.height > ModalBottomSheetGesture.closeDistanceThreshold
+                    || velocity > ModalBottomSheetGesture.closeVelocityThreshold
+
+                dragStartTime = nil
+                if shouldDismiss {
+                    // 直接交给父层关闭动画；不回弹 offset，避免回弹与消失动画叠加造成闪烁。
+                    onDismiss()
+                } else {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        dragOffset = 0
+                    }
+                }
+            }
+    }
+
     /// CloseAction：32 × 32 圆形关闭按钮，位于 Sheet 右上角。
     private var closeAction: some View {
         Button(action: onDismiss) {
@@ -99,6 +154,20 @@ public struct ModalBottomSheet<Content: View>: View {
                 .contentShape(Circle())
         }
         .accessibilityLabel("关闭")
+    }
+}
+
+private enum ModalBottomSheetGesture {
+    /// 下拉关闭阈值：拖动超过该距离，或松手速度超过该值（逻辑点/秒）即关闭。
+    static let closeDistanceThreshold: CGFloat = 120
+    static let closeVelocityThreshold: CGFloat = 800
+}
+
+private struct SheetScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = min(value, nextValue())
     }
 }
 
@@ -138,6 +207,34 @@ private extension View {
 }
 
 #if DEBUG
+#Preview("ModalBottomSheet.dragToDismiss") {
+    struct DragToDismissDemo: View {
+        @State private var isPresented = true
+
+        var body: some View {
+            ZStack {
+                AppColors.pageBase.ignoresSafeArea()
+
+                if isPresented {
+                    ModalBottomSheet(onDismiss: { isPresented = false }) {
+                        VStack(alignment: .leading, spacing: Spacing.lg) {
+                            Text("可下拉关闭的底部面板")
+                                .font(.sectionTitle)
+                                .foregroundStyle(AppColors.textPrimary)
+
+                            Text("向下拖动把手或内容：超过关闭距离或速度后关闭，未达到则回位。内容处于顶部时才接管拖动手势。")
+                                .font(.appBody)
+                                .foregroundStyle(AppColors.textSecondary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return DragToDismissDemo()
+}
+
 #Preview("ModalBottomSheet.default") {
     ModalBottomSheet(onDismiss: {}) {
         VStack(alignment: .leading, spacing: Spacing.lg) {

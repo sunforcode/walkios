@@ -34,18 +34,15 @@ final class HomeAndRootViewModelTests: XCTestCase {
         XCTAssertEqual(sut.state, .ready)
     }
 
-    func testHomeUsesServerNilFocusToRequestRouteDiscoveryWithoutAddingAPageState() async {
-        var routeDiscoveryCount = 0
+    func testHomeShowsNoFocusEmptyStateWhenServerReturnsNilFocus() async {
         let sut = HomeViewModel(
-            loadFocus: { PersonalTripFocus(trip: nil) },
-            onNoFocus: { routeDiscoveryCount += 1 }
+            loadFocus: { PersonalTripFocus(trip: nil) }
         )
 
         await sut.load()
 
         XCTAssertNil(sut.focusedTrip)
-        XCTAssertEqual(sut.state, .loading)
-        XCTAssertEqual(routeDiscoveryCount, 1)
+        XCTAssertEqual(sut.state, .ready, "无焦点行程停留在首页空态，不自动进入全部路线")
     }
 
     func testRefreshFailureKeepsExistingFocusVisible() async {
@@ -462,11 +459,10 @@ final class HomeAndRootViewModelTests: XCTestCase {
         XCTAssertTrue(logout.loggedOut)
     }
 
-    func testHomeLayoutUsesApprovedSpacingTokens() {
-        XCTAssertEqual(HomeLayout.sceneHorizontalPadding, 18)
-        XCTAssertEqual(HomeLayout.guestHorizontalPadding, 28)
-        XCTAssertEqual(HomeLayout.guestBottomPadding, 36)
-    }
+func testHomeLayoutUsesApprovedSpacingTokens() {
+    XCTAssertEqual(Spacing.pageHorizontal, 16)
+    XCTAssertEqual(Spacing.navBarHeight, 44)
+}
 
     func testSystemTabBarVisibilityTracksTheSelectedNavigationPath() {
         var sut = AppShellState()

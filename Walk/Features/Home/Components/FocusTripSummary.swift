@@ -41,12 +41,8 @@ struct FocusTripSummary: View {
     let onOpen: () -> Void
 
     var body: some View {
-        GeometryReader { proxy in
-            ScrollView {
-                content(horizontalPadding: horizontalPadding(for: proxy.size.width))
-                    .frame(minHeight: proxy.size.height, alignment: .bottomLeading)
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height)
+        content(horizontalPadding: FocusTripLayout.horizontalPadding)
+            .frame(maxWidth: .infinity, alignment: .bottomLeading)
             .contentShape(Rectangle())
             .onTapGesture(perform: onOpen)
             .accessibilityElement(children: .ignore)
@@ -54,12 +50,9 @@ struct FocusTripSummary: View {
             .accessibilityHint("打开个人行程详情")
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { onOpen() }
-        }
     }
 
     private func content(horizontalPadding: CGFloat) -> some View {
-        // 左侧单一信息块：沉底左下、全局一级导航之上；
-        // 路线名、一句话描述（起终点）、距离/爬升/用时、天气自上而下排列。
         VStack(alignment: .leading, spacing: Spacing.lg) {
             routeIdentity
 
@@ -67,8 +60,8 @@ struct FocusTripSummary: View {
 
             WeatherSummary(model: resolvedWeather)
         }
-        .padding(.horizontal, horizontalPadding)
         .padding(.bottom, FocusTripLayout.contentBottomPadding)
+        .padding(.horizontal, horizontalPadding)
         .foregroundStyle(AppColors.textPrimary)
     }
 
@@ -108,9 +101,6 @@ struct FocusTripSummary: View {
         return summary.joined(separator: "，")
     }
 
-    private func horizontalPadding(for width: CGFloat) -> CGFloat {
-        width < 390 ? FocusTripLayout.compactHorizontalPadding : FocusTripLayout.horizontalPadding
-    }
 }
 
 private enum FocusTripLayout {

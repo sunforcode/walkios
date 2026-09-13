@@ -12,7 +12,8 @@ public enum Spacing {
 
      public static let pageHorizontal = lg
 
-     /// 分区式页面中 section 卡片之间、以及悬浮 section 卡片距屏幕左右边缘的间距。
-     public static let sectionGap: CGFloat = 10
      public static let navBarHeight: CGFloat = 44
+
+     /// 底部 Home 指示器安全区估算值（Feature 不得直接读 safeAreaInsets，用此 token 替代）。
+     public static let safeAreaBottom: CGFloat = 34
 }

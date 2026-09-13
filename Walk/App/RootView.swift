@@ -67,8 +67,8 @@ struct RootView: View {
             shell.routeListShowsBackEntry = false
         }
         .onChange(of: shell.path(for: .profile)) { path in
-            // 账户菜单打开期间，父级（我的）任务栈一旦推入新页，Sheet 立即关闭：
-            // 设置项经父级任务栈承接，模态不残留覆盖在推入页之上。
+            // 设置项经我的页任务栈承接：父级任务栈一旦推入新页，Sheet 立即关闭，
+            // 模态不残留覆盖在推入页之上。
             if shell.isAccountMenuPresented && !path.isEmpty {
                 shell.dismissAccountMenu()
             }
@@ -99,14 +99,13 @@ struct RootView: View {
         )
     }
 
-    /// PAGE-ACCOUNT-MENU：Modal 任务，以 App 层 overlay 呈现模态 Sheet；
-    /// Sheet 自带遮罩、把手、关闭入口，不进入任务栈。
+    /// PAGE-ACCOUNT-MENU：Modal 任务，以 App 层 overlay 呈现模态 Sheet，只承载设置主页；
+    /// 设置项经我的页任务栈承接：先关闭 Sheet，再从我的页任务栈推入目标页。
     private var accountMenuCover: some View {
         AccountMenuView(
             viewModel: profileModel,
             onClose: { shell.dismissAccountMenu() },
             onNavigate: { destination in
-                // 设置项经父级任务栈承接：先关闭 Sheet，再从我的页任务栈推入目标页。
                 shell.dismissAccountMenu()
                 navigate(destination, in: .profile)
             },
@@ -131,9 +130,6 @@ struct RootView: View {
         HomeView(
             onAuthenticate: { requestAuthentication($0, in: .home) },
             onNavigate: { navigate($0, in: .home) },
-            onNoFocus: {
-                shell.showRouteList()
-            },
             service: appEnvironment.personalTripService
         )
         .id(authenticationGeneration)
@@ -143,7 +139,6 @@ struct RootView: View {
         RouteDiscoveryView(
             routeService: appEnvironment.routeService,
             onNavigate: { destination in
-                if destination == .routeList { shell.routeListShowsBackEntry = true }
                 navigate(destination, in: .routes)
             }
         )
@@ -196,14 +191,11 @@ struct RootView: View {
         case .homeStart:
             // account-access：焦点行程结果由认证链路确认（confirmingFocus/focusError），
             // 无法确认时不会走到这里；此处只消费已确认结果，不再自行 catch 落回首页。
-            guard let focusExists = confirmedFocusTripExists else { return }
+            // 无焦点行程同样回到首页空态，不自动进入全部路线（app-flow）。
+            guard confirmedFocusTripExists != nil else { return }
             confirmedFocusTripExists = nil
-            if focusExists {
-                shell.setPath([], for: .home)
-                shell.selectTab(.home)
-            } else {
-                shell.showRouteList()
-            }
+            shell.setPath([], for: .home)
+            shell.selectTab(.home)
         case .profile:
             shell.selectTab(.profile)
             authenticationGeneration += 1
@@ -217,6 +209,9 @@ struct RootView: View {
     private func navigate(_ destination: AppDestination, in tab: AppTab) {
         var path = shell.path(for: tab)
         guard path.last != destination else { return }
+        // PAGE-ROUTE-LIST 经任意页推入均为普通任务：显示返回入口；
+        // 任务栈根页到达（行程清单找路线）走 showRouteList，不经过此处。
+        if destination == .routeList { shell.routeListShowsBackEntry = true }
         path.append(destination)
         shell.setPath(path, for: tab)
     }
@@ -246,9 +241,7 @@ struct RootView: View {
                     }
                 )
             case .profileDetails:
-                ProfileDetailsView(accountService: appEnvironment.accountService)
-            case .accountSecurity:
-                AccountSecurityView(accountService: appEnvironment.accountService)
+                ProfileDetailsView(viewModel: profileModel)
             case .tripList:
                 TripListView(
                     service: appEnvironment.personalTripService,
@@ -264,12 +257,18 @@ struct RootView: View {
                     reloadRevision: shell.reloadRevision(for: tripID),
                     onOpenRoute: { navigate(.routeDetail($0), in: shell.selectedTab) },
                     onOpenEquipment: { navigate(.tripEquipment(tripID), in: shell.selectedTab) },
-                    onOpenDay: {
-                        navigate(.tripDay(tripID: tripID, initialDayID: $0), in: shell.selectedTab)
-                    },
                     onOpenWeather: {
                         navigate(.tripWeather(tripID), in: shell.selectedTab)
+                    },
+                    onOpenBrowse: { dayNumber in
+                        navigate(.tripBrowse(tripID: tripID, dayNumber: dayNumber), in: shell.selectedTab)
                     }
+                )
+            case let .tripBrowse(tripID, dayNumber):
+                TripBrowseView(
+                    tripID: tripID,
+                    service: appEnvironment.personalTripService,
+                    initialDayNumber: dayNumber
                 )
             case let .tripEquipment(tripID):
                 TripEquipmentView(
@@ -291,12 +290,6 @@ struct RootView: View {
                 EquipmentEditView(
                     service: appEnvironment.equipmentService,
                     equipmentID: equipmentID
-                )
-            case let .tripDay(tripID, initialDayID):
-                TripDayView(
-                    tripID: tripID,
-                    initialDayID: initialDayID,
-                    service: appEnvironment.personalTripService
                 )
             case let .tripWeather(tripID):
                 TripWeatherView(tripID: tripID, service: appEnvironment.personalTripService)

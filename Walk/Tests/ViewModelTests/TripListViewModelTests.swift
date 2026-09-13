@@ -382,7 +382,7 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
             routeVersionStatus: detail.routeVersionStatus
         )
 
-        XCTAssertEqual(presentation.coverProjection.versionLabel, nil)
+        XCTAssertEqual(presentation.coverProjection.conditionTags.count, 3)
         XCTAssertFalse(presentation.coverProjection.coverAvailable)
         XCTAssertEqual(presentation.dayProjections[0].tripDayID, "day-1")
         // personal-trip：每日行动按 sequence 表达的实际发生顺序组织；TripDayPresentation 按 sequence 升序提供。
@@ -396,7 +396,7 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         XCTAssertTrue(presentation.equipmentSummaryProjection.editable)
     }
 
-    func testTripCoverProjectionOmitsVersionTagWhenLabelIsMissing() {
+    func testTripCoverProjectionCarriesExactlyOneRowOfConditionTags() {
         let projection = TripCoverHeaderProjection(
             name: "贡嘎行程",
             status: .planned,
@@ -405,10 +405,10 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
             endDate: "2026-08-27",
             totalDayCount: 3,
             hikingDayCount: 2,
-            versionLabel: nil,
             coverAvailable: false
         )
 
+        // 封面只保留一行条件标签：出发城市、日期范围与天数，不展示版本依据。
         XCTAssertEqual(projection.conditionTags, ["成都出发", "2026-08-25–2026-08-27", "3 天 · 徒步 2 天"])
     }
 
@@ -417,8 +417,8 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         let cover = try productionSource(at: "Features/Trips/Components/TripCoverHeader.swift")
 
         XCTAssertTrue(source.contains("TripBusinessComponents.TripCoverHeader("))
-        XCTAssertTrue(source.contains("TripBusinessComponents.TripDaySummaryCard("))
-        XCTAssertTrue(source.contains("TripBusinessComponents.TripWeatherSummaryCard("))
+        XCTAssertTrue(source.contains("TripBusinessComponents.TripDayOverviewEntry("))
+        XCTAssertTrue(source.contains("TripBusinessComponents.DailyWeatherSummaryRow("), "行程天气以每日摘要行呈现，明细归天气页")
         XCTAssertTrue(source.contains("viewModel.isWeatherUnavailable"))
         XCTAssertTrue(source.contains("title: \"行程天气暂不可用\""))
         XCTAssertTrue(source.contains("TripBusinessComponents.TripEquipmentSummaryCard("))
@@ -429,13 +429,16 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         XCTAssertFalse(source.contains("RouteMapView("), "冻结轨迹不得冒充行程封面")
         XCTAssertFalse(source.contains("adoptedRouteVersionID"), "封面不得回退显示不透明版本 ID")
 
-        XCTAssertFalse(source.contains("private struct TripRouteSummaryCard: View"))
+        // 版本卡已从 DETAIL 正文退役；指标摘要并入走向卡（置于海拔图上方），路线入口卡归 PAGE-TRIP-DETAIL 正文。
+        let routeCard = try productionSource(at: "Features/Trips/Components/TripRouteSummaryCard.swift")
         XCTAssertTrue(source.contains("TripBusinessComponents.TripRouteSummaryCard("))
-        XCTAssertTrue(source.contains("TripBusinessComponents.TripRouteVersionCard("))
-        XCTAssertTrue(source.contains("TripBusinessComponents.TripRouteMetricsSummary("))
+        XCTAssertFalse(source.contains("TripBusinessComponents.TripRouteVersionCard("))
+        XCTAssertTrue(routeCard.contains("TripBusinessComponents.TripRouteMetricsSummary("))
+        XCTAssertFalse(routeCard.contains("生成依据"), "走向卡不再展示生成依据标签")
 
-        XCTAssertTrue(cover.contains("let versionLabel: String?"))
-        XCTAssertTrue(cover.contains("if let versionLabel = tripNonEmpty(versionLabel)"))
+        // 封面条件标签不含版本依据。
+        XCTAssertFalse(cover.contains("versionLabel"))
+        XCTAssertFalse(cover.contains("生成依据"))
     }
 
     private func productionSource(at relativePath: String) throws -> String {
@@ -783,16 +786,6 @@ final class TripDayWeatherViewModelTests: XCTestCase {
         XCTAssertEqual(presentation.dayLabel, "D1")
     }
 
-    func testTripDayFocusStartsAtRequestedDayAndClampsWhenDaysShrink() {
-        let days = PersonalTripTestFixtures.twoDays.days
-
-        XCTAssertEqual(TripDayFocusPolicy.initialIndex(days: days, initialDayID: "day-2"), 1)
-        XCTAssertEqual(TripDayFocusPolicy.initialIndex(days: days, initialDayID: "missing-day"), 0)
-        XCTAssertEqual(TripDayFocusPolicy.clampedIndex(5, dayCount: days.count), 1)
-        XCTAssertEqual(TripDayFocusPolicy.clampedIndex(-3, dayCount: days.count), 0)
-        XCTAssertEqual(TripDayFocusPolicy.clampedIndex(0, dayCount: 0), 0)
-    }
-
     func testTripDayPresentationKeepsDailyRouteSummaryWithoutDuplicatingHikeAction() {
         let day = PersonalTripTestFixtures.populatedDays.days[0]
 
@@ -823,21 +816,6 @@ final class TripDayWeatherViewModelTests: XCTestCase {
         XCTAssertFalse(source.contains("remainingTransportActions"))
         XCTAssertFalse(source.contains("groupedPoints"))
         XCTAssertFalse(source.contains("dailyRouteActions"))
-    }
-
-    func testTripDayPageUsesFullScreenPagingWithoutDayJumpControls() throws {
-        let source = try productionSource(at: "Features/Trips/TripDayWeatherViews.swift")
-
-        XCTAssertFalse(source.contains("\"前一天\""))
-        XCTAssertFalse(source.contains("\"后一天\""))
-        XCTAssertFalse(source.contains("TripDaySelection"))
-        XCTAssertTrue(source.contains("tabViewStyle(.page"))
-        XCTAssertTrue(source.contains("scrollBoundaryHandoff"))
-        XCTAssertTrue(source.contains("ForEach(presentation.presentationItems)"))
-        XCTAssertFalse(source.contains("presentation.presentationItems.filter"))
-        XCTAssertTrue(source.contains("if item.isDailyRouteSummary"))
-        XCTAssertTrue(source.contains("Text(\"每日路程\")"))
-        XCTAssertTrue(source.contains("ForEach(presentation.pointItems)"))
     }
 
     func testTripDayWeatherUnavailableCountsAsVisibleDayContent() {
@@ -1095,29 +1073,14 @@ final class TripDayWeatherViewModelTests: XCTestCase {
         XCTAssertFalse(source.contains("weatherAssociations"))
     }
 
-    /// PAGE-TRIP-DAY：无自然日结果用 EmptyState 表达，不进入结构错误；
+    /// PAGE-TRIP-BROWSE：无自然日结果用 EmptyState 表达，不进入结构错误；
     /// 边界提示按 Page spec 三形态文案。
-    func testTripDayUsesEmptyStateForNoDaysAndBoundaryCueTexts() throws {
-        let source = try productionSource(at: "Features/Trips/TripDayWeatherViews.swift")
+    func testTripBrowseUsesEmptyStateForNoDaysAndBoundaryCueTexts() throws {
+        let source = try productionSource(at: "Features/Trips/TripBrowseView.swift")
 
         XCTAssertTrue(source.contains("不会根据起止日期或默认模板补造"))
         XCTAssertTrue(source.contains("本次行程只有一天"))
-        XCTAssertTrue(source.contains("到达底部后继续上滑查看"))
-        XCTAssertTrue(source.contains("已到行程最后一天"))
-    }
-
-    func testTripDayRejectsProjectionFromDifferentCurrentRevision() async {
-        let sut = TripDayViewModel(
-            tripID: "trip-1",
-            initialDayID: "day-1",
-            loadDays: { _ in PersonalTripTestFixtures.days },
-            loadCurrentRevision: { _ in "revision-2" }
-        )
-
-        await sut.load()
-
-        XCTAssertNil(sut.result)
-        XCTAssertNotNil(sut.errorMessage)
+        XCTAssertTrue(source.contains("到达底部后继续上滑查看下一日"))
     }
 
     func testTripWeatherAcceptsProjectionMatchingCurrentRevision() async {
@@ -1330,7 +1293,15 @@ enum PersonalTripTestFixtures {
         precipitation: QualifiedString(value: "午后降雨", confidence: InformationConfidence(status: "pending_verification", category: .dynamicExternalInformation)),
         wind: QualifiedString(value: "微风", confidence: InformationConfidence(status: "verified", category: .dynamicExternalInformation)),
         placeContext: QualifiedString(value: "老榆林", confidence: nil),
-        routeSectionContext: QualifiedString(value: "日乌且垭口段", confidence: nil),
+        routeSectionContext: WeatherQualifiedValue(
+            value: PersonalTripRouteSectionSnapshot(
+                start: PublicRoutePlace(name: "老榆林"),
+                end: PublicRoutePlace(name: "垭口"),
+                name: "日乌且垭口段",
+                path: nil
+            ),
+            confidence: nil
+        ),
         source: QualifiedString(value: "气象服务", confidence: InformationConfidence(status: "verified", category: .dynamicExternalInformation)),
         updatedAt: QualifiedInstant(value: Instant(rawValue: "2026-08-24T08:00:00+08:00"), confidence: InformationConfidence(status: "verified", category: .dynamicExternalInformation))
     )

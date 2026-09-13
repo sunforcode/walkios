@@ -2,53 +2,27 @@ import SwiftUI
 import WalkData
 import WalkDesignSystem
 
-enum TripRouteVersionRelationship: Equatable {
-    case current
-    case newerPublicVersionAvailable
-    case currentPublicVersionUnavailable
-}
+/// 路线走向文字卡投影：只消费本次行程冻结的路线事实；
+/// 走向摘要与海拔剖面缺失时按局部状态表达，不从关键点名称或轨迹几何补造。
+struct TripRouteSummaryProjection: Equatable {
+    let routeName: String
+    var versionLabel: String?
+    /// 冻结路线走向摘要；nil 表示缺失，按局部不可用表达。
+    var routeOrientation: String?
+    /// 冻结海拔剖面；nil 表示缺失，不读取当前公共路线替代。
+    var elevationSamples: [FrozenRouteElevationSample]?
+    /// 冻结指标摘要（距离/爬升/下降/最高海拔），置于海拔图上方；nil 表示不展示。
+    var metrics: TripRouteMetricsSummaryProjection?
 
-enum TripRouteDifferenceChangeType: Equatable {
-    case added
-    case noLongerProvided
-    case modified
-}
-
-struct TripRouteDifferenceProjection: Identifiable, Equatable {
-    let id: String
-    let label: String
-    let changeType: TripRouteDifferenceChangeType
-    let summary: String
-    var before: String?
-    var after: String?
-
-    var detail: String {
-        var values = [summary]
-        switch changeType {
-        case .added:
-            if let after = tripNonEmpty(after) { values.append("新增：\(after)") }
-        case .noLongerProvided:
-            if let before = tripNonEmpty(before) { values.append("原资料：\(before)") }
-        case .modified:
-            if let before = tripNonEmpty(before) { values.append("原为：\(before)") }
-            if let after = tripNonEmpty(after) { values.append("现为：\(after)") }
-        }
-        return values.joined(separator: "；")
+    var hasElevationChart: Bool {
+        (elevationSamples?.count ?? 0) >= 2
     }
 }
 
-struct TripRouteSummaryProjection: Equatable {
-    let routeName: String
-    let versionLabel: String?
-    var routeType: String?
-    var region: String
-    var start: String
-    var end: String
-    var direction: String?
-    var metrics: [MetricItemModel]
-}
-
 extension TripBusinessComponents {
+    /// 业务独立 TripRouteSummaryCard（L2b）：路线介绍区的走向文字卡，
+    /// 整卡单一 activate 进入对应路线的公共路线详情页；指标摘要置于海拔图上方，不展示版本操作。
+    /// 合同见 docs/ui/components/business/components/trip-route-summary-card/spec.md。
     struct TripRouteSummaryCard: View {
         let projection: TripRouteSummaryProjection
         let onActivate: () -> Void
@@ -57,94 +31,121 @@ extension TripBusinessComponents {
             Button(action: onActivate) {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
                     header
-
-                    if let routeType = tripNonEmpty(projection.routeType) {
-                        Text(routeType)
-                            .font(.appCaption)
-                            .foregroundStyle(AppColors.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                    orientationText
+                    if let metrics = projection.metrics {
+                        TripBusinessComponents.TripRouteMetricsSummary(projection: metrics)
                     }
-
-                    routeContext
-
-                    if !projection.metrics.isEmpty {
-                        Rectangle()
-                            .fill(AppColors.surfaceDivider)
-                            .frame(height: 1)
-                            .accessibilityHidden(true)
-                        MetricGroup(items: projection.metrics, variant: .grid)
+                    if projection.hasElevationChart {
+                        elevationChart
+                    } else {
+                        UnavailableStateView(
+                            title: "海拔剖面暂未提供",
+                            message: "不读取当前公共路线替代冻结剖面。",
+                            icon: "chart.xyaxis.line",
+                            variant: .inline
+                        )
                     }
                 }
-                .padding(Spacing.lg)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    LinearGradient(
-                        colors: [
-                            AppColors.surfacePrimary,
-                            AppColors.sceneForestMiddle,
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
-                        .stroke(AppColors.borderSubtle, lineWidth: 1)
-                }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isButton)
+            .accessibilityHint("进入路线详情")
         }
 
         private var header: some View {
-            HStack(alignment: .top, spacing: Spacing.md) {
-                Text(projection.routeName)
-                    .font(.listTitle)
-                    .foregroundStyle(AppColors.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                if let versionLabel = tripNonEmpty(projection.versionLabel) {
-                    InfoTag(title: "生成依据 · \(versionLabel)", tone: .neutral)
-                }
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(AppColors.textWeak)
-                    .frame(width: 18)
-                    .accessibilityHidden(true)
-            }
+            Text(projection.routeName)
+                .font(.listTitle)
+                .foregroundStyle(AppColors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
 
         @ViewBuilder
-        private var routeContext: some View {
-            let context = routeContextText
-            if !context.isEmpty {
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text(context)
-                        .font(.appBody)
-                        .foregroundStyle(AppColors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let direction = tripNonEmpty(projection.direction) {
-                        Text(direction)
-                            .font(.appCaption)
-                            .foregroundStyle(AppColors.textWeak)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
+        private var orientationText: some View {
+            if let orientation = tripNonEmpty(projection.routeOrientation) {
+                Text(orientation)
+                    .font(.appBody)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("路线走向摘要暂未提供，不从关键点名称或轨迹推断。")
+                    .font(.appCaption)
+                    .foregroundStyle(AppColors.textWeak)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
 
-        private var routeContextText: String {
-            [tripNonEmpty(projection.region),
-             tripNonEmpty(projection.start).map { start -> String in
-                 tripNonEmpty(projection.end).map { "\(start) → \($0)" } ?? start
-             }]
-                .compactMap { $0 }
-                .joined(separator: " · ")
+        /// 冻结海拔图：样本按累计距离映射为折线，只使用本次行程冻结剖面；
+        /// 带纵轴（最高/最低海拔）与横轴（起点/终点累计距离）坐标轴。
+        private var elevationChart: some View {
+            let samples = projection.elevationSamples ?? []
+            let maxMeters = samples.map(\.elevation.meters).max() ?? 0
+            let minMeters = samples.map(\.elevation.meters).min() ?? 0
+            let totalKilometers = Int(((samples.last?.distance.meters ?? 0) / 1000).rounded())
+            return VStack(alignment: .leading, spacing: Spacing.xs) {
+                Text("海拔变化（冻结剖面）")
+                    .font(.micro)
+                    .foregroundStyle(AppColors.textWeak)
+
+                HStack(alignment: .center, spacing: Spacing.xs) {
+                    VStack(alignment: .trailing, spacing: 0) {
+                        Text("\(Int(maxMeters.rounded())) m")
+                        Spacer(minLength: 0)
+                        Text("\(Int(minMeters.rounded())) m")
+                    }
+                    .font(.micro)
+                    .foregroundStyle(AppColors.textWeak)
+
+                    GeometryReader { proxy in
+                        FrozenElevationChartShape(samples: samples)
+                            .stroke(AppColors.interactionPrimary, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    }
+                }
+                .frame(height: 88)
+
+                Divider()
+
+                HStack {
+                    Text("0 km")
+                    Spacer()
+                    Text("\(totalKilometers) km")
+                }
+                .font(.micro)
+                .foregroundStyle(AppColors.textWeak)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("海拔变化图，最高海拔 \(Int(maxMeters.rounded())) 米，最低海拔 \(Int(minMeters.rounded())) 米，全程约 \(totalKilometers) 公里，来自本次行程冻结剖面")
         }
+    }
+}
+
+/// 折线形状：x = 累计距离占比，y = 海拔占比（顶部为最高海拔）。
+struct FrozenElevationChartShape: Shape {
+    let samples: [FrozenRouteElevationSample]
+
+    func path(in rect: CGRect) -> Path {
+        guard samples.count >= 2 else { return Path() }
+        let totalDistance = max(samples.last?.distance.meters ?? 0, 1)
+        let elevations = samples.map(\.elevation.meters)
+        let minElevation = elevations.min() ?? 0
+        let maxElevation = elevations.max() ?? minElevation + 1
+        let span = max(maxElevation - minElevation, 1)
+
+        var path = Path()
+        for (index, sample) in samples.enumerated() {
+            let x = rect.minX + rect.width * CGFloat(sample.distance.meters / totalDistance)
+            let y = rect.maxY - rect.height * CGFloat((sample.elevation.meters - minElevation) / span)
+            if index == 0 {
+                path.move(to: CGPoint(x: x, y: y))
+            } else {
+                path.addLine(to: CGPoint(x: x, y: y))
+            }
+        }
+        return path
     }
 }
 

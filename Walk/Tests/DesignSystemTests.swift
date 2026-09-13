@@ -65,6 +65,15 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertFalse(regexMatches(#"AppTypography\.caption\b"#, in: source))
     }
 
+    func testModalBottomSheetCoversBottomSafeArea() throws {
+        let source = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/ModalBottomSheet.swift")
+
+        XCTAssertTrue(
+            source.contains(".ignoresSafeArea(edges: .bottom)"),
+            "Sheet 表面须忽略底部安全区，贴齐屏幕底边不留间距"
+        )
+    }
+
     func testFeatureSourcesUseTypographyTokensOnly() throws {
         let violations = try violations(in: "Features") { source in
             var found: [String] = []
@@ -142,6 +151,127 @@ final class DesignSystemTests: XCTestCase {
         }
 
         XCTAssertEqual(declarations, ["TripStatusBadge.swift: struct TripStatusBadge"])
+    }
+
+    func testUtilityNavigationHeaderIsUnifiedFloatingCarrier() throws {
+        let source = try productionSource(
+            at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/UtilityNavigationHeader.swift"
+        )
+
+        XCTAssertTrue(
+            source.contains("public let title: String?"),
+            "标题可选：同页 PageTitleBlock 拥有唯一主标题时导航承载省略标题"
+        )
+        XCTAssertFalse(source.contains("surfaceHeader"), "统一悬浮承载不使用固定页头底色")
+        XCTAssertFalse(regexMatches(#"showsDivider"#, in: source), "统一悬浮承载不渲染下边界线")
+        XCTAssertTrue(
+            source.contains("public var variant: IconButtonVariant = .overlay"),
+            "导航槽默认为悬浮圆形 IconButton.overlay"
+        )
+    }
+
+    func testSecondaryPagesDropPromotionalKickersAndDuplicatedTitles() throws {
+        let violations = try violations(in: "Features") { source in
+            source.contains("长期个人资产")
+                ? ["二级页不得输出宣传性 kicker 文案「长期个人资产」"]
+                : []
+        }
+        XCTAssertTrue(violations.isEmpty, violations.joined(separator: "\n"))
+
+        let tripListSource = try productionSource(at: "Features/Trips/TripListView.swift")
+        XCTAssertLessThanOrEqual(
+            tripListSource.components(separatedBy: "我的全部行程").count - 1,
+            1,
+            "页面标题只呈现一次：由顶部悬浮导航承载拥有，正文不重复标题块"
+        )
+        XCTAssertFalse(
+            tripListSource.contains("当前行程和历史行程在同一页面分组展示"),
+            "正文不重复纯解释性副标题"
+        )
+    }
+
+    func testPageTitleBlockTitleRowHeightIsIndependentOfTrailing() throws {
+        let source = try productionSource(
+            at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift"
+        )
+        let titleBlockSource = try titleBlockRegion(in: source)
+
+        XCTAssertTrue(
+            titleBlockSource.contains(".frame(minHeight: 44"),
+            "标题行必须自带 44pt 最小高度：trailing 触控目标不得反向决定一级页头高度（首页/路线/我的三页页头高度保持一致）"
+        )
+    }
+
+    /// 切取 `PageTitleBlock` 的源码区域，避免断言命中文件内其他 `minHeight: 44`。
+    private func titleBlockRegion(in source: String) throws -> Substring {
+        let startMarker = "public struct PageTitleBlock"
+        let endMarker = "public struct UtilityPageContainer"
+        let start = try XCTUnwrap(source.range(of: startMarker), "SharedPrimitives.swift 应包含 \(startMarker)")
+        let end = try XCTUnwrap(source.range(of: endMarker, range: start.upperBound..<source.endIndex), "SharedPrimitives.swift 应包含 \(endMarker)")
+        return source[start.lowerBound..<end.lowerBound]
+    }
+
+    func testPageShellBackgroundSlotDoesNotParticipateInLayout() throws {
+        let source = try productionSource(
+            at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift"
+        )
+        let shellSource = try pageShellRegion(in: source)
+
+        XCTAssertTrue(
+            shellSource.contains(".background {"),
+            "PageShell 背景必须经 .background 垫底渲染：背景插槽是纯装饰层，不参与布局"
+        )
+        XCTAssertFalse(
+            shellSource.contains("ZStack"),
+            "PageShell 不得把背景作为 ZStack 兄弟节点：自然尺寸不受控的背景（如未标 scale 的位图）会把容器撑爆，将内容顶出屏幕"
+        )
+    }
+
+    /// 转场顶部安全区尖峰免疫：根容器（PageShell / RouteDiscoveryView）不再消费动态安全区，
+    /// 改用共享的固定窗口安全区常量定位（push/pop 期间系统临时插回导航栏高度会把锚定内容顶跳）。
+    func testRootContainersPinWindowSafeAreaAgainstTransitionSpike() throws {
+        let shellFile = try productionSource(
+            at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift"
+        )
+        let shellSource = try pageShellRegion(in: shellFile)
+        XCTAssertTrue(
+            shellSource.contains("PinnedWindowSafeAreaInsets.current"),
+            "PageShell 使用共享固定窗口安全区常量，不消费动态安全区"
+        )
+        XCTAssertTrue(
+            shellSource.contains(".ignoresSafeArea()"),
+            "PageShell 内容布局脱离动态安全区，由常量定位"
+        )
+        // 读值必须发生在视图挂载后（onAppear）：视图 init / body 求值事务内
+        // 访问 UIWindow 会在 iOS 26 触发 AttributeGraph 循环，锁死整棵视图树
+        // 的更新（@State mutation 不再触发重算，所有 push 静默失效）。
+        XCTAssertTrue(
+            shellSource.contains(".onAppear {"),
+            "PageShell 的窗口安全区常量必须在 onAppear 中解析，不得在 init 期读取"
+        )
+
+        let discovery = try productionSource(at: "Features/Routes/RouteDiscoveryView.swift")
+        XCTAssertTrue(
+            discovery.contains("PinnedWindowSafeAreaInsets.current"),
+            "路线页页头与场景同样使用固定窗口安全区常量"
+        )
+        XCTAssertTrue(
+            discovery.contains(".onAppear {"),
+            "路线页同样在 onAppear 中解析窗口安全区常量"
+        )
+        XCTAssertFalse(
+            discovery.contains("let pinnedInsets: EdgeInsets = PinnedWindowSafeAreaInsets.current"),
+            "路线页不得在属性初始化器中读取窗口安全区"
+        )
+    }
+
+    /// 切取 `PageShell` 的源码区域，避免断言命中文件内其他容器写法。
+    private func pageShellRegion(in source: String) throws -> Substring {
+        let startMarker = "public struct PageShell"
+        let endMarker = "public struct MePageBackgroundOverlay"
+        let start = try XCTUnwrap(source.range(of: startMarker), "SharedPrimitives.swift 应包含 \(startMarker)")
+        let end = try XCTUnwrap(source.range(of: endMarker, range: start.upperBound..<source.endIndex), "SharedPrimitives.swift 应包含 \(endMarker)")
+        return source[start.lowerBound..<end.lowerBound]
     }
 
     private func walkRoot() throws -> URL {
@@ -328,8 +458,31 @@ final class DesignSystemTests: XCTestCase {
         _ = EmptyStateView(title: "Empty").body
     }
 
+    // MARK: 统一页面壳（UtilityPage 骨架，合同 docs/ui/components/common/utility-page/spec.md）
+
+    func testUtilityPageShellRendersAllSlotCombinations() {
+        // default：返回入口 + 标题区 + 滚动内容
+        _ = UtilityPage(title: "页题", description: "页题说明") { Text("内容") }.body
+        // backOnly：无标题（标题由内容区承载）
+        _ = UtilityPage { Text("内容") }.body
+        // 任务栈根落点：不显示返回入口
+        _ = UtilityPage(title: "页题", showsBackEntry: false) { Text("内容") }.body
+        // hero + background + bottomFixed 全插槽
+        _ = UtilityPage(
+            title: "页题",
+            background: { AppColors.pageBase },
+            hero: { Text("封面区") },
+            bottomFixed: { Text("底部动作") }
+        ) { Text("内容") }.body
+        // 自定义 leading / trailing 动作
+        _ = UtilityPage(
+            leading: IconButtonConfiguration(systemName: "xmark", accessibilityLabel: "关闭", action: {}),
+            trailing: IconButtonConfiguration(systemName: "magnifyingglass", accessibilityLabel: "搜索", action: {})
+        ) { Text("内容") }.body
+    }
+
     func testTextInputUsesApprovedTypographySurfaceAndRadius() throws {
-        let source = try productionSource(at: "Features/Profile/ProfileEntryPages.swift")
+        let source = try productionSource(at: "Features/Profile/SettingsPageShell.swift")
         XCTAssertTrue(source.contains(".font(.appBody)"))
         XCTAssertTrue(source.contains(".background(AppColors.surfaceInput, in: RoundedRectangle(cornerRadius: Radius.md))"))
         XCTAssertFalse(source.contains("var prefix:"))
@@ -415,17 +568,65 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(weather.contains("WeatherSummary("))
         XCTAssertTrue(focus.contains("#Preview"))
         XCTAssertTrue(focus.contains("FocusTripSummary("))
-        XCTAssertEqual(occurrences(of: "#Preview", in: home), 7)
+        // 校准状态 8 个：guest、noFocus、focusComplete、focusMissingMetrics、
+        // focusWeatherOmitted、loading、error、longContent（PAGE-HOME 规范）。
+        XCTAssertEqual(occurrences(of: "#Preview", in: home), 8)
         XCTAssertTrue(home.contains("HomeView("))
+    }
+
+    /// 焦点行程摘要左边距：PAGE-HOME 摘要与页面 18pt 水平边距对齐，content 槽位必须真正应用传入参数。
+    func testFocusTripSummaryAppliesSpecifiedHorizontalPadding() throws {
+        let focus = try productionSource(at: "Features/Home/Components/FocusTripSummary.swift")
+        XCTAssertTrue(
+            focus.contains(".padding(.horizontal, horizontalPadding)"),
+            "content 槽位必须应用调用方传入的水平边距，不得接收后丢弃"
+        )
+    }
+
+    /// 首页触控域：ready 且有焦点行程时整页可点开行程详情；子内容自身手势与守卫保证非焦点态为空操作。
+    func testHomePageOffersWholePageTapToOpenFocusedTrip() throws {
+        let home = try productionSource(at: "Features/Home/HomeView.swift")
+        XCTAssertTrue(home.contains("openFocusedTripIfNeeded"), "整页触控复用焦点行程守卫入口")
+        XCTAssertTrue(home.contains(".contentShape(Rectangle())"), "触控域覆盖整页而非仅摘要块")
+        XCTAssertTrue(
+            home.contains("guard case .ready = viewModel.state"),
+            "非焦点状态（guest/loading/error）点击为空操作"
+        )
+    }
+
+    /// 首页无焦点空态：已登录无焦点行程停留在首页呈现空态与主动入口，不再自动跳转全部路线。
+    func testHomePageShowsNoFocusEmptyStateWithoutAutoJump() throws {
+        let home = try productionSource(at: "Features/Home/HomeView.swift")
+        let homeViewModel = try productionSource(at: "Features/Home/HomeViewModel.swift")
+        let root = try productionSource(at: "App/RootView.swift")
+        XCTAssertTrue(home.contains("NoFocusContent"), "无焦点空态由 NoFocusContent 非组件承载")
+        XCTAssertTrue(home.contains("onBrowseRoutes"), "空态主动入口承载 browseRoutes UI 事件")
+        XCTAssertFalse(home.contains("onNoFocus"), "首页不再持有无焦点自动跳转回调")
+        XCTAssertFalse(homeViewModel.contains("onNoFocus"), "HomeViewModel 不再触发无焦点自动跳转")
+        XCTAssertFalse(root.contains("onNoFocus:"), "RootView 不再把无焦点结果接到 showRouteList")
+    }
+
+    /// PAGE-ROUTE-LIST 返回入口：经任意页推入（首页空态、发现流）统一显示返回入口；
+    /// 特判只在 navigate 内拥有一次，来源页不得各自设置。
+    func testRouteListPushedFromAnyTabShowsBackEntry() throws {
+        let root = try productionSource(at: "App/RootView.swift")
+        XCTAssertTrue(
+            root.contains("if destination == .routeList { shell.routeListShowsBackEntry = true }"),
+            "推入 routeList 的返回入口可见性由 navigate 统一设置"
+        )
+        XCTAssertFalse(
+            root.contains("if destination == .routeList { shell.routeListShowsBackEntry = true }\n                navigate"),
+            "来源页 onNavigate 不再各自特判"
+        )
     }
 
     func testStandardNavigationPagesUseSharedRootBackgroundContainer() throws {
         let equipmentSource = try productionSource(at: "Features/Equipment/EquipmentListView.swift")
 
-        XCTAssertTrue(equipmentSource.contains("UtilityPageContainer"))
+        XCTAssertTrue(equipmentSource.contains("UtilityPage("), "二级页由统一壳 UtilityPage 承载（根背景容器收归壳内）")
     }
 
-    func testRouteCardHeightFillsViewportMinusRegisteredVerticalSpacing() {
+    func testRouteDiscoveryLayoutPreservesCardHeightCalculation() {
         XCTAssertEqual(RouteDiscoveryLayout.cardHeight(for: 500), 484)
         XCTAssertEqual(RouteDiscoveryLayout.cardHeight(for: 800), 784)
         XCTAssertEqual(RouteDiscoveryLayout.cardHeight(for: 1_200), 1_184)
@@ -526,6 +727,21 @@ final class DesignSystemTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         return try String(contentsOf: walkRoot.appendingPathComponent(relativePath), encoding: .utf8)
+    }
+
+    /// 个人资料域已按页拆分为独立文件；结构断言聚合读取全部拆分文件。
+    private func profileEntrySources() throws -> String {
+        try [
+            "Features/Profile/SettingsPageShell.swift",
+            "Features/Profile/EntryFormPage.swift",
+            "Features/Profile/ProfileDetailsPage.swift",
+            "Features/Profile/NotificationSettingsPage.swift",
+            "Features/Profile/PrivacySettingsPage.swift",
+            "Features/Profile/HelpFeedbackPage.swift",
+            "Features/Profile/AboutPage.swift",
+        ]
+        .map { try productionSource(at: $0) }
+        .joined(separator: "\n")
     }
 
     func testPersonalTripStatusBadgeColorsMatchApprovedContract() {
@@ -738,12 +954,8 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(discoverySource.contains("不会用缓存猜测替代真实路线资料。"), "重点路线失败态说明")
         XCTAssertTrue(discoverySource.contains("variant: .default"), "重点路线空态使用 EmptyState.default")
         XCTAssertFalse(discoverySource.contains("variant: .compactText"), "发现页不再用 compactText")
-
-        XCTAssertTrue(discoverySource.contains("UIAccessibility.post"), "R3：换页做无障碍公告")
-        XCTAssertTrue(discoverySource.contains("已到第一条路线"), "R3：首页边界公告")
-        XCTAssertTrue(discoverySource.contains("已到最后一条路线"), "R3：末页边界公告")
-        XCTAssertTrue(discoverySource.contains("第 \\(index + 1) 条，共 \\(count) 条"), "R3：中段「{路线身份}，第 X 条，共 N 条」")
-        XCTAssertTrue(discoverySource.contains("guard count > 1"), "R3：单条路线不做公告")
+        XCTAssertFalse(discoverySource.contains("UIAccessibility.post"), "发现页不再做换页无障碍公告")
+        XCTAssertFalse(discoverySource.contains("RoutePagingConfigurator"), "发现页不再有 paging 行为")
 
         XCTAssertTrue(collectionSource.contains("当前暂无可选择路线"), "全部路线空态标题（原型 h3）")
         XCTAssertTrue(collectionSource.contains("路线准备完成后会出现在这里。"), "全部路线空态说明（原型 p）")
@@ -817,18 +1029,15 @@ final class DesignSystemTests: XCTestCase {
         )
     }
 
-    func testTripDetailKeepsBlockedRouteVersionAndMetricsInExistingRegion() throws {
+    func testTripDetailContainsRouteVersionAndMetricsInBody() throws {
         let detail = try productionSource(at: "Features/Trips/TripDetailView.swift")
+        let routeCard = try productionSource(at: "Features/Trips/Components/TripRouteSummaryCard.swift")
 
-        XCTAssertFalse(detail.contains("private struct TripRouteSummaryCard: View"), "不再保留私有聚合 TripRouteSummaryCard")
-        XCTAssertFalse(detail.contains("routeMetrics(route)"))
-        XCTAssertFalse(detail.contains("var versionContent"))
-        XCTAssertTrue(detail.contains("TripBusinessComponents.TripRouteVersionCard("), "使用生产 TripRouteVersionCard")
-        XCTAssertTrue(detail.contains("TripBusinessComponents.TripRouteMetricsSummary("), "使用生产 TripRouteMetricsSummary")
-        XCTAssertTrue(detail.contains("TripBusinessComponents.TripRouteSummaryCard("), "使用生产路线入口 TripRouteSummaryCard")
-        XCTAssertTrue(detail.contains("routeVersionProjection("), "页面构造版本投影")
-        XCTAssertTrue(detail.contains("routeMetricsProjection("), "页面构造指标投影")
-        XCTAssertTrue(detail.contains("routeEntryProjection("), "页面构造路线入口投影")
+        // PAGE-TRIP-DETAIL 正文承载路线入口卡；指标摘要并入走向卡、置于海拔图上方；版本卡已退役。
+        XCTAssertFalse(detail.contains("TripBusinessComponents.TripRouteVersionCard("), "版本卡不再承载于 DETAIL 正文")
+        XCTAssertTrue(routeCard.contains("TripBusinessComponents.TripRouteMetricsSummary("), "指标摘要并入走向卡置于海拔图上方")
+        XCTAssertTrue(detail.contains("TripBusinessComponents.TripRouteSummaryCard("), "DETAIL 正文承载路线入口卡")
+        XCTAssertTrue(detail.contains("routeEntryProjection("), "DETAIL 构造路线入口投影")
     }
 
     func testTripListEmptyStatePointsToRouteDiscovery() throws {
@@ -838,12 +1047,12 @@ final class DesignSystemTests: XCTestCase {
 
     func testTripListUsesApprovedPageStatesAndSpacing() throws {
         let list = try productionSource(at: "Features/Trips/TripListView.swift")
-        XCTAssertTrue(list.contains(".padding(.top, Spacing.lg)"), "滚动内容顶部距固定导航头 lg")
+        XCTAssertTrue(list.contains("UtilityPage(title:"), "二级页滚动与顶部间距由统一壳承载，页面不自写固定导航头间距")
         XCTAssertTrue(list.contains("variant: .default"), "全局空态使用 EmptyState.default")
         XCTAssertTrue(list.contains("variant: .page"), "加载失败使用 ErrorView.page")
         XCTAssertFalse(list.contains("variant: .section"), "PAGE-TRIPS 全局状态不得使用 Section 变体")
-        XCTAssertTrue(list.contains("个人行程找回"), "TripsTitleBlock kicker")
-        XCTAssertTrue(list.contains("当前行程和历史行程在同一页面分组展示。"), "TripsTitleBlock 副标题")
+        XCTAssertFalse(list.contains("个人行程找回"), "页面标题只呈现一次：正文不重复标题块与 kicker")
+        XCTAssertFalse(list.contains("当前行程和历史行程在同一页面分组展示。"), "正文不重复纯解释性副标题")
         XCTAssertTrue(list.contains("无法加载行程列表"), "错误态标题钉入 spec")
         XCTAssertTrue(list.contains("不会使用缓存或离线行程补齐。"), "错误态说明钉入 spec")
         XCTAssertTrue(list.contains("icon: \"calendar\""), "全局空态图标 calendar（原型证据）")
@@ -887,14 +1096,17 @@ final class DesignSystemTests: XCTestCase {
     }
 
     func testTripDayKeepsServerActionAndPointOrderAndEdgeHint() throws {
-        let day = try productionSource(at: "Features/Trips/TripDayWeatherViews.swift")
-        XCTAssertTrue(day.contains("ForEach(presentation.presentationItems)"), "行动按后端 sequence 原序展示")
-        XCTAssertTrue(day.contains("ForEach(presentation.pointItems)"), "点位按单一 sequence 流展示")
-        XCTAssertFalse(day.contains("departureTransportActions"), "客户端不推断去程交通槽位")
-        XCTAssertFalse(day.contains("groupedPoints"), "客户端不按类别重排点位")
-        XCTAssertTrue(day.contains("本次行程只有一天"), "一日行程边界提示")
-        XCTAssertTrue(day.contains("到达底部后继续上滑查看"), "非末日边界提示指向下一日")
-        XCTAssertTrue(day.contains("已到行程最后一天"), "末日边界提示")
+        let browse = try productionSource(at: "Features/Trips/TripBrowseView.swift")
+        XCTAssertTrue(browse.contains("boundaryCue"), "日尾边界提示由浏览页承担")
+        let plan = try productionSource(at: "Features/Trips/TripBrowsePagePlan.swift")
+        XCTAssertTrue(plan.contains("presentationItems"), "行动按后端 sequence 原序展示")
+        XCTAssertTrue(plan.contains("pointItems"), "点位按单一 sequence 流展示")
+        XCTAssertFalse(plan.contains("departureTransportActions"), "客户端不推断去程交通槽位")
+        XCTAssertFalse(plan.contains("groupedPoints"), "客户端不按类别重排点位")
+        XCTAssertTrue(browse.contains("本次行程只有一天"), "一日行程边界提示")
+        XCTAssertTrue(browse.contains("到达底部后继续上滑查看下一日"), "非末日边界提示指向边界越界翻页")
+        XCTAssertTrue(browse.contains("已到行程最后一天"), "末日边界提示")
+        let day = try productionSource(at: "Features/Trips/Components/TripDayArrangement.swift")
         XCTAssertTrue(day.contains("spacing: Spacing.md"), "内部滚动区行距使用 canonical md token")
         XCTAssertFalse(day.contains("Spacing.listItemGap"), "禁止旧 listItemGap alias")
     }
@@ -915,10 +1127,10 @@ final class DesignSystemTests: XCTestCase {
 
     func testTripEquipmentFollowsSectionedSpec() throws {
         let equipment = try productionSource(at: "Features/Trips/TripEquipment.swift")
-        // PAGE-TRIP-EQUIPMENT 权威：固定导航用 UtilityNavigationHeader（非 .navigationTitle），
+        // PAGE-TRIP-EQUIPMENT 权威：页面由统一二级页壳承载（固定导航头由壳内部装配），
         // 清单不可用用 ErrorView.page（非 UnavailableStateView），保存失败经 InlineEquipmentEditor.saveError。
-        XCTAssertTrue(equipment.contains("UtilityNavigationHeader("), "固定导航头")
-        XCTAssertTrue(equipment.contains("title: \"行程装备\""), "导航头标题")
+        XCTAssertTrue(equipment.contains("UtilityPage("), "页面由统一二级页壳承载（固定导航头由壳内部装配）")
+        XCTAssertTrue(equipment.contains("title: \"行程装备\""), "页题交由壳标题区")
         XCTAssertTrue(equipment.contains("本次清单为空"), "空态标题钉入 spec（6.4 T6）")
         XCTAssertTrue(equipment.contains("新增本次装备"), "次级操作新增")
         XCTAssertTrue(equipment.contains("管理我的装备"), "次级操作管理")
@@ -952,7 +1164,10 @@ final class DesignSystemTests: XCTestCase {
     /// PAGE-LOGIN：FormField 容器与 TextInput 容器不可嵌套（双层边框缺陷）；背景环境动画用 Lottie 承载。
     func testLoginUsesSingleLayerFormControlsAndAnimatedBackground() throws {
         let authPanel = try productionSource(at: "Features/Profile/Components/AuthPanel.swift")
-        XCTAssertFalse(authPanel.contains("TextInput("), "FormField 自带容器样式，嵌套自带容器的 TextInput 会产生双层边框")
+        XCTAssertFalse(
+            authPanel.range(of: "\\bTextInput\\(", options: .regularExpression) != nil,
+            "FormField 自带容器样式，嵌套自带容器的 TextInput 会产生双层边框"
+        )
         XCTAssertTrue(authPanel.contains("TextField("), "FormField 内使用裸 TextField 控件")
         XCTAssertTrue(authPanel.contains("@FocusState"), "焦点态由 AuthPanel 持有并驱动 FormField 聚焦描边")
 
@@ -1049,16 +1264,45 @@ final class DesignSystemTests: XCTestCase {
         // 按 PAGE-ME / PAGE-ACCOUNT-MENU 权威，查看入口、脱敏账号与关于行由 TripCalendarCard / AccountMenuView 承载，不在我的页。
         let calendarCard = try productionSource(at: "Features/Trips/Components/TripCalendarCard.swift")
         XCTAssertTrue(calendarCard.contains("查看全部"), "行程日历查看入口在 TripCalendarCard 组件内")
+        // 按 PAGE-ACCOUNT-MENU 权威，脱敏账号摘要由设置主页身份头部 ProfileIdentityHeader 组件承载。
+        let identityHeader = try productionSource(at: "Features/Profile/Components/ProfileIdentityHeader.swift")
+        XCTAssertTrue(identityHeader.contains("maskedPhone"), "脱敏账号摘要在账户菜单身份头部组件内")
         let accountMenu = try productionSource(at: "Features/Profile/AccountMenuView.swift")
-        XCTAssertTrue(accountMenu.contains("maskedPhone"), "脱敏账号摘要在账户菜单页内")
+        XCTAssertTrue(accountMenu.contains("ProfileIdentityHeader("), "设置主页使用身份头部组件")
         XCTAssertTrue(accountMenu.contains("关于 Walk"), "关于行文案在账户菜单页内")
+        XCTAssertFalse(accountMenu.contains("isCloseActionPresented"), "账户菜单不显示右上角叉号")
+        XCTAssertFalse(accountMenu.contains("accountSecurity"), "账号与安全已从设置主页移除")
         XCTAssertFalse(profile.contains("fullScreenCover"), "模态承载在 RootView，我的页自身不弹覆盖层")
         XCTAssertTrue(profile.contains("onOpenAccountMenu("), "头像入口弹出 PAGE-ACCOUNT-MENU 模态")
     }
 
+    func testSettingsDetailSheetsFollowModalPageSpec() throws {
+        let entryPages = try profileEntrySources()
+
+        XCTAssertFalse(entryPages.contains("AccountSecurityView"), "账号与安全二级页已退役")
+        XCTAssertTrue(entryPages.contains("UtilityPage("), "二级设置页使用统一页面壳 UtilityPage，不再自建骨架")
+        XCTAssertFalse(entryPages.contains("SettingsDetailPage"), "旧设置页壳已退役")
+        XCTAssertTrue(entryPages.contains("SurfaceElevated"), "二级设置页 Section 使用浅层表面")
+        XCTAssertTrue(entryPages.contains("EntrySettingsRow"), "二级设置页使用左右信息行")
+        XCTAssertTrue(entryPages.contains("surfaceDivider"), "二级设置页行间使用横线分隔")
+        XCTAssertTrue(entryPages.contains("反馈内容") && entryPages.contains("提交"), "反馈页仅保留内容与提交")
+        XCTAssertFalse(entryPages.contains("常见问题"), "反馈页不再包含常见问题")
+        XCTAssertFalse(entryPages.contains("EntryPageContract.feedbackFields[0]"), "反馈页不再包含分类")
+        XCTAssertTrue(entryPages.contains("Walk 是一款面向徒步爱好者的行程规划应用"), "关于页使用已确认介绍")
+        XCTAssertTrue(entryPages.contains("CFBundleShortVersionString"), "关于页展示当前版本号")
+        XCTAssertFalse(entryPages.contains("EntrySettingsRow(title: \"版本\""), "关于页版本号居中展示，不使用左右信息行")
+    }
+
+    func testHelpFeedbackSubmitClearsContentWithLocalSuccess() async throws {
+        let source = try profileEntrySources()
+        XCTAssertTrue(source.contains("feedbackSubmitted"), "反馈提交提供本地成功反馈")
+        XCTAssertTrue(source.contains("feedback = \"\""), "提交后清空反馈内容")
+        XCTAssertFalse(source.contains("uploadFeedback") && source.contains("apiClient"), "反馈提交不发起网络请求")
+    }
+
     func testEquipmentListFollowsPageStructureSpec() throws {
         let list = try productionSource(at: "Features/Equipment/EquipmentListView.swift")
-        XCTAssertTrue(list.contains("长期个人资产"), "页题区引导语")
+        XCTAssertFalse(list.contains("长期个人资产"), "二级页页题不含宣传性 kicker")
         XCTAssertTrue(list.contains("装备与清单"), "页题区标题")
         XCTAssertTrue(list.contains("个人装备记录实际拥有数量和可选单件重量；清单按清单内数量汇总预计总重量。"), "页题区说明")
         // PAGE-MY-EQUIPMENT 权威页签为 SegmentedControl 通用组件，非原生 .pickerStyle(.segmented)；
@@ -1080,9 +1324,7 @@ final class DesignSystemTests: XCTestCase {
 
     func testEquipmentEditFollowsPageStructureSpec() throws {
         let edit = try productionSource(at: "Features/Equipment/AddEquipmentView.swift")
-        XCTAssertTrue(edit.contains("新增个人装备"))
-        XCTAssertTrue(edit.contains("编辑个人装备"))
-        XCTAssertTrue(edit.contains("写入长期个人资产"))
+        XCTAssertFalse(edit.contains("写入长期个人资产"), "二级页页题不含宣传性 kicker")
         XCTAssertTrue(edit.contains("新增一件装备"))
         XCTAssertTrue(edit.contains("更新装备"))
         XCTAssertTrue(edit.contains("只维护装备名称、实际拥有数量和可选的单件重量。"))
@@ -1091,21 +1333,21 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertFalse(edit.contains("if #available(iOS 17.0"), "iOS 16 也必须展示装备名称输入")
         XCTAssertTrue(edit.contains("删除后会从用户装备清单移除，但不会修改已经生成的行程装备。"))
         XCTAssertTrue(edit.contains("\"保存\""), "底部固定主按钮保存")
-        XCTAssertTrue(edit.contains(".safeAreaInset(edge: .bottom"))
+        XCTAssertTrue(edit.contains("bottomFixed:"), "固定底部动作交由壳的 bottomFixed 插槽（safeAreaInset 由壳统一）")
     }
 
     func testEntryFormPageSupportsPageHeadingWithoutBreakingSharedForm() throws {
-        let pages = try productionSource(at: "Features/Profile/ProfileEntryPages.swift")
+        let pages = try profileEntrySources()
         XCTAssertTrue(pages.contains("guide: String? = nil"), "引导语参数可选")
         XCTAssertTrue(pages.contains("pageTitle: String? = nil"), "页内标题参数可选")
         XCTAssertTrue(pages.contains("fieldSpacing: CGFloat = Spacing.lg"), "字段间距参数可配置")
     }
 
     func testEntryFormPageUsesUnifiedNavigationShell() throws {
-        let pages = try productionSource(at: "Features/Profile/ProfileEntryPages.swift")
-        XCTAssertTrue(pages.contains("UtilityNavigationHeader("), "设置子页与全 App 二级页共用自绘返回壳")
-        XCTAssertTrue(pages.contains(".toolbar(.hidden, for: .navigationBar)"), "隐藏系统导航栏")
-        XCTAssertTrue(pages.contains("dismiss()"), "返回入口语义为移除当前页")
+        let pages = try profileEntrySources()
+        XCTAssertTrue(pages.contains("UtilityPage("), "设置子页与全 App 二级页共用统一页面壳 UtilityPage")
+        XCTAssertFalse(pages.contains("UtilityNavigationHeader("), "页面不自装配导航行，返回壳由 UtilityPage 统一承载")
+        XCTAssertFalse(pages.contains(".toolbar(.hidden"), "隐藏系统导航栏/标签页由壳统一处理")
         XCTAssertFalse(pages.contains(".navigationTitle"), "不再依赖系统导航标题")
         XCTAssertFalse(pages.contains("navigationBarTitleDisplayMode"), "不再依赖系统导航栏")
     }

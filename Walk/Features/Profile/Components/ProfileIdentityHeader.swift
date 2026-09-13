@@ -2,67 +2,70 @@ import SwiftUI
 import WalkData
 import WalkDesignSystem
 
-struct ProfileIdentityHeaderProjection: Equatable {
-    let nickname: String?
-    let maskedPhone: String
-    let hasAvatar: Bool
-
-    init(nickname: String?, maskedPhone: String, hasAvatar: Bool) {
-        self.nickname = nickname
-        self.maskedPhone = maskedPhone
-        self.hasAvatar = hasAvatar
-    }
-
-    init(profile: ProfileProjection) {
-        self.init(
-            nickname: profile.nickname,
-            maskedPhone: profile.maskedPhone,
-            hasAvatar: profile.avatar != nil
-        )
-    }
-}
-
 enum AccountEquipmentBusinessComponents {
+    /// 设置主页身份头部：左侧用户名（昵称缺失时显示身份）与必有脱敏手机号，
+    /// 右侧 48 逻辑点圆形头像选择入口。只输出 selectAvatar，不解析身份、
+    /// 不加载媒体、不决定导航；头像更新中禁用入口，失败保持兜底内容。
     struct ProfileIdentityHeader: View {
-        let projection: ProfileIdentityHeaderProjection
+        enum AvatarState {
+            case ready
+            case updating
+            case failed
+        }
+
+        let profile: ProfileProjection
         var avatarImage: Image? = nil
-
-        init(projection: ProfileIdentityHeaderProjection, avatarImage: Image? = nil) {
-            self.projection = projection
-            self.avatarImage = avatarImage
-        }
-
-        init(profile: ProfileProjection, avatarImage: Image? = nil) {
-            self.init(projection: ProfileIdentityHeaderProjection(profile: profile), avatarImage: avatarImage)
-        }
+        var avatarState: AvatarState = .ready
+        let onSelectAvatar: () -> Void
 
         var body: some View {
             HStack(alignment: .center, spacing: Spacing.md) {
-                if projection.hasAvatar, let avatarImage {
-                    avatarImage
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 48, height: 48)
-                        .clipShape(Circle())
-                        .accessibilityHidden(true)
-                }
-
                 VStack(alignment: .leading, spacing: Spacing.xs) {
-                    if let nickname = projection.nickname {
-                        Text(nickname)
-                            .font(.identityTitle)
-                            .foregroundStyle(AppColors.textPrimary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    Text(profile.nickname ?? "Walk 用户")
+                        .font(.identityTitle)
+                        .foregroundStyle(AppColors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(1)
 
-                    Text(projection.maskedPhone)
+                    Text(profile.maskedPhone)
                         .font(.micro)
                         .foregroundStyle(AppColors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button(action: onSelectAvatar) {
+                    ZStack {
+                        Circle()
+                            .fill(AppColors.surfaceElevated)
+                            .frame(width: 48, height: 48)
+
+                        if avatarState == .updating {
+                            ProgressView()
+                                .tint(AppColors.textPrimary)
+                        } else if let avatarImage {
+                            avatarImage
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 48, height: 48)
+                                .clipShape(Circle())
+                        } else {
+                            Image(systemName: "person.crop.circle")
+                                .font(.ornament(24, weight: .regular))
+                                .foregroundStyle(AppColors.textSecondary)
+                        }
+                    }
+                    .overlay {
+                        Circle().stroke(AppColors.borderSubtle, lineWidth: 1)
+                    }
+                    .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(avatarState == .updating)
+                .opacity(avatarState == .updating ? 0.55 : 1)
+                .accessibilityLabel("更换头像")
+                .accessibilityHint(avatarState == .failed ? "上次头像更新失败，可重试" : "")
             }
-            .accessibilityElement(children: .combine)
         }
     }
 }
@@ -71,7 +74,8 @@ enum AccountEquipmentBusinessComponents {
 #Preview("ProfileIdentityHeader.default") {
     BusinessComponentPreviewHost {
         AccountEquipmentBusinessComponents.ProfileIdentityHeader(
-            profile: BusinessComponentPreviewFixtures.profileDefault
+            profile: BusinessComponentPreviewFixtures.profileDefault,
+            onSelectAvatar: {}
         )
     }
 }
@@ -79,7 +83,8 @@ enum AccountEquipmentBusinessComponents {
 #Preview("ProfileIdentityHeader.minimal") {
     BusinessComponentPreviewHost {
         AccountEquipmentBusinessComponents.ProfileIdentityHeader(
-            profile: BusinessComponentPreviewFixtures.profileMinimal
+            profile: BusinessComponentPreviewFixtures.profileMinimal,
+            onSelectAvatar: {}
         )
     }
 }

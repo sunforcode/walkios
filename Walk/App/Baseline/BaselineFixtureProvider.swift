@@ -283,7 +283,35 @@ enum BaselineFixtureProvider {
         distance: RouteDistance(meters: 12_100),
         ascent: RouteElevationGain(meters: 600),
         descent: RouteElevationLoss(meters: 580),
-        maxElevation: RouteElevation(meters: 1_412)
+        maxElevation: RouteElevation(meters: 1_412),
+        introduction: "云岭环线绕行北麓山脊，串联垭口、营地与溪谷，全程以徒步为主，适合两天以上的慢节奏穿越。",
+        routeOrientation: "自云栈口出发，逆时针经折风垭口、星落台营地与松雾溪谷后回到起点，整体为环线走向。",
+        elevationProfile: FrozenRouteElevationProfile(
+            minElevation: RouteElevation(meters: 980),
+            maxElevation: RouteElevation(meters: 1_412),
+            samples: [
+                FrozenRouteElevationSample(
+                    distance: RouteDistance(meters: 0),
+                    elevation: RouteElevation(meters: 980)
+                ),
+                FrozenRouteElevationSample(
+                    distance: RouteDistance(meters: 3_200),
+                    elevation: RouteElevation(meters: 1_240)
+                ),
+                FrozenRouteElevationSample(
+                    distance: RouteDistance(meters: 6_400),
+                    elevation: RouteElevation(meters: 1_412)
+                ),
+                FrozenRouteElevationSample(
+                    distance: RouteDistance(meters: 9_600),
+                    elevation: RouteElevation(meters: 1_150)
+                ),
+                FrozenRouteElevationSample(
+                    distance: RouteDistance(meters: 12_100),
+                    elevation: RouteElevation(meters: 980)
+                ),
+            ]
+        )
     )
 
     private static let equipmentSummary = PersonalTripEquipmentSummary(

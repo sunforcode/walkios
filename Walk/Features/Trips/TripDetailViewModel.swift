@@ -25,7 +25,6 @@ struct TripDetailPresentation: Equatable {
             endDate: detail.trip.endDate.description,
             totalDayCount: detail.trip.totalDayCount,
             hikingDayCount: detail.trip.hikingDayCount,
-            versionLabel: detail.trip.frozenRouteBasis.versionLabel,
             coverAvailable: false
         )
     }
@@ -34,10 +33,83 @@ struct TripDetailPresentation: Equatable {
         days.days.map { Self.dayProjection($0, totalTrekDays: days.hikingDayCount) }
     }
 
+    /// 概览日入口投影：仅冻结事实（日序、日期、徒步日序、当日行程起讫）。
+    var dayOverviewEntries: [TripDayOverviewEntryProjection] {
+        days.days
+            .sorted { $0.dayNumber < $1.dayNumber }
+            .map { day in
+                TripDayOverviewEntryProjection(
+                    tripDayID: day.identity,
+                    dayNumber: day.dayNumber,
+                    date: Self.overviewDateText(day.date),
+                    hikingDayNumber: day.hikingDayNumber,
+                    totalTrekDays: days.hikingDayCount,
+                    subtitle: Self.overviewSubtitle(day)
+                )
+            }
+    }
+
+    /// 副标题只来自冻结行动事实：徒步日取起讫点名，交通日取接驳起讫链；缺失为 nil。
+    private static func overviewSubtitle(_ day: PersonalTripDay) -> String? {
+        if let hike = day.actions.first(where: { $0.actionType == "hike" }) {
+            let names = [hike.start?.value?.name, hike.end?.value?.name].compactMap { $0 }
+            return names.isEmpty ? nil : names.joined(separator: " → ")
+        }
+        let chain = day.actions
+            .filter { ["long_distance_transport", "route_transfer"].contains($0.actionType) }
+            .compactMap { action -> [String]? in
+                let origin = action.origin?.value?.name
+                let destination = action.destination?.value?.name
+                guard origin != nil || destination != nil else { return nil }
+                return [origin, destination].compactMap { $0 }
+            }
+            .map { $0.joined(separator: " → ") }
+            .joined(separator: " → ")
+        return tripNonEmpty(chain)
+    }
+
+    private static func overviewDateText(_ date: LocalDate) -> String {
+        "\(date.month)月\(date.day)日"
+    }
+
     var weatherSummaryProjection: TripWeatherSummaryProjection? {
         let samples = days.days.compactMap(Self.trendSample)
         guard !samples.isEmpty else { return nil }
         return TripWeatherSummaryProjection(samples: samples, notice: nil)
+    }
+
+    /// 行程详情页每日独立天气卡投影：从冻结自然日天气直接派生，地点取冻结 placeContext。
+    var weatherDayProjections: [TripWeatherDayProjection] {
+        days.days.map { day in
+            TripWeatherDayProjection(
+                id: day.identity,
+                dayNumber: day.dayNumber,
+                date: Self.overviewDateText(day.date),
+                primaryStage: day.primaryStage,
+                hikingDayNumber: day.hikingDayNumber,
+                placeContext: Self.nonEmptyText(day.weather.placeContext.value),
+                weather: TripWeatherProjection(
+                    condition: Self.weatherValue(TripWeatherFieldPresentation(qualified: day.weather.condition)),
+                    temperature: Self.weatherValue(TripWeatherFieldPresentation(temperatureRange: day.weather.temperatureRange)),
+                    precipitation: Self.weatherValue(TripWeatherFieldPresentation(qualified: day.weather.precipitation)),
+                    wind: Self.weatherValue(TripWeatherFieldPresentation(qualified: day.weather.wind))
+                )
+            )
+        }
+    }
+
+    private static func nonEmptyText(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        return value
+    }
+
+    private static func weatherValue(_ field: TripWeatherFieldPresentation) -> TripWeatherValueProjection {
+        TripWeatherValueProjection(
+            value: field.text,
+            state: TripWeatherDayComponentPresentation.informationState(field.status)
+        )
     }
 
     /// 天气摘要从冻结自然日派生（方案 A）：不依赖独立天气关联接口，
@@ -85,7 +157,7 @@ struct TripDetailPresentation: Equatable {
 
     var blocks: [TripDetailBlock] {
         var result: [TripDetailBlock] = [.identity, .days, .route]
-        if weatherSummaryProjection != nil || detail.trip.weatherOverview?.summary.value != nil {
+        if !weatherDayProjections.isEmpty || detail.trip.weatherOverview?.summary.value != nil {
             result.append(.weather)
         }
         result.append(.equipment)
@@ -120,6 +192,14 @@ struct TripDetailPresentation: Equatable {
                     trailing: item.point.type
                 )
             },
+            resources: presentation.pointItems.map { item in
+                TripDayResourceProjection(
+                    id: "point-\(item.sequence)",
+                    category: item.point.type,
+                    name: item.point.name,
+                    distance: item.point.distance?.value.map { distanceText($0.meters) }
+                )
+            },
             weather: TripWeatherDayComponentPresentation(
                 day: PersonalTripWeatherDay(
                     tripDayID: day.identity,
@@ -138,7 +218,7 @@ struct TripDetailPresentation: Equatable {
         )
     }
 
-    private static func actionTitle(_ action: PersonalTripAction) -> String {
+    static func actionTitle(_ action: PersonalTripAction) -> String {
         switch action.actionType {
         case "long_distance_transport": "大交通"
         case "route_transfer": "路线接驳"
@@ -148,7 +228,7 @@ struct TripDetailPresentation: Equatable {
     }
 
     /// 接驳块按徒步行动分段：首段徒步之前的交通为去程，末段徒步之后的为返程。
-    private static func transportProjection(
+    static func transportProjection(
         day: PersonalTripDay,
         direction: TripDayTransportSummaryProjection.Direction
     ) -> TripDayTransportSummaryProjection? {
@@ -169,6 +249,15 @@ struct TripDetailPresentation: Equatable {
             guard let lastHike = hikeSequences.max() else { return nil }
             selected = transportActions.filter { $0.sequence > lastHike }
         }
+        guard !selected.isEmpty else { return nil }
+        return transportProjection(from: selected, direction: direction)
+    }
+
+    /// 由给定交通行动集合构造接驳摘要投影；供浏览页无徒步日复用。
+    static func transportProjection(
+        from selected: [PersonalTripAction],
+        direction: TripDayTransportSummaryProjection.Direction
+    ) -> TripDayTransportSummaryProjection? {
         guard !selected.isEmpty else { return nil }
 
         let places = selected.compactMap { action -> [String]? in
@@ -200,7 +289,7 @@ struct TripDetailPresentation: Equatable {
         )
     }
 
-    private static func hikeProjection(from actions: [PersonalTripAction]) -> TripDayHikeSummaryProjection? {
+    static func hikeProjection(from actions: [PersonalTripAction]) -> TripDayHikeSummaryProjection? {
         guard let hike = actions.first(where: { $0.actionType == "hike" }) else { return nil }
 
         var nodes: [TripDayHikeNodeProjection] = []

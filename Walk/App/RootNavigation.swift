@@ -39,7 +39,6 @@ enum AppDestination: Hashable {
     case routeSearch
     case routeDetail(String)
     case profileDetails
-    case accountSecurity
     case notificationSettings
     case privacySettings
     case helpAndFeedback
@@ -47,10 +46,10 @@ enum AppDestination: Hashable {
     case tripList
     case createTrip(routeID: String)
     case tripDetail(String)
+    case tripBrowse(tripID: String, dayNumber: Int)
     case tripEquipment(String)
     case personalEquipment
     case equipmentEdit(equipmentID: String?)
-    case tripDay(tripID: String, initialDayID: String)
     case tripWeather(String)
 
     var pageID: String {
@@ -58,15 +57,15 @@ enum AppDestination: Hashable {
         case .routeList: "PAGE-ROUTE-LIST"
         case .routeSearch: "PAGE-SEARCH"
         case .routeDetail: "PAGE-ROUTE-DETAIL"
-        case .profileDetails, .accountSecurity, .notificationSettings, .privacySettings,
+        case .profileDetails, .notificationSettings, .privacySettings,
              .helpAndFeedback, .about: "PAGE-ME"
         case .tripList: "PAGE-TRIPS"
         case .createTrip: "PAGE-TRIP-CREATE"
         case .tripDetail: "PAGE-TRIP-DETAIL"
+        case .tripBrowse: "PAGE-TRIP-BROWSE"
         case .tripEquipment: "PAGE-TRIP-EQUIPMENT"
         case .personalEquipment: "PAGE-MY-EQUIPMENT"
         case .equipmentEdit: "PAGE-EQUIPMENT-EDIT"
-        case .tripDay: "PAGE-TRIP-DAY"
         case .tripWeather: "PAGE-TRIP-WEATHER"
         }
     }
@@ -83,11 +82,11 @@ enum EntryPageContract {
 
 struct AppShellState: Equatable {
     var selectedTab: AppTab = .home
-    /// PAGE-ROUTE-LIST 的返回入口可见性：由到达方式决定（发现页推入显示，首页落点不显示）。
+    /// PAGE-ROUTE-LIST 的返回入口可见性：由到达方式决定（发现页推入显示，行程清单找路线等任务栈根页到达不显示）。
     var routeListShowsBackEntry = false
     /// PAGE-LOGIN 为 Modal 任务，全屏覆盖呈现，不进入任务栈。
     var isLoginPresented = false
-    /// PAGE-ACCOUNT-MENU 为 Modal 任务，以模态 Sheet 呈现，不进入任务栈；设置项目标页由我的页任务栈承接。
+    /// PAGE-ACCOUNT-MENU 为 Modal 任务，以模态 Sheet 呈现，不进入任务栈；设置项由 Modal 内部导航承载。
     var isAccountMenuPresented = false
 
     private var homePath: [AppDestination] = []
@@ -168,7 +167,8 @@ enum RootNavigation {
     static let toolButtonHitSize = minimumHitSize
 
     // 一级导航由系统 tab bar 承载：不增加独立胶囊；沉浸式场景延伸至系统边缘。
-    // 保持 tabBar 背景透明，只保留 Tab 项的选中/未选文字与图标色。
+    // 内容在顶部（scrollEdge）时背景透明；内容滚到 bar 下方（standard）时使用系统材质，
+    // 由系统在两套外观间播放透明↔材质过渡。只保留 Tab 项的选中/未选文字与图标色。
     static func makeTabBarAppearance() -> UITabBarAppearance {
         let appearance = UITabBarAppearance()
         appearance.configureWithTransparentBackground()
@@ -191,9 +191,11 @@ enum RootNavigation {
     }
 
     static func applyTabBarAppearance() {
-        let appearance = makeTabBarAppearance()
-        UITabBar.appearance().standardAppearance = appearance
-        UITabBar.appearance().scrollEdgeAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = makeTabBarAppearance()
+
+        let standard = makeTabBarAppearance()
+        standard.configureWithDefaultBackground()
+        UITabBar.appearance().standardAppearance = standard
     }
 
     static func makeNavigationBarAppearance() -> UINavigationBarAppearance {
@@ -215,11 +217,13 @@ enum RootNavigation {
 }
 
 enum HomeStyle {
-    static let gradientStops: [Gradient.Stop] = [
-        .init(color: AppColors.sceneForestHighlight, location: 0),
-        .init(color: AppColors.sceneForestMiddle, location: 0.46),
-        .init(color: AppColors.pageBase, location: 1),
-    ]
+// 与路线、我的两个一级页共用同一色彩序列（pageOuter→pageMiddle→pageBase），
+// 只保留首页特有的渐变方向与山形剪影作为页面构图差异。
+static let gradientStops: [Gradient.Stop] = [
+.init(color: AppColors.pageOuter, location: 0),
+.init(color: AppColors.pageMiddle, location: 0.46),
+.init(color: AppColors.pageBase, location: 1),
+]
     static let gradientStartPoint = UnitPoint(x: 0, y: 0)
     static let gradientEndPoint = UnitPoint(x: 1, y: 1)
     static let weatherPlaceholder = "天气摘要暂不可用"

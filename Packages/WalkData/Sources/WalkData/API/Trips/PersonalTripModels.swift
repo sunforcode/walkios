@@ -1,5 +1,34 @@
 import Foundation
 
+/// 冻结海拔剖面自有样本：沿路线累计距离与对应海拔。
+public struct FrozenRouteElevationSample: Codable, Equatable {
+    public let distance: RouteDistance
+    public let elevation: RouteElevation
+
+    public init(distance: RouteDistance, elevation: RouteElevation) {
+        self.distance = distance
+        self.elevation = elevation
+    }
+}
+
+/// 冻结海拔剖面：有序非空样本集合，样本按距离严格递增，
+/// 记录的最小与最大海拔分别等于样本中的最小与最大海拔。
+public struct FrozenRouteElevationProfile: Codable, Equatable {
+    public let minElevation: RouteElevation
+    public let maxElevation: RouteElevation
+    public let samples: [FrozenRouteElevationSample]
+
+    public init(
+        minElevation: RouteElevation,
+        maxElevation: RouteElevation,
+        samples: [FrozenRouteElevationSample]
+    ) {
+        self.minElevation = minElevation
+        self.maxElevation = maxElevation
+        self.samples = samples
+    }
+}
+
 public struct FrozenRouteBasis: Codable, Equatable {
      public let routeName: String
      public let routeType: String
@@ -15,10 +44,14 @@ public struct FrozenRouteBasis: Codable, Equatable {
      public let ascent: RouteElevationGain?
      public let descent: RouteElevationLoss?
      public let maxElevation: RouteElevation?
+     public let introduction: String?
+     public let routeOrientation: String?
+     public let elevationProfile: FrozenRouteElevationProfile?
 
     public enum CodingKeys: String, CodingKey {
         case routeName, routeType, region, start, end, estimatedDuration
         case mainTrackPath, versionLabel, cover, direction, distance, ascent, descent, maxElevation
+        case introduction, routeOrientation, elevationProfile
     }
 
     public init(
@@ -35,7 +68,10 @@ public struct FrozenRouteBasis: Codable, Equatable {
         distance: RouteDistance?,
         ascent: RouteElevationGain?,
         descent: RouteElevationLoss?,
-        maxElevation: RouteElevation?
+        maxElevation: RouteElevation?,
+        introduction: String? = nil,
+        routeOrientation: String? = nil,
+        elevationProfile: FrozenRouteElevationProfile? = nil
     ) {
         self.routeName = routeName
         self.routeType = routeType
@@ -51,6 +87,9 @@ public struct FrozenRouteBasis: Codable, Equatable {
         self.ascent = ascent
         self.descent = descent
         self.maxElevation = maxElevation
+        self.introduction = introduction
+        self.routeOrientation = routeOrientation
+        self.elevationProfile = elevationProfile
     }
 }
 
@@ -559,7 +598,8 @@ public struct PersonalTripDayWeather: Codable, Equatable {
      public let precipitation: QualifiedString
      public let wind: QualifiedString
      public let placeContext: QualifiedString
-     public let routeSectionContext: QualifiedString?
+    /// 后端合同为 `QualifiedValue<RouteSectionSnapshotProjection>`：值是冻结路线区段快照对象，不是字符串。
+     public let routeSectionContext: WeatherQualifiedValue<PersonalTripRouteSectionSnapshot>?
      public let source: QualifiedString?
      public let updatedAt: QualifiedInstant?
 
@@ -574,7 +614,7 @@ public struct PersonalTripDayWeather: Codable, Equatable {
         precipitation: QualifiedString,
         wind: QualifiedString,
         placeContext: QualifiedString,
-        routeSectionContext: QualifiedString?,
+        routeSectionContext: WeatherQualifiedValue<PersonalTripRouteSectionSnapshot>?,
         source: QualifiedString?,
         updatedAt: QualifiedInstant?
     ) {

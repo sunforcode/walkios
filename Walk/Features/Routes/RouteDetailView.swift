@@ -8,10 +8,10 @@ private enum RouteDetailLayout {
     static let bottomDetailMinimumHeight: CGFloat = 355
     /// 首屏信息区固定高度（分区式：屏幕分为地图区 + 信息区，信息区只装下标题/描述/标签/指标，剩余全给地图）。
     static let summarySectionHeight: CGFloat = 380
-    /// section 间距（设计系统 token：`Spacing.sectionGap`）。
-    static let sectionSpacing = Spacing.sectionGap
-    /// section 卡片左右边距（悬浮卡样式，设计系统 token：`Spacing.sectionGap`）。
-    static let sectionHorizontalMargin = Spacing.sectionGap
+    /// section 间距（设计系统 token：`Spacing.md`）。
+    static let sectionSpacing = Spacing.md
+    /// section 卡片左右边距（悬浮卡样式，设计系统 token：`Spacing.md`）。
+    static let sectionHorizontalMargin = Spacing.md
     /// 纯地图底部 dock 的估算高度，用于地图镜头底部避让。
     static let pureMapDockHeight: CGFloat = 216
     /// 纯地图下选中区间信息卡的估算高度，用于定位按钮避让。
@@ -37,6 +37,8 @@ struct RouteDetailView: View {
     @State private var isPanelScrolledToTop = true
     /// 信息面顶部下拽的跟手偏移：收起时保持不归零，随收起动画一起滑出。
     @State private var panelDragOffset: CGFloat = 0
+    /// 地图层是否已激活：push 首帧只渲染占位底色，MapKit 引擎启动不与转场动画抢主线程。
+    @State private var isMapLayerActive = false
 
     init(
         routeId: String,
@@ -64,14 +66,21 @@ struct RouteDetailView: View {
         GeometryReader { geometry in
             // 分区式首屏：信息区固定高度，地图区吸收剩余空间。
             // firstSectionHeight 为含内边距的 section 外高，panelSections 调用处再减内边距得内容高。
-            // 滚动内容延伸到物理屏幕底，topSpacer 需补偿底部安全区，让下一 section 顶边刚好落在物理底之外。
-            let topSpacerHeight = geometry.size.height + geometry.safeAreaInsets.bottom
+            // 滚动内容延伸到物理屏幕底，topSpacer 补偿底部Home指示器区域，让下一 section 顶边刚好落在物理底之外。
+            let topSpacerHeight = geometry.size.height + Spacing.safeAreaBottom
                 - RouteDetailLayout.summarySectionHeight
                 - RouteDetailLayout.sectionSpacing
             let firstSectionHeight = RouteDetailLayout.summarySectionHeight
 
             ZStack(alignment: .bottom) {
-                mapLayer(viewportHeight: geometry.size.height)
+                // 占位常驻底层：与地图瓦片加载前的底色一致，MKMapView 就绪后淡入其上。
+                mapPlaceholder
+                    .onAppear { scheduleMapLayerActivation() }
+
+                if isMapLayerActive {
+                    mapLayer(viewportHeight: geometry.size.height)
+                        .transition(.opacity)
+                }
 
                 detailContent(topSpacerHeight: topSpacerHeight, firstSectionHeight: firstSectionHeight)
                     .offset(y: isPureMapActive ? geometry.size.height : 0)
@@ -287,6 +296,23 @@ struct RouteDetailView: View {
                 onScrolledTopChange: { isPanelScrolledToTop = $0 }
             )
         }
+    }
+
+    /// 延迟创建 MKMapView：等 push 转场过半后再启动 MapKit 引擎，避免首帧同步创建撞上转场。
+    private func scheduleMapLayerActivation() {
+        guard !isMapLayerActive else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            withAnimation(.easeIn(duration: 0.2)) {
+                isMapLayerActive = true
+            }
+        }
+    }
+
+    /// 地图占位：与 RouteMap 瓦片加载前的底色一致。
+    private var mapPlaceholder: some View {
+        AppColors.pageBase
+            .ignoresSafeArea()
+            .accessibilityHidden(true)
     }
 
     private func mapLayer(viewportHeight: CGFloat) -> some View {
@@ -622,12 +648,16 @@ private struct RouteDetailScrollOverlay: View {
                 }
             }
 
-            ForEach(Array(presentation.routePointSectionProjections.enumerated()), id: \.element.title) { _, section in
+            ForEach(Array(presentation.routePointGroupProjections.enumerated()), id: \.element.id) { _, group in
                 sectionCard {
-                    RouteBusinessComponents.RoutePointSection(
-                        projection: selectedPointSection(section),
-                        onFocusPoint: onFocusPoint
-                    )
+                    VStack(alignment: .leading, spacing: Spacing.lg) {
+                        ForEach(Array(group.sections.enumerated()), id: \.element.title) { _, section in
+                            RouteBusinessComponents.RoutePointSection(
+                                projection: selectedPointSection(section),
+                                onFocusPoint: onFocusPoint
+                            )
+                        }
+                    }
                 }
             }
 

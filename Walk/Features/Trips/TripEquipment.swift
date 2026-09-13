@@ -100,7 +100,6 @@ final class TripEquipmentViewModel: ObservableObject {
 }
 
 struct TripEquipmentView: View {
-    @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: TripEquipmentViewModel
     @State private var editorMode: TripEquipmentEditorMode?
     @State private var editorName = ""
@@ -127,35 +126,42 @@ struct TripEquipmentView: View {
     }
 
     var body: some View {
-        UtilityPageContainer {
-            VStack(spacing: 0) {
-                UtilityNavigationHeader(
-                    title: "行程装备",
-                    leading: IconButtonConfiguration(
-                        systemName: "chevron.left",
-                        accessibilityLabel: "返回个人行程",
-                        action: { dismiss() }
+        UtilityPage(
+            title: "行程装备",
+            bottomFixed: {
+                if viewModel.projection?.editable == true {
+                    PrimaryAction(
+                        title: editorMode == nil ? "新增本次装备" : "保存本次装备",
+                        isLoading: viewModel.isMutating && editorMode != nil,
+                        isDisabled: viewModel.isMutating || (editorMode != nil && !editorInputIsValid),
+                        fillsWidth: true,
+                        action: {
+                            if editorMode == nil {
+                                beginAdding()
+                            } else {
+                                saveEditor()
+                            }
+                        }
                     )
-                )
-
-                Group {
-                    if viewModel.isLoading && viewModel.projection == nil {
-                        LoadingView(message: "正在加载行程装备", variant: .page)
-                    } else if viewModel.errorMessage != nil, viewModel.projection == nil {
-                        ErrorView(
-                            message: "当前装备快照不可用或汇总不一致。",
-                            title: "无法显示行程装备",
-                            variant: .page,
-                            retry: { Task { await viewModel.load() } }
-                        )
-                    } else if let projection = viewModel.projection {
-                        content(projection)
-                    }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+        ) {
+            Group {
+                if viewModel.isLoading && viewModel.projection == nil {
+                    LoadingView(message: "正在加载行程装备", variant: .page)
+                } else if viewModel.errorMessage != nil, viewModel.projection == nil {
+                    ErrorView(
+                        message: "当前装备快照不可用或汇总不一致。",
+                        title: "无法显示行程装备",
+                        variant: .page,
+                        retry: { Task { await viewModel.load() } }
+                    )
+                } else if let projection = viewModel.projection {
+                    scrollContent(projection)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 420, alignment: .center)
         }
-        .toolbar(.hidden, for: .navigationBar)
         .overlay {
             if let item = deletingItem {
                 ConfirmationDialog(
@@ -181,117 +187,92 @@ struct TripEquipmentView: View {
         }
     }
 
-    private func content(_ projection: TripEquipmentProjection) -> some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: Spacing.xl) {
-                    contextRow(projection.trip)
-                    TripBusinessComponents.TripEquipmentOverview(
-                        projection: TripEquipmentOverviewProjection(
-                            itemCount: projection.snapshot.summary.itemCount,
-                            knownTotalWeightGrams: projection.snapshot.summary.knownTotalWeight.grams,
-                            missingWeightItemCount: projection.snapshot.summary.missingWeightItemCount,
-                            ownedItemCount: projection.snapshot.summary.ownedItemCount,
-                            unconfirmedOwnedItemCount: projection.snapshot.summary.unconfirmedOwnedItemCount
-                        )
+    private func scrollContent(_ projection: TripEquipmentProjection) -> some View {
+        LazyVStack(alignment: .leading, spacing: Spacing.xl) {
+            contextRow(projection.trip)
+            TripBusinessComponents.TripEquipmentOverview(
+                projection: TripEquipmentOverviewProjection(
+                    itemCount: projection.snapshot.summary.itemCount,
+                    knownTotalWeightGrams: projection.snapshot.summary.knownTotalWeight.grams,
+                    missingWeightItemCount: projection.snapshot.summary.missingWeightItemCount,
+                    ownedItemCount: projection.snapshot.summary.ownedItemCount,
+                    unconfirmedOwnedItemCount: projection.snapshot.summary.unconfirmedOwnedItemCount
+                )
+            )
+
+            if !projection.editable {
+                NoticeView(
+                    message: "只有规划中的行程可以调整本次装备。",
+                    title: "当前行程只读",
+                    icon: "lock",
+                    tone: .readonly
+                )
+            }
+
+            if projection.editable, editorMode != nil {
+                AccountEquipmentBusinessComponents.InlineEquipmentEditor(
+                    projection: InlineEquipmentEditorProjection(
+                        title: editorMode?.title ?? "本次装备",
+                        name: editorName,
+                        quantity: editorQuantity,
+                        unitWeight: editorUnitWeight,
+                        note: editorNote,
+                        nameError: editorNameError,
+                        unitWeightError: editorUnitWeightError,
+                        noteError: nil,
+                        saveError: viewModel.errorMessage,
+                        isLoading: viewModel.isMutating
+                    ),
+                    onChangeField: updateEditorField,
+                    onChangeQuantity: { editorQuantity = $0 },
+                    onCancel: cancelEditing
+                )
+            }
+
+            ContentSection(title: "装备清单") {
+                if projection.snapshot.items.isEmpty {
+                    EmptyStateView(
+                        title: "本次清单为空",
+                        message: "预计总重量 0 kg。规划中的行程可以新增只属于当前行程的装备。",
+                        icon: "backpack",
+                        variant: .section
                     )
-
-                    if !projection.editable {
-                        NoticeView(
-                            message: "只有规划中的行程可以调整本次装备。",
-                            title: "当前行程只读",
-                            icon: "lock",
-                            tone: .readonly
-                        )
-                    }
-
-                    if projection.editable, editorMode != nil {
-                        AccountEquipmentBusinessComponents.InlineEquipmentEditor(
-                            projection: InlineEquipmentEditorProjection(
-                                title: editorMode?.title ?? "本次装备",
-                                name: editorName,
-                                quantity: editorQuantity,
-                                unitWeight: editorUnitWeight,
-                                note: editorNote,
-                                nameError: editorNameError,
-                                unitWeightError: editorUnitWeightError,
-                                noteError: nil,
-                                saveError: viewModel.errorMessage,
-                                isLoading: viewModel.isMutating
-                            ),
-                            onChangeField: updateEditorField,
-                            onChangeQuantity: { editorQuantity = $0 },
-                            onCancel: cancelEditing
-                        )
-                    }
-
-                    ContentSection(title: "装备清单") {
-                        if projection.snapshot.items.isEmpty {
-                            EmptyStateView(
-                                title: "本次清单为空",
-                                message: "预计总重量 0 kg。规划中的行程可以新增只属于当前行程的装备。",
-                                icon: "backpack",
-                                variant: .section
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(projection.snapshot.items.enumerated()), id: \.element.id) { index, item in
+                            TripBusinessComponents.TripEquipmentItemRow(
+                                projection: equipmentItemProjection(item, editable: projection.editable && editorMode == nil),
+                                onRequestEdit: { _ in beginEditing(item) },
+                                onRequestDelete: { _ in deletingItem = item }
                             )
-                        } else {
-                            VStack(alignment: .leading, spacing: 0) {
-                                ForEach(Array(projection.snapshot.items.enumerated()), id: \.element.id) { index, item in
-                                    TripBusinessComponents.TripEquipmentItemRow(
-                                        projection: equipmentItemProjection(item, editable: projection.editable && editorMode == nil),
-                                        onRequestEdit: { _ in beginEditing(item) },
-                                        onRequestDelete: { _ in deletingItem = item }
-                                    )
-                                    if index < projection.snapshot.items.count - 1 {
-                                        Rectangle()
-                                            .fill(AppColors.surfaceDivider)
-                                            .frame(height: 1)
-                                            .accessibilityHidden(true)
-                                    }
-                                }
+                            if index < projection.snapshot.items.count - 1 {
+                                Rectangle()
+                                    .fill(AppColors.surfaceDivider)
+                                    .frame(height: 1)
+                                    .accessibilityHidden(true)
                             }
                         }
                     }
-
-                    if projection.editable, editorMode == nil {
-                        secondaryActions
-                    }
-
-                    if let error = viewModel.errorMessage, viewModel.projection != nil, editorMode == nil {
-                        ErrorView(
-                            message: error,
-                            title: "操作未完成",
-                            variant: .section,
-                            retry: nil
-                        )
-                    }
-
-                    independentCopyNote
-                }
-                .frame(maxWidth: 600, alignment: .topLeading)
-                .frame(maxWidth: .infinity, alignment: .top)
-                .padding(.horizontal, Spacing.pageHorizontal)
-                .padding(.top, Spacing.md)
-                .padding(.bottom, projection.editable ? 108 : Spacing.xl)
-            }
-
-            if projection.editable {
-                FixedActionArea {
-                    PrimaryAction(
-                        title: editorMode == nil ? "新增本次装备" : "保存本次装备",
-                        isLoading: viewModel.isMutating && editorMode != nil,
-                        isDisabled: viewModel.isMutating || (editorMode != nil && !editorInputIsValid),
-                        fillsWidth: true,
-                        action: {
-                            if editorMode == nil {
-                                beginAdding()
-                            } else {
-                                saveEditor()
-                            }
-                        }
-                    )
                 }
             }
+
+            if projection.editable, editorMode == nil {
+                secondaryActions
+            }
+
+            if let error = viewModel.errorMessage, viewModel.projection != nil, editorMode == nil {
+                ErrorView(
+                    message: error,
+                    title: "操作未完成",
+                    variant: .section,
+                    retry: nil
+                )
+            }
+
+            independentCopyNote
         }
+        .frame(maxWidth: 600, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .top)
     }
 
     private func contextRow(_ trip: TripEquipmentTrip) -> some View {
@@ -457,7 +438,7 @@ struct TripEquipmentView: View {
     }
 }
 
-private func equipmentItemProjection(
+func equipmentItemProjection(
     _ item: TripEquipmentItem,
     editable: Bool
 ) -> TripEquipmentItemRowProjection {

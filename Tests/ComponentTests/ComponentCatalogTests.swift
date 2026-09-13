@@ -7,10 +7,10 @@ final class ComponentCatalogTests: XCTestCase {
     func testCatalogMatchesAuthoritativeComponentInventory() {
         let entries = ComponentCatalog.entries
 
-        XCTAssertEqual(entries.count, 81)
-        XCTAssertEqual(Set(entries.map(\.id)).count, 81)
+        XCTAssertEqual(entries.count, 79)
+        XCTAssertEqual(Set(entries.map(\.id)).count, 79)
         XCTAssertEqual(entries.filter { $0.category == .common }.count, 37)
-        XCTAssertEqual(entries.filter { $0.category == .business }.count, 44)
+        XCTAssertEqual(entries.filter { $0.category == .business }.count, 42)
         XCTAssertEqual(Set(entries.map(\.id)), Set(Self.expectedComponentIDs))
     }
 
@@ -60,7 +60,7 @@ final class ComponentCatalogTests: XCTestCase {
         "RouteFactSection", "RouteImageGallery", "RouteIntroduction", "RouteListRow",
         "RouteMap", "RoutePointDetail", "RoutePointSection", "RouteReferenceDayList", "RouteScene",
         "RouteSegmentList", "RouteSummary", "TrekDayBadge", "TripCalendarCard", "TripCoverHeader", "TripDayArrangement",
-        "TripDayHikeSummary", "TripDaySummaryCard", "TripDayTransportSummary", "TripEquipmentGearRings",
+        "TripDayOverviewEntry", "TripEquipmentGearRings",
         "TripEquipmentSummaryCard", "TripListRow", "TripRouteSummaryCard",
         "TripStatusBadge", "TripWeatherSummaryCard", "TripWeatherTrendChart", "WeatherOverview", "WeatherSummary",
     ]

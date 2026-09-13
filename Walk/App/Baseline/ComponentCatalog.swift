@@ -191,7 +191,7 @@ enum ComponentCatalog {
             }
         },
         entry("SettingsListRow", .common) {
-            SettingsListRow(id: "account", label: "账号与安全", onActivate: { _ in })
+            SettingsListRow(id: "notifications", label: "通知设置", onActivate: { _ in })
         },
         entry("SheetHandle", .common) {
             SheetHandle()
@@ -262,6 +262,9 @@ enum ComponentCatalog {
         entry("DailyWeatherCard", .business) {
             TripBusinessComponents.DailyWeatherCard(day: BusinessComponentPreviewFixtures.weatherDayDefault)
         },
+        entry("DailyWeatherSummaryRow", .business) {
+            TripBusinessComponents.DailyWeatherSummaryRow(day: BusinessComponentPreviewFixtures.weatherDayRowKnown)
+        },
         entry("ElevationProfile", .business) {
             RouteBusinessComponents.ElevationProfile(projection: BusinessComponentPreviewFixtures.elevationProfile)
         },
@@ -329,7 +332,8 @@ enum ComponentCatalog {
         },
         entry("ProfileIdentityHeader", .business) {
             AccountEquipmentBusinessComponents.ProfileIdentityHeader(
-                profile: BusinessComponentPreviewFixtures.profileDefault
+                profile: BusinessComponentPreviewFixtures.profileDefault,
+                onSelectAvatar: {}
             )
         },
         entry("RouteFactSection", .business) {
@@ -406,8 +410,7 @@ enum ComponentCatalog {
         },
         entry("TripCoverHeader", .business) {
             TripBusinessComponents.TripCoverHeader(
-                projection: BusinessComponentPreviewFixtures.tripCoverDefault,
-                onNavigateBack: {}
+                projection: BusinessComponentPreviewFixtures.tripCoverDefault
             ) {
                 TripDeterministicCoverSurface()
             }
@@ -418,36 +421,10 @@ enum ComponentCatalog {
             )
             .frame(height: 700)
         },
-        entry("TripDaySummaryCard", .business) {
-            TripBusinessComponents.TripDaySummaryCard(
-                day: BusinessComponentPreviewFixtures.tripDayDefault,
-                onActivate: { _ in }
-            )
-        },
-        entry("TripDayHikeSummary", .business) {
-            TripBusinessComponents.TripDayHikeSummary(
-                projection: BusinessComponentPreviewFixtures.tripDayDefault.hikeSummary
-                    ?? TripDayHikeSummaryProjection(
-                        segment: "徒步段",
-                        distance: nil,
-                        ascent: nil,
-                        duration: nil,
-                        nodes: []
-                    )
-            )
-        },
-        entry("TripDayTransportSummary", .business) {
-            TripBusinessComponents.TripDayTransportSummary(
-                projection: BusinessComponentPreviewFixtures.tripDayDefault.outboundTransport
-                    ?? TripDayTransportSummaryProjection(
-                        direction: .outbound,
-                        title: "大交通与路线接驳",
-                        timeRange: nil,
-                        duration: nil,
-                        path: nil,
-                        modes: nil,
-                        notice: nil
-                    )
+        entry("TripDayOverviewEntry", .business) {
+            TripBusinessComponents.TripDayOverviewEntry(
+                projection: BusinessComponentPreviewFixtures.tripDayOverviewEntryDefault,
+                onActivate: {}
             )
         },
         entry("TripEquipmentSummaryCard", .business) {

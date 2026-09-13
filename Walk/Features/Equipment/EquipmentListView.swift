@@ -40,23 +40,12 @@ struct EquipmentListView: View {
     }
 
     var body: some View {
-        UtilityPageContainer {
-            VStack(spacing: 0) {
-                UtilityNavigationHeader(
-                    title: "我的装备",
-                    leading: IconButtonConfiguration(
-                        systemName: "chevron.left",
-                        accessibilityLabel: "返回",
-                        action: requestDismissal
-                    )
-                )
-                content
-            }
-        }
-        .toolbar(.hidden, for: .navigationBar)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if showsFixedActionArea {
-                FixedActionArea {
+        UtilityPage(
+            title: "装备与清单",
+            description: "个人装备记录实际拥有数量和可选单件重量；清单按清单内数量汇总预计总重量。",
+            onBack: requestDismissal,
+            bottomFixed: {
+                if showsFixedActionArea {
                     PrimaryAction(
                         title: fixedActionTitle,
                         isLoading: isFixedActionLoading,
@@ -66,6 +55,8 @@ struct EquipmentListView: View {
                     )
                 }
             }
+        ) {
+            scrollContent
         }
         .overlay {
             if let deletingList {
@@ -93,19 +84,13 @@ struct EquipmentListView: View {
         }
     }
 
-    private var content: some View {
+    private var scrollContent: some View {
         ScrollViewReader { scrollProxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: Spacing.lg) {
                     AppColors.surfacePrimary.opacity(0)
                         .frame(height: 0)
                         .id("equipment-page-top")
-
-                    PageTitleBlock(
-                        title: "装备与清单",
-                        kicker: "长期个人资产",
-                        description: "个人装备记录实际拥有数量和可选单件重量；清单按清单内数量汇总预计总重量。"
-                    )
 
                     SegmentedControl(
                         options: [
@@ -120,9 +105,6 @@ struct EquipmentListView: View {
                 }
                 .frame(maxWidth: 600, alignment: .topLeading)
                 .frame(maxWidth: .infinity, alignment: .top)
-                .padding(.horizontal, Spacing.pageHorizontal)
-                .padding(.top, Spacing.md)
-                .padding(.bottom, 108)
             }
             .coordinateSpace(name: scrollCoordinateSpace)
             .onPreferenceChange(EquipmentScrollAnchorPreferenceKey.self) { offsets in

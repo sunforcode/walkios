@@ -3,13 +3,13 @@ import SwiftUI
 public struct IconButtonConfiguration {
      public let systemName: String
      public let accessibilityLabel: String
-     public var variant: IconButtonVariant = .default
+     public var variant: IconButtonVariant = .overlay
      public let action: () -> Void
 
      public init(
         systemName: String,
         accessibilityLabel: String,
-        variant: IconButtonVariant = .default,
+        variant: IconButtonVariant = .overlay,
         action: @escaping () -> Void
     ) {
         self.systemName = systemName
@@ -19,12 +19,13 @@ public struct IconButtonConfiguration {
     }
 }
 
+/// 二级任务页统一悬浮导航承载：无固定底色与下边界线，返回为悬浮圆形
+/// `IconButton.overlay`，标题与尾部动作悬浮于页面顶部区域。标题可选——
+/// 同页 `PageTitleBlock` 拥有唯一主标题时由 Page 省略标题，避免重复。
 public struct UtilityNavigationHeader: View {
-     public let title: String
+     public let title: String?
      public var leading: IconButtonConfiguration? = nil
      public var trailing: IconButtonConfiguration? = nil
-     public var showsDivider = false
-     public var titleAsLabel = false
 
      public var body: some View {
         HStack(spacing: 0) {
@@ -32,31 +33,25 @@ public struct UtilityNavigationHeader: View {
             titleView
             navigationItem(trailing)
         }
-        .frame(minHeight: Spacing.xxxl + Spacing.sm)
-        .background(AppColors.surfaceGlass)
-        .background(AppColors.surfaceHeader)
-        .overlay(alignment: .bottom) {
-            if showsDivider {
-                Rectangle()
-                    .fill(AppColors.surfaceDivider)
-                    .frame(height: 1)
-            }
-        }
+        // 返回钮与尾部动作距屏幕左右缘一个页边距，不再贴边。
+        .padding(.horizontal, Spacing.pageHorizontal)
+        .frame(minHeight: Spacing.navBarHeight)
     }
 
     @ViewBuilder
     private var titleView: some View {
-        let title = Text(title)
-            .font(.navTitle)
-            .foregroundStyle(AppColors.textPrimary)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity)
-
-        if titleAsLabel {
-            title
+        if let title {
+            Text(title)
+                .font(.navTitle)
+                .foregroundStyle(AppColors.textPrimary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
+                .accessibilityAddTraits(.isHeader)
         } else {
-            title.accessibilityAddTraits(.isHeader)
+            Color.clear
+                .frame(maxWidth: .infinity, maxHeight: Spacing.navBarHeight)
+                .accessibilityHidden(true)
         }
     }
 
@@ -77,17 +72,13 @@ public struct UtilityNavigationHeader: View {
     }
 
     public init(
-        title: String,
+        title: String? = nil,
         leading: IconButtonConfiguration? = nil,
-        trailing: IconButtonConfiguration? = nil,
-        showsDivider: Bool = false,
-        titleAsLabel: Bool = false
+        trailing: IconButtonConfiguration? = nil
     ) {
         self.title = title
         self.leading = leading
         self.trailing = trailing
-        self.showsDivider = showsDivider
-        self.titleAsLabel = titleAsLabel
     }
 }
 
@@ -128,7 +119,6 @@ public struct UtilityNavigationHeader: View {
 
 #Preview("UtilityNavigationHeader.back") {
     UtilityNavigationHeader(
-        title: "全部路线",
         leading: IconButtonConfiguration(
             systemName: "chevron.left",
             accessibilityLabel: "返回",
@@ -138,14 +128,9 @@ public struct UtilityNavigationHeader: View {
     .background(AppColors.pageBase)
 }
 
-#Preview("UtilityNavigationHeader.tail") {
+#Preview("UtilityNavigationHeader.titleOnly") {
     UtilityNavigationHeader(
-        title: "全部路线",
-        trailing: IconButtonConfiguration(
-            systemName: "magnifyingglass",
-            accessibilityLabel: "搜索路线",
-            action: {}
-        )
+        title: "行程天气"
     )
     .background(AppColors.pageBase)
 }

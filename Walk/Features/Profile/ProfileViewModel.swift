@@ -74,11 +74,17 @@ final class ProfileViewModel: ObservableObject {
     @Published private(set) var equipmentErrorMessage: String?
     @Published private(set) var logoutErrorMessage: String?
     @Published private(set) var isLoggedIn = false
+    @Published private(set) var isAvatarUpdating = false
+    @Published private(set) var avatarErrorMessage: String?
+    @Published private(set) var isSavingProfile = false
+    @Published private(set) var profileUpdateErrorMessage: String?
 
     private let authSession: any AuthSession
     private let loadAccount: () async throws -> AccountResponse
     private let loadCalendar: () async throws -> PersonalTripCalendar
     private let loadEquipment: () async throws -> PersonalEquipmentCollection
+    private let uploadAvatar: ((Data, String) async throws -> AvatarMediaResponse)?
+    private let updateProfile: ((ProfileUpdate) async throws -> ProfileResponse)?
     private let revokeSession: () async throws -> Void
     private let clearCachedResponses: () async -> Void
 
@@ -93,6 +99,8 @@ final class ProfileViewModel: ObservableObject {
         self.loadAccount = { try await accountService.currentAccount() }
         self.loadCalendar = { try await tripService.calendar() }
         self.loadEquipment = { try await equipmentService.getPersonalEquipment() }
+        self.uploadAvatar = { try await accountService.uploadAvatar(data: $0, contentType: $1) }
+        self.updateProfile = { try await accountService.updateProfile($0) }
         self.revokeSession = { try await accountService.logout() }
         self.clearCachedResponses = clearCachedResponses
     }
@@ -102,6 +110,8 @@ final class ProfileViewModel: ObservableObject {
         loadAccount: @escaping () async throws -> AccountResponse,
         loadCalendar: @escaping () async throws -> PersonalTripCalendar,
         loadEquipment: @escaping () async throws -> PersonalEquipmentCollection,
+        uploadAvatar: ((Data, String) async throws -> AvatarMediaResponse)? = nil,
+        updateProfile: ((ProfileUpdate) async throws -> ProfileResponse)? = nil,
         revokeSession: @escaping () async throws -> Void = {},
         clearCachedResponses: @escaping () async -> Void = {}
     ) {
@@ -109,8 +119,62 @@ final class ProfileViewModel: ObservableObject {
         self.loadAccount = loadAccount
         self.loadCalendar = loadCalendar
         self.loadEquipment = loadEquipment
+        self.uploadAvatar = uploadAvatar
+        self.updateProfile = updateProfile
         self.revokeSession = revokeSession
         self.clearCachedResponses = clearCachedResponses
+    }
+
+    /// 头像更新：先上传头像媒体取得 mediaReference，再写入 Profile；
+    /// 成功后刷新共享 `account.profile`，失败保留原头像并暴露当前 Modal 可见错误。
+    func updateAvatar(data: Data, contentType: String) async {
+        guard !isAvatarUpdating else { return }
+        guard let uploadAvatar, let updateProfile else {
+            avatarErrorMessage = "头像更新暂不可用"
+            return
+        }
+        isAvatarUpdating = true
+        avatarErrorMessage = nil
+        defer { isAvatarUpdating = false }
+
+        do {
+            let media = try await uploadAvatar(data, contentType)
+            let response = try await updateProfile(ProfileUpdate(avatar: .value(media.mediaReference)))
+            if let account {
+                self.account = AccountResponse(account: account.account, profile: response.profile)
+            }
+        } catch {
+            avatarErrorMessage = Self.message(for: error)
+        }
+    }
+
+    /// 头像数据读取失败：在设置 Modal 内可见，不改变内部层级、不关闭 Modal。
+    func reportAvatarReadFailure() {
+        avatarErrorMessage = "无法读取所选头像"
+    }
+
+    /// 昵称保存：写入既有 Profile 更新接口，成功后刷新共享 `account.profile`。
+    func updateNickname(_ nickname: String) async {
+        guard let updateProfile else {
+            profileUpdateErrorMessage = "昵称保存暂不可用"
+            return
+        }
+        guard !isSavingProfile else { return }
+        isSavingProfile = true
+        profileUpdateErrorMessage = nil
+        defer { isSavingProfile = false }
+
+        do {
+            let trimmed = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+            let response = try await updateProfile(
+                ProfileUpdate(nickname: trimmed.isEmpty ? .clear : .value(trimmed))
+            )
+            if let account {
+                self.account = AccountResponse(account: account.account, profile: response.profile)
+            }
+        } catch {
+            profileUpdateErrorMessage = Self.message(for: error)
+        }
     }
 
     func loadProfile() async {

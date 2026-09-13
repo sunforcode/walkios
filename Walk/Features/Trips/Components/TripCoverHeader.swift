@@ -10,35 +10,29 @@ struct TripCoverHeaderProjection: Equatable {
     let endDate: String
     let totalDayCount: Int
     let hikingDayCount: Int
-    let versionLabel: String?
     var coverAvailable: Bool = true
 
     var conditionTags: [String] {
-        var tags = [
+        [
             "\(departureCity)出发",
             startDate == endDate ? startDate : "\(startDate)–\(endDate)",
             "\(totalDayCount) 天 · 徒步 \(hikingDayCount) 天",
         ]
-        if let versionLabel = tripNonEmpty(versionLabel) {
-            tags.append("生成依据 · \(versionLabel)")
-        }
-        return tags
     }
 }
 
 extension TripBusinessComponents {
+    /// 封面身份区：行程名称 + 状态徽章 + 条件标签，悬浮于封面表面之上。
+    /// 返回入口由页面壳的导航行承载（悬浮于封面之上），组件不再自建返回按钮。
     struct TripCoverHeader<Cover: View>: View {
         let projection: TripCoverHeaderProjection
-        let onNavigateBack: () -> Void
         private let cover: Cover
 
         init(
             projection: TripCoverHeaderProjection,
-            onNavigateBack: @escaping () -> Void,
             @ViewBuilder cover: () -> Cover
         ) {
             self.projection = projection
-            self.onNavigateBack = onNavigateBack
             self.cover = cover()
         }
 
@@ -70,16 +64,6 @@ extension TripBusinessComponents {
                 identity
                     .padding(.horizontal, Spacing.lg)
                     .padding(.bottom, Spacing.lg)
-            }
-            .overlay(alignment: .topLeading) {
-                IconButton(
-                    systemName: "chevron.left",
-                    accessibilityLabel: "返回上一页",
-                    variant: .overlay,
-                    action: onNavigateBack
-                )
-                .padding(.top, 54)
-                .padding(.leading, Spacing.lg)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 275)
@@ -128,8 +112,7 @@ extension TripBusinessComponents {
 #if DEBUG
 #Preview("TripCoverHeader.default") {
     TripBusinessComponents.TripCoverHeader(
-        projection: BusinessComponentPreviewFixtures.tripCoverDefault,
-        onNavigateBack: {}
+        projection: BusinessComponentPreviewFixtures.tripCoverDefault
     ) {
         TripDeterministicCoverSurface()
     }
@@ -139,8 +122,7 @@ extension TripBusinessComponents {
 
 #Preview("TripCoverHeader.longName") {
     TripBusinessComponents.TripCoverHeader(
-        projection: BusinessComponentPreviewFixtures.tripCoverLongName,
-        onNavigateBack: {}
+        projection: BusinessComponentPreviewFixtures.tripCoverLongName
     ) {
         TripDeterministicCoverSurface()
     }
