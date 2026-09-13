@@ -21,6 +21,27 @@ final class APIClientContractTests: XCTestCase {
         XCTAssertEqual(section.path?.count, 2)
     }
 
+    /// 复现 TripDetailViewModel.loadTrip 全链路：detail + days 解码、revision 匹配、weather 解码与校验。
+    func testTripDetailFullLoadPipelineDecodesProductionResponses() throws {
+        let detailEnvelope: DataEnvelope<PersonalTripDetail> = try Fixture.decode("trip-detail-planned-full")
+        let daysEnvelope: DataEnvelope<PersonalTripDays> = try Fixture.decode("trip-days-planned-full")
+        let weatherEnvelope: DataEnvelope<PersonalTripWeather> = try Fixture.decode("trip-weather-associations-full")
+
+        let detail = try detailEnvelope.data
+        let days = try daysEnvelope.data
+        let weather = try weatherEnvelope.data
+
+        XCTAssertEqual(detail.revision, days.revision)
+        XCTAssertEqual(days.tripID, detail.trip.identity)
+        XCTAssertEqual(detail.routeVersionStatus.tripRevision, detail.revision)
+        XCTAssertEqual(weather.tripID, detail.trip.identity)
+        XCTAssertEqual(weather.revision, detail.revision)
+        XCTAssertTrue(
+            PersonalTripWeatherValidator.isValid(weather, tripID: detail.trip.identity, revision: detail.revision),
+            "生产 weather 关联投影必须通过 PersonalTripWeatherValidator"
+        )
+    }
+
     func testRouteDetailEnvelopeDecodesCompleteBackendContract() throws {
         let envelope: APIEnvelope<RouteDetailResponse> = try Fixture.decode("route-detail-route-1")
         let route = try envelope.unwrap()

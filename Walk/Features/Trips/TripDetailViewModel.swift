@@ -476,7 +476,13 @@ final class TripDetailViewModel: ObservableObject {
                     throw APIClientError.invalidResponse
                 }
                 replaceProjection(detail: detail, days: days, weather: weather)
-            } catch let error where Self.isWeatherProjectionUnavailable(error) {
+            } catch {
+                // 天气是详情页的辅助信息：后端投影不可用（trip_weather_projection_unavailable）、
+                // 解码失败或关联结构校验不通过时，降级为天气不可用并记录原因，
+                // 不得拖垮整个行程详情页。
+                #if DEBUG
+                print("⚠️ [TripDetail] 天气投影降级为不可用：\(error)")
+                #endif
                 replaceProjection(detail: detail, days: days, weather: nil)
                 isWeatherUnavailable = true
             }
@@ -617,11 +623,6 @@ final class TripDetailViewModel: ObservableObject {
         weather = nil
         isWeatherUnavailable = true
         routeVersionStatus = detail.routeVersionStatus
-    }
-
-    private static func isWeatherProjectionUnavailable(_ error: Error) -> Bool {
-        guard case APIClientError.api(let code, _, _, _) = error else { return false }
-        return code == "trip_weather_projection_unavailable"
     }
 
     private func message(for error: Error, operation: String) -> String {

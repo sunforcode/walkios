@@ -118,6 +118,45 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         )
     }
 
+    func testLoadDegradesWeatherWhenProjectionDecodeFailsInsteadOfFailingDetailPage() async {
+        let detail = PersonalTripTestFixtures.detail(track: [])
+        let sut = TripDetailViewModel(
+            loadDetail: { _ in detail },
+            loadDays: { _ in PersonalTripTestFixtures.days },
+            loadWeather: { _ in
+                throw DecodingError.typeMismatch(
+                    String.self,
+                    .init(codingPath: [], debugDescription: "production contract mismatch")
+                )
+            }
+        )
+
+        await sut.loadTrip(id: "trip-1")
+
+        XCTAssertEqual(sut.trip, detail)
+        XCTAssertEqual(sut.days, PersonalTripTestFixtures.days)
+        XCTAssertNil(sut.weather)
+        XCTAssertTrue(sut.isWeatherUnavailable)
+        XCTAssertNil(sut.errorMessage)
+    }
+
+    func testLoadDegradesWeatherWhenProjectionIsInvalidInsteadOfFailingDetailPage() async {
+        let detail = PersonalTripTestFixtures.detail(track: [])
+        let sut = TripDetailViewModel(
+            loadDetail: { _ in detail },
+            loadDays: { _ in PersonalTripTestFixtures.days },
+            loadWeather: { _ in throw APIClientError.invalidResponse }
+        )
+
+        await sut.loadTrip(id: "trip-1")
+
+        XCTAssertEqual(sut.trip, detail)
+        XCTAssertEqual(sut.days, PersonalTripTestFixtures.days)
+        XCTAssertNil(sut.weather)
+        XCTAssertTrue(sut.isWeatherUnavailable)
+        XCTAssertNil(sut.errorMessage)
+    }
+
     func testLoadRejectsRevisionMismatchWithoutReplacingExistingProjection() async {
         let original = PersonalTripTestFixtures.detail(track: [])
         let mismatchedDays = PersonalTripDays(

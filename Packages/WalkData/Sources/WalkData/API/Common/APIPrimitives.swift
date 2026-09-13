@@ -86,7 +86,23 @@ public struct Instant: Codable, Hashable, CustomStringConvertible {
     }
 
      public init(from decoder: Decoder) throws {
-        self.rawValue = try decoder.singleValueContainer().decode(String.self)
+        let container = try decoder.singleValueContainer()
+        // 后端时间既可能是 ISO-8601 字符串，也可能是 epoch 秒数（与 APIJSONDecoder 的 Date 策略一致）。
+        if let value = try? container.decode(String.self) {
+            self.rawValue = value
+            return
+        }
+        let seconds = try container.decode(Double.self)
+        self.rawValue = Self.iso8601String(fromEpochSeconds: seconds)
+    }
+
+    private static func iso8601String(fromEpochSeconds seconds: Double) -> String {
+        let hasFractionalSeconds = seconds.truncatingRemainder(dividingBy: 1) != 0
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = hasFractionalSeconds
+            ? [.withInternetDateTime, .withFractionalSeconds]
+            : [.withInternetDateTime]
+        return formatter.string(from: Date(timeIntervalSince1970: seconds))
     }
 
      public func encode(to encoder: Encoder) throws {

@@ -234,7 +234,16 @@ public enum PersonalTripWeatherValidator {
         return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private static let instantFormatter = ISO8601DateFormatter()
+    private static let instantWithFractionalSecondsFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
     private static func instantDate(_ instant: Instant) -> Date? {
-        ISO8601DateFormatter().date(from: instant.rawValue)
+        // 后端 epoch 时间转出的 ISO 字符串可能带毫秒小数，需要与小数秒格式兼容。
+        instantWithFractionalSecondsFormatter.date(from: instant.rawValue)
+            ?? instantFormatter.date(from: instant.rawValue)
     }
 }
