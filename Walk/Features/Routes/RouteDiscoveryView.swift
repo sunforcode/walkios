@@ -1,10 +1,13 @@
 import SwiftUI
+import UIKit
 import WalkData
 import WalkDesignSystem
 
 enum RouteDiscoveryLayout {
+    /// 卡片高度等于分页视口：scroll snap 的吸附单位是容器高度，
+    /// 卡片必须与视口等高才能逐屏对齐（第二屏起不累积偏差）。
     static func cardHeight(for viewportHeight: CGFloat) -> CGFloat {
-        max(0, viewportHeight - (2 * Spacing.sm))
+        max(0, viewportHeight)
     }
 }
 
@@ -15,6 +18,9 @@ struct RouteDiscoveryView: View {
     /// 转场期间动态安全区尖峰不再顶跳页头与场景。
     /// 只能在 onAppear 解析（视图事务内读 UIWindow 会锁死 iOS 26 更新管道）。
     @State private var pinnedInsets = EdgeInsets()
+    /// 当前分页卡片的 routeId：由 scrollPosition 双向驱动——手势翻页写入，
+    /// 可访问性等价动作（selectAdjacentRoute）通过写入它实现编程式翻页。
+    @State private var activeRouteID: String?
 
     init(
         routeService: RouteService,
@@ -49,6 +55,7 @@ struct RouteDiscoveryView: View {
             .ignoresSafeArea()
         }
         .toolbar(.hidden, for: .navigationBar)
+        .immersiveSystemAreaContext()
         // 窗口安全区常量在视图挂载后解析（同 PageShell）：首帧在屏幕外不可见。
         .onAppear {
             if pinnedInsets == EdgeInsets() {
@@ -108,51 +115,134 @@ struct RouteDiscoveryView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             GeometryReader { proxy in
-                TabView {
-                    ForEach(viewModel.routes) { route in
-                        RouteBusinessComponents.RouteScene(
-                            projection: RouteSceneProjection(
-                                routeID: route.routeId,
-                                coverAvailable: false,
-                                name: route.name,
-                                region: route.region,
-                                difficulty: route.difficulty,
-                                metrics: [
-                                    route.distance.map {
-                                        MetricItemModel(
-                                            id: "distance",
-                                            value: distanceText($0.meters),
-                                            label: "距离"
-                                        )
-                                    },
-                                    route.ascent.map {
-                                        MetricItemModel(
-                                            id: "ascent",
-                                            value: metersText($0.meters),
-                                            label: "累计爬升"
-                                        )
-                                    },
-                                    route.estimatedDuration.map {
-                                        MetricItemModel(
-                                            id: "estimated-duration",
-                                            value: durationText($0.seconds),
-                                            label: "预计用时"
-                                        )
-                                    },
-                                ].compactMap { $0 }
-                            ),
-                            onSelect: { _ in
-                                onNavigate(.routeDetail(route.routeId))
-                            }
-                        ) {
-                            RouteDeterministicImageSurface(style: .forest)
-                        }
-                        .frame(width: proxy.size.width, height: RouteDiscoveryLayout.cardHeight(for: proxy.size.height))
-                    }
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
+                routePager(cardHeight: RouteDiscoveryLayout.cardHeight(for: proxy.size.height))
+                    .frame(width: proxy.size.width)
             }
-            .ignoresSafeArea(edges: .top)
+            // 分页区域铺满整个屏幕：顶部延伸至状态栏之后（规范：场景层延伸至顶部安全区之后），
+            // 底部延伸至 tab bar 之后（规范：tab bar 悬浮于内容之上）。
+            // 底部内容避让由 DesignSystem 的沉浸式系统区域上下文统一承载。
+            .ignoresSafeArea(edges: [.top, .bottom])
+        }
+    }
+
+    /// RoutePager：规范要求本页唯一纵向滚动拥有者，纵向 scroll snap 分页、首尾不循环。
+    /// 每屏一条 RouteScene，卡片高度等于分页区域（整屏）。
+    private func routePager(cardHeight: CGFloat) -> some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            // 路线数量有限且需精确分页定位，不用 Lazy 容器（scrollPosition 对 lazy 内容定位不稳定）。
+            VStack(spacing: 0) {
+                ForEach(Array(viewModel.routes.enumerated()), id: \.element.routeId) { index, route in
+                    routeCard(route)
+                        .frame(height: cardHeight)
+                        // 换页后只让当前 RouteScene 进入焦点顺序。
+                        .accessibilityHidden(index != activeIndex)
+                }
+            }
+            .scrollTargetLayout()
+        }
+        .scrollTargetBehavior(.paging)
+        .scrollPosition(id: $activeRouteID)
+        .onChange(of: viewModel.routes) { _, routes in
+            if activeRouteID == nil {
+                activeRouteID = routes.first?.routeId
+            }
+        }
+        .onChange(of: activeRouteID) { previous, current in
+            // 首次赋值是初始定位，不作换页公告。
+            guard previous != nil, let current else { return }
+            announcePagePosition(routeID: current)
+        }
+        .modifier(RoutePagerAccessibilityActions(
+            routeCount: viewModel.routes.count,
+            onAdjacent: { selectAdjacentRoute($0) }
+        ))
+    }
+
+    private func routeCard(_ route: PublicRouteBrowseSummary) -> some View {
+        RouteBusinessComponents.RouteScene(
+            projection: RouteSceneProjection(
+                routeID: route.routeId,
+                coverAvailable: false,
+                name: route.name,
+                region: route.region,
+                difficulty: route.difficulty,
+                metrics: [
+                    route.distance.map {
+                        MetricItemModel(
+                            id: "distance",
+                            value: distanceText($0.meters),
+                            label: "距离"
+                        )
+                    },
+                    route.ascent.map {
+                        MetricItemModel(
+                            id: "ascent",
+                            value: metersText($0.meters),
+                            label: "累计爬升"
+                        )
+                    },
+                    route.estimatedDuration.map {
+                        MetricItemModel(
+                            id: "estimated-duration",
+                            value: durationText($0.seconds),
+                            label: "预计用时"
+                        )
+                    },
+                ].compactMap { $0 }
+            ),
+            onSelect: { _ in
+                onNavigate(.routeDetail(route.routeId))
+            }
+        ) {
+            RouteDeterministicImageSurface(style: .forest)
+        }
+    }
+
+    /// 当前分页索引：由 activeRouteID 派生；未定位时所有卡保持可见。
+    private var activeIndex: Int? {
+        viewModel.routes.firstIndex(where: { $0.routeId == activeRouteID })
+    }
+
+    /// 可访问性等价动作 `selectAdjacentRoute`：切换相邻路线；首尾不循环，
+    /// 越界时按规范公告「已到第一条路线」「已到最后一条路线」。
+    private func selectAdjacentRoute(_ offset: Int) {
+        guard let currentIndex = viewModel.routes.firstIndex(where: { $0.routeId == activeRouteID }) else {
+            return
+        }
+        let target = currentIndex + offset
+        guard viewModel.routes.indices.contains(target) else {
+            announce(offset < 0 ? "已到第一条路线" : "已到最后一条路线")
+            return
+        }
+        withAnimation {
+            activeRouteID = viewModel.routes[target].routeId
+        }
+    }
+
+    /// 换页公告：「{路线身份}，第 {当前序号} 条，共 {总数} 条」。
+    private func announcePagePosition(routeID: String) {
+        guard let index = viewModel.routes.firstIndex(where: { $0.routeId == routeID }) else { return }
+        let route = viewModel.routes[index]
+        announce("\(route.name)，第 \(index + 1) 条，共 \(viewModel.routes.count) 条")
+    }
+
+    private func announce(_ message: String) {
+        UIAccessibility.post(notification: .announcement, argument: message)
+    }
+}
+
+/// 分页可访问性等价动作：多于一务路线时暴露上一条/下一条；单条路线不注册。
+private struct RoutePagerAccessibilityActions: ViewModifier {
+    let routeCount: Int
+    let onAdjacent: (Int) -> Void
+
+    func body(content: Content) -> some View {
+        if routeCount > 1 {
+            content
+                .accessibilityAction(named: Text("上一条路线")) { onAdjacent(-1) }
+                .accessibilityAction(named: Text("下一条路线")) { onAdjacent(1) }
+        } else {
+            content
         }
     }
 }

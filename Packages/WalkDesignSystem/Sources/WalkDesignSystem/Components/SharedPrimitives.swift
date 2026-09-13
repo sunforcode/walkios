@@ -9,8 +9,8 @@ public enum StatePresentationVariant {
     case scene
 
      public var isFullPage: Bool { self == .page }
-     public var alignment: HorizontalAlignment { self == .page || self == .scene ? .center : .leading }
-     public var textAlignment: TextAlignment { self == .page || self == .scene ? .center : .leading }
+     public var alignment: HorizontalAlignment { self == .form ? .leading : .center }
+     public var textAlignment: TextAlignment { self == .form ? .leading : .center }
 }
 
 // MARK: - Page shells and headers
@@ -53,12 +53,11 @@ public struct PageHeroHeader: View {
 /// 页面差异仅允许通过 background / hero / title & description / bottomFixed /
 /// showsBackEntry 五个插槽表达；返回控件形态、导航行结构、标题排版不可自定义。
 private struct UtilityPageScrollBounceModifier: ViewModifier {
-    /// 页面级滚动回弹开关：`scrollBounceBehavior(.basedOnSize)` 需要 iOS 16.4+，低版本无操作；
-    /// 内容不超出视口时不回弹，超出的长内容仍保留系统原生边界回弹。
+    /// 页面级滚动回弹开关：内容不超出视口时不回弹，超出的长内容仍保留系统原生边界回弹。
     let disabled: Bool
 
     func body(content: Content) -> some View {
-        if #available(iOS 16.4, *), disabled {
+        if disabled {
             content.scrollBounceBehavior(.basedOnSize)
         } else {
             content
@@ -423,14 +422,48 @@ extension UtilityPageContainer where Background == LinearGradient {
     }
 }
 
+private struct ImmersiveBottomContentPaddingKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+private extension EnvironmentValues {
+    var immersiveBottomContentPadding: CGFloat {
+        get { self[ImmersiveBottomContentPaddingKey.self] }
+        set { self[ImmersiveBottomContentPaddingKey.self] = newValue }
+    }
+}
+
+private struct ImmersiveBottomContentPaddingModifier: ViewModifier {
+    @Environment(\.immersiveBottomContentPadding) private var systemAreaPadding
+    let base: CGFloat
+
+    func body(content: Content) -> some View {
+        content.padding(.bottom, base + systemAreaPadding)
+    }
+}
+
+public extension View {
+    /// 在尚未忽略安全区的页面根部读取系统区域，并以语义化环境值下发给沉浸式内容。
+    func immersiveSystemAreaContext() -> some View {
+        GeometryReader { proxy in
+            self.environment(\.immersiveBottomContentPadding, proxy.safeAreaInsets.bottom)
+        }
+    }
+
+    /// 为沉浸式页面底部内容叠加系统区域避让；Feature 不接触物理 inset。
+    func immersiveBottomContentPadding(_ base: CGFloat = 0) -> some View {
+        modifier(ImmersiveBottomContentPaddingModifier(base: base))
+    }
+}
+
 public struct ImmersivePageContainer<Content: View>: View {
     private let content: Content
 
-     public init(@ViewBuilder content: () -> Content) {
+    public init(@ViewBuilder content: () -> Content) {
         self.content = content()
     }
 
-     public var body: some View {
+    public var body: some View {
         ZStack {
             RadialGradient(
                 colors: [AppColors.pageOuter, AppColors.pageMiddle, AppColors.pageBase],

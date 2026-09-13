@@ -51,7 +51,11 @@ public struct ErrorView: View {
                 }
             }
             .padding(variant == .page ? Spacing.xl : Spacing.md)
-            .frame(maxWidth: variant == .page ? 320 : .infinity, alignment: variant == .page ? .center : .leading)
+            .frame(
+                maxWidth: variant == .page ? 320 : .infinity,
+                maxHeight: variant == .scene ? .infinity : nil,
+                alignment: variant == .form ? .leading : .center
+            )
             .background {
                 if variant == .form {
                     RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
