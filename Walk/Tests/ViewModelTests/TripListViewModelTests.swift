@@ -217,7 +217,7 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
             cancelTrip: { _, _, _, key in
                 keys.append(key)
                 attempts += 1
-                if attempts == 1 { throw APIClientError.transport("连接中断") }
+                if attempts == 1 { throw APIClientError.transport(.connectionLost) }
                 if attempts == 2 { throw APIClientError.api(code: "trip_state_conflict", message: "状态已变化", retryable: false) }
                 return cancelled
             },

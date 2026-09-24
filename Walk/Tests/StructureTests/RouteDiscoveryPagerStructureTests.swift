@@ -1,0 +1,51 @@
+import XCTest
+@testable import Walk
+
+/// 结构测试强制：PAGE-ROUTES（路线发现）的 RoutePager 必须是纵向 scroll snap 分页
+/// （`docs/ui/pages/PAGE-ROUTES/spec.md`：RoutePager 是唯一纵向滚动拥有者，纵向 scroll snap，首尾不循环；
+/// 禁止项明确不允许横向分页）。
+final class RouteDiscoveryPagerStructureTests: XCTestCase {
+
+    /// scroll snap 的吸附单位是分页容器高度：卡片高度必须与分页视口一致，
+    /// 否则第二屏起每次吸附累积偏差，卡片与视口错位（不满屏/露缝）。
+    func testPagerCardHeightEqualsPagingViewport() {
+        XCTAssertEqual(RouteDiscoveryLayout.cardHeight(for: 800), 800)
+        XCTAssertEqual(RouteDiscoveryLayout.cardHeight(for: 0), 0)
+    }
+
+    func testRoutePagerUsesVerticalScrollSnapPaging() throws {
+        let source = try featuresSource("Routes/RouteDiscoveryView.swift")
+        XCTAssertTrue(
+            source.contains(".scrollTargetBehavior(.paging)"),
+            "PAGE-ROUTES 规范要求 RoutePager 使用纵向 scroll snap 分页（.scrollTargetBehavior(.paging)）。"
+        )
+        XCTAssertTrue(
+            source.contains("ScrollView(.vertical"),
+            "PAGE-ROUTES 规范要求 RoutePager 的滚动轴为纵向。"
+        )
+        XCTAssertFalse(
+            source.contains(".tabViewStyle(.page"),
+            "PAGE-ROUTES 规范禁止把整屏分页承载在横向 TabView(.page) 上。"
+        )
+    }
+
+    // MARK: 文件发现
+
+    /// 本文件位于 `Walk/Tests/StructureTests/` → 上三级为 Walk，再进 Features。
+    private static func featuresRootURL() throws -> URL {
+        let testFileURL = URL(fileURLWithPath: #filePath)
+        return testFileURL
+            .deletingLastPathComponent()   // StructureTests
+            .deletingLastPathComponent()   // Tests
+            .deletingLastPathComponent()   // Walk
+            .appendingPathComponent("Features")
+    }
+
+    private func featuresSource(_ relativePath: String) throws -> String {
+        let root = try Self.featuresRootURL()
+        return try String(
+            contentsOf: root.appendingPathComponent(relativePath),
+            encoding: .utf8
+        )
+    }
+}

@@ -626,10 +626,10 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(equipmentSource.contains("UtilityPage("), "二级页由统一壳 UtilityPage 承载（根背景容器收归壳内）")
     }
 
-    func testRouteDiscoveryLayoutPreservesCardHeightCalculation() {
-        XCTAssertEqual(RouteDiscoveryLayout.cardHeight(for: 500), 484)
-        XCTAssertEqual(RouteDiscoveryLayout.cardHeight(for: 800), 784)
-        XCTAssertEqual(RouteDiscoveryLayout.cardHeight(for: 1_200), 1_184)
+    func testRouteDiscoveryCardHeightEqualsPagingViewport() {
+        XCTAssertEqual(RouteDiscoveryLayout.cardHeight(for: 500), 500)
+        XCTAssertEqual(RouteDiscoveryLayout.cardHeight(for: 800), 800)
+        XCTAssertEqual(RouteDiscoveryLayout.cardHeight(for: 1_200), 1_200)
     }
 
     func testRouteDetailStartsWithExplicitEmptyTrackState() {
@@ -664,9 +664,9 @@ final class DesignSystemTests: XCTestCase {
     /// add-route-detail-pure-map-mode：生成入口迁入 MapToolbar，信息面滚动内容不承载生成动作；
     /// 资格不足时保持可见、禁用呈现但可点，以轻提示传达原因。
     func testRouteDetailKeepsEligibilityAwareGenerationActionOutsideScrollableContent() throws {
-        let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
+        let source = try routeDetailPageSources()
 
-        XCTAssertTrue(source.contains("RouteToolbarGenerateAction"))
+        XCTAssertTrue(source.contains("RouteToolbarGenerateAction("))
         XCTAssertTrue(source.contains("presentation.generationAction"))
         XCTAssertTrue(source.contains("action.isEnabled ? onGenerate : onUnavailable"))
         XCTAssertTrue(source.contains("onGenerateTrip(routeId)"))
@@ -675,10 +675,11 @@ final class DesignSystemTests: XCTestCase {
     }
 
     func testRouteDetailOverlayUsesFullScreenContinuousScrollWithoutDrawerState() throws {
-        let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
+        let source = try routeDetailPageSources()
 
-        XCTAssertTrue(source.contains("RouteDetailScrollOverlay"))
-        XCTAssertTrue(source.contains(".frame(height: topSpacerHeight)"))
+        XCTAssertTrue(source.contains("RouteDetailScrollOverlay("))
+        XCTAssertTrue(source.contains(".routeDetailAlignedScrolling(topInset: topSpacerHeight)"), "顶部地图留白传入滚动内容布局")
+        XCTAssertTrue(source.contains("contentMargins(.top, topInset, for: .scrollContent)"), "顶部留白由滚动内容边距承载，不要求额外占位 View")
         XCTAssertFalse(source.contains("drawerState"))
         XCTAssertFalse(source.contains("overlayOffset"))
         XCTAssertFalse(source.contains("RouteDetailSheetPhysics"))
@@ -687,11 +688,11 @@ final class DesignSystemTests: XCTestCase {
     }
 
     func testRouteDetailUsesOneFullScreenScrollOverlay() throws {
-        let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
+        let source = try routeDetailPageSources()
 
-        XCTAssertTrue(source.contains("RouteDetailScrollOverlay"))
-        XCTAssertTrue(source.contains("topSpacerHeight"))
-        XCTAssertTrue(source.contains(".frame(height: topSpacerHeight)"))
+        XCTAssertTrue(source.contains("RouteDetailScrollOverlay("))
+        XCTAssertTrue(source.contains("topSpacerHeight: topSpacerHeight"), "页面向信息滚动层传入顶部地图留白")
+        XCTAssertEqual(source.components(separatedBy: "ScrollView(").count - 1, 1, "页面及支持结构共同保持唯一滚动拥有者")
         XCTAssertFalse(source.contains("private struct RouteDetailDrawer: View"))
         XCTAssertFalse(source.contains("isScrollEnabled"))
         XCTAssertFalse(source.contains("case expanded"))
@@ -706,7 +707,7 @@ final class DesignSystemTests: XCTestCase {
     }
 
     func testExpandedGroupsUseSolidSectionsWithTransparentGaps() throws {
-        let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
+        let source = try routeDetailPageSources()
 
         // 信息面迭代：容器透明，每个资料区由 sectionCard 独立成卡片展示。
         XCTAssertFalse(source.contains("RouteDetailSectionContainer"))
@@ -727,6 +728,14 @@ final class DesignSystemTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         return try String(contentsOf: walkRoot.appendingPathComponent(relativePath), encoding: .utf8)
+    }
+
+    /// 页面和其非组件支持结构共同构成 RouteDetail；同时校验入口仍消费该支持结构。
+    private func routeDetailPageSources(file: StaticString = #filePath, line: UInt = #line) throws -> String {
+        let page = try productionSource(at: "Features/Routes/RouteDetailView.swift")
+        let support = try productionSource(at: "Features/Routes/RouteDetailViewSupport.swift")
+        XCTAssertTrue(page.contains("RouteDetailScrollOverlay("), "页面必须消费被审计的信息滚动层", file: file, line: line)
+        return [page, support].joined(separator: "\n")
     }
 
     /// 个人资料域已按页拆分为独立文件；结构断言聚合读取全部拆分文件。
@@ -821,6 +830,12 @@ final class DesignSystemTests: XCTestCase {
 
         let sharedPrimitives = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift")
         XCTAssertTrue(sharedPrimitives.contains(".ignoresSafeArea()"), "页面壳负责将沉浸式背景延伸到系统区域")
+        XCTAssertTrue(sharedPrimitives.contains("immersiveSystemAreaContext"), "共享承载负责读取沉浸式页面系统区域")
+        XCTAssertTrue(sharedPrimitives.contains("immersiveBottomContentPadding"), "共享承载负责把底部系统区域转换为内容避让")
+        let routeDiscovery = try productionSource(at: "Features/Routes/RouteDiscoveryView.swift")
+        XCTAssertTrue(routeDiscovery.contains(".immersiveSystemAreaContext()"), "路线发现页复用共享系统区域承载")
+        let routeScene = try productionSource(at: "Features/Routes/Components/RouteScene.swift")
+        XCTAssertTrue(routeScene.contains(".immersiveBottomContentPadding(Spacing.xl)"), "路线场景复用共享底部内容避让")
         let routeDetail = try productionSource(at: "Features/Routes/RouteDetailView.swift")
         XCTAssertTrue(routeDetail.contains("ImmersivePageContainer"), "路线详情复用统一沉浸式页面壳")
     }
@@ -954,8 +969,8 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(discoverySource.contains("不会用缓存猜测替代真实路线资料。"), "重点路线失败态说明")
         XCTAssertTrue(discoverySource.contains("variant: .default"), "重点路线空态使用 EmptyState.default")
         XCTAssertFalse(discoverySource.contains("variant: .compactText"), "发现页不再用 compactText")
-        XCTAssertFalse(discoverySource.contains("UIAccessibility.post"), "发现页不再做换页无障碍公告")
-        XCTAssertFalse(discoverySource.contains("RoutePagingConfigurator"), "发现页不再有 paging 行为")
+        XCTAssertTrue(discoverySource.contains("UIAccessibility.post"), "发现页按 PAGE-ROUTES 合同公告换页位置与首尾边界")
+        XCTAssertFalse(discoverySource.contains("RoutePagingConfigurator"), "发现页不再保留旧 UIKit paging 配置器")
 
         XCTAssertTrue(collectionSource.contains("当前暂无可选择路线"), "全部路线空态标题（原型 h3）")
         XCTAssertTrue(collectionSource.contains("路线准备完成后会出现在这里。"), "全部路线空态说明（原型 p）")
@@ -995,7 +1010,7 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertFalse(gallery.contains("onOpenImage"), "不产生打开图片事件")
         XCTAssertFalse(gallery.contains("?? \"路线图片\""), "不用默认文案补标题")
 
-        let detail = try productionSource(at: "Features/Routes/RouteDetailView.swift")
+        let detail = try routeDetailPageSources()
         XCTAssertTrue(detail.contains("RouteBusinessComponents.RouteImageGallery("), "页面使用生产图片区组件")
         XCTAssertFalse(detail.contains("RouteImageGrid"), "不保留页面私有图片网格")
         XCTAssertFalse(detail.contains("RouteImageViewer"), "不建立图片查看器覆盖层")

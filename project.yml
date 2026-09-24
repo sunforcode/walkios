@@ -2,7 +2,7 @@ name: Walk
 options:
   bundleIdPrefix: com.walk
   deploymentTarget:
-    iOS: "16.0"
+    iOS: "18.0"
   createIntermediateGroups: true
 
 settings:
@@ -16,9 +16,11 @@ settings:
 
 packages:
   Lottie:
-    path: .swiftpm-packages/checkouts/lottie-ios
+    url: https://github.com/airbnb/lottie-ios.git
+    exactVersion: 4.4.3
   Alamofire:
-    path: .swiftpm-packages/checkouts/Alamofire
+    url: https://github.com/Alamofire/Alamofire.git
+    exactVersion: 5.9.1
   WalkData:
     path: Packages/WalkData
   WalkDesignSystem:
@@ -28,7 +30,7 @@ targets:
   Walk:
     type: application
     platform: iOS
-    deploymentTarget: "16.0"
+    deploymentTarget: "18.0"
     sources:
       - path: Walk
         excludes:
@@ -50,7 +52,7 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         WalkAPIBaseURL: "$(WALK_API_BASE_URL)"
-        WalkDataSourceMode: "$(WALK_DATA_SOURCE_MODE)"
+        WalkDataMode: "$(WALK_DATA_MODE)"
         WalkEnvironment: "$(WALK_ENVIRONMENT)"
         NSLocationWhenInUseUsageDescription: 需要使用您的位置来记录轨迹和显示当前位置
         NSLocationAlwaysAndWhenInUseUsageDescription: 需要在后台持续获取位置以记录轨迹
@@ -63,18 +65,17 @@ targets:
       configs:
         Debug:
           WALK_API_BASE_URL: https://api.example.invalid/walkbg/api/v1
-          WALK_DATA_SOURCE_MODE: mock
+          WALK_DATA_MODE: mock
           WALK_ENVIRONMENT: development
         Release:
-          # Production deployment is deliberately unavailable until a real URL replaces this placeholder.
-          WALK_API_BASE_URL: https://api.example.invalid/walkbg/api/v1
-          WALK_DATA_SOURCE_MODE: remote
+          WALK_API_BASE_URL: https://vialu.cn/walkbg/api/v1
+          WALK_DATA_MODE: real
           WALK_ENVIRONMENT: production
 
   WalkTests:
     type: bundle.unit-test
     platform: iOS
-    deploymentTarget: "16.0"
+    deploymentTarget: "18.0"
     sources:
       - path: Walk/Tests
       - path: Walk/Resources/MockAPI/route-detail-route-1.json
@@ -93,7 +94,7 @@ targets:
   WalkBaselineUITests:
     type: bundle.ui-testing
     platform: iOS
-    deploymentTarget: "16.0"
+    deploymentTarget: "18.0"
     sources:
       - path: Tests/BaselineUITests
     dependencies:
@@ -109,7 +110,7 @@ targets:
   WalkBaselineTests:
     type: bundle.unit-test
     platform: iOS
-    deploymentTarget: "16.0"
+    deploymentTarget: "18.0"
     sources:
       - path: Tests/BaselineTests
     dependencies:
@@ -125,7 +126,7 @@ targets:
   WalkComponentTests:
     type: bundle.unit-test
     platform: iOS
-    deploymentTarget: "16.0"
+    deploymentTarget: "18.0"
     sources:
       - path: Tests/ComponentTests
     dependencies:
@@ -141,7 +142,7 @@ targets:
   WalkComponentUITests:
     type: bundle.ui-testing
     platform: iOS
-    deploymentTarget: "16.0"
+    deploymentTarget: "18.0"
     sources:
       - path: Tests/ComponentUITests
     dependencies:
@@ -161,16 +162,14 @@ schemes:
         Walk: all
         WalkTests: [test]
     run:
+      # 不注入环境变量：环境变量优先于已保存的 Debug 设置（R-CONFIG），
+      # 注入会使 Debug 页的选择失效。默认值来自 Debug 构建配置。
       config: Debug
-      environmentVariables:
-        WALK_API_BASE_URL: "https://vialu.cn/walkbg/api/v1"
-        WALK_DATA_SOURCE_MODE: remote
-        WALK_ENVIRONMENT: development
     test:
       config: Debug
       environmentVariables:
         WALK_API_BASE_URL: "https://api.example.invalid/walkbg/api/v1"
-        WALK_DATA_SOURCE_MODE: mock
+        WALK_DATA_MODE: mock
         WALK_ENVIRONMENT: test
       targets:
         - WalkTests

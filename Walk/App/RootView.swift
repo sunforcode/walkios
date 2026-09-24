@@ -23,6 +23,7 @@ struct RootView: View {
             accountService: appEnvironment.accountService,
             tripService: appEnvironment.personalTripService,
             equipmentService: appEnvironment.equipmentService,
+            authSession: appEnvironment.authManager,
             clearCachedResponses: {
                 await appEnvironment.apiStorageGeneration.invalidate()
                 try? await appEnvironment.apiStorage.removeAll()
@@ -132,7 +133,8 @@ struct RootView: View {
         HomeView(
             onAuthenticate: { requestAuthentication($0, in: .home) },
             onNavigate: { navigate($0, in: .home) },
-            service: appEnvironment.personalTripService
+            service: appEnvironment.personalTripService,
+            authSession: appEnvironment.authManager
         )
         .id(authenticationGeneration)
     }
@@ -303,6 +305,13 @@ struct RootView: View {
                 HelpAndFeedbackView()
             case .about:
                 AboutView()
+            #if DEBUG
+            case .debugEnvironment:
+                DebugEnvironmentView(effective: appEnvironment.configuration)
+            #else
+            case .debugEnvironment:
+                EmptyView()
+            #endif
             case let .createTrip(routeID):
                 CreateTripView(
                     routeID: routeID,

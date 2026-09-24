@@ -11,7 +11,7 @@ final class WalkBaselineScreenshotTests: XCTestCase {
         for scenarioID in Self.tripListScenarioIDs {
             let app = XCUIApplication()
             app.launchArguments = [
-                "-DataSourceMode", "mock",
+                "-WalkDataMode", "mock",
                 "-APIBaseURL", "https://api.example.invalid/walkbg/api/v1",
                 "-WalkEnvironment", "test",
                 "-WalkBaselineScenario", scenarioID,

@@ -56,7 +56,7 @@ final class BaselineScenarioTests: XCTestCase {
         let configuration = try AppConfiguration(
             arguments: [
                 "Walk",
-                "-DataSourceMode", "mock",
+                "-WalkDataMode", "mock",
                 "-APIBaseURL", "https://api.example.invalid/walkbg/api/v1",
                 "-WalkEnvironment", "test",
                 "-WalkBaselineScenario", "page-trips--loaded",
@@ -72,7 +72,7 @@ final class BaselineScenarioTests: XCTestCase {
         XCTAssertThrowsError(try AppConfiguration(
             arguments: [
                 "Walk",
-                "-DataSourceMode", "mock",
+                "-WalkDataMode", "mock",
                 "-APIBaseURL", "https://api.example.invalid/walkbg/api/v1",
                 "-WalkEnvironment", "test",
                 "-WalkBaselineScenario", "page-trip-transport--default",
@@ -91,7 +91,7 @@ final class BaselineScenarioTests: XCTestCase {
         XCTAssertThrowsError(try AppConfiguration(
             arguments: [
                 "Walk",
-                "-DataSourceMode", "mock",
+                "-WalkDataMode", "mock",
                 "-APIBaseURL", "https://api.example.invalid/walkbg/api/v1",
                 "-WalkEnvironment", "test",
                 "-WalkBaselineScenario", "page-trip-detail--invented",
@@ -108,7 +108,7 @@ final class BaselineScenarioTests: XCTestCase {
 
     func testConfigurationRestrictsBaselineScenarioToNonProductionMockMode() {
         let remoteConfiguration = AppConfiguration(
-            dataSourceMode: .remote,
+            dataMode: .real,
             baseURL: URL(string: "https://api.example.test/v1")!,
             environmentName: "test",
             baselineScenario: .pageTripsLoaded
@@ -118,7 +118,7 @@ final class BaselineScenarioTests: XCTestCase {
         }
 
         let productionConfiguration = AppConfiguration(
-            dataSourceMode: .mock,
+            dataMode: .mock,
             baseURL: URL(string: "https://api.example.test/v1")!,
             environmentName: "production",
             baselineScenario: .pageTripsLoaded

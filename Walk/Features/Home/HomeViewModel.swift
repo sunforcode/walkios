@@ -26,7 +26,7 @@ final class HomeViewModel: ObservableObject {
 
     init(
         service: any PersonalTripServicing,
-        authSession: any AuthSession = AuthManager.shared
+        authSession: any AuthSession
     ) {
         self.isLoggedIn = { authSession.isLoggedIn }
         self.loadFocus = { try await service.focus() }

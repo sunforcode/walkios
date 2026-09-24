@@ -17,9 +17,10 @@ struct WalkApp: App {
             let configuration: AppConfiguration
             if componentPreviewRequest != nil {
                 configuration = AppConfiguration(
-                    dataSourceMode: .mock,
+                    dataMode: .mock,
                     baseURL: URL(string: "https://api.example.invalid/walkbg/api/v1")!,
-                    environmentName: "component-preview"
+                    environmentName: "component-preview",
+                    executionContext: .componentPreview
                 )
             } else {
                 configuration = try AppConfiguration.process()
@@ -31,7 +32,11 @@ struct WalkApp: App {
             RootNavigation.applyTabBarAppearance()
             RootNavigation.applyNavigationBarAppearance()
 #endif
-            let environment = try AppEnvironment(configuration: configuration)
+            // 只有正常运行上下文参与缓存启动生命周期；测试、Baseline 与预览不读写宿主状态。
+            let environment = try AppEnvironment(
+                configuration: configuration,
+                cacheLifecycle: configuration.executionContext == .app ? ResponseCacheLifecycle() : nil
+            )
             _appEnvironment = StateObject(wrappedValue: environment)
         } catch {
             fatalError("Invalid app configuration: \(error)")

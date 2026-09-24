@@ -7,28 +7,48 @@ public final class AlamofireRemoteAPIClient: APIClient {
     private let storage: (any APIStorage)?
     private let storageContext: APIStorageContext?
     private let storageGeneration: APIStorageGeneration?
+    private let responseCachePolicy: APIResponseCachePolicy
+    /// App 注入的默认断网策略；端点资格仍决定是否真正允许离线返回。
+    private let offlinePolicy: OfflinePolicy
     private let accessToken: () -> String?
     private let invalidateSession: () async -> Void
+    /// 缓存来源时间使用注入的时钟，便于确定性验证有效期。
+    private let now: () -> Date
 
      public init(
         baseURL: URL,
-        session: Session = AlamofireRemoteAPIClient.makeDefaultSession(),
+        session: Session? = nil,
         storage: (any APIStorage)? = nil,
         storageContext: APIStorageContext? = nil,
         storageGeneration: APIStorageGeneration? = nil,
-        accessToken: @escaping () -> String? = { AuthManager.shared.currentToken },
-        invalidateSession: @escaping () async -> Void = { AuthManager.shared.logout() }
+        responseCachePolicy: APIResponseCachePolicy = .enabled,
+        offlinePolicy: OfflinePolicy = .default,
+        accessToken: @escaping () -> String?,
+        invalidateSession: @escaping () async -> Void = {},
+        now: @escaping () -> Date = { Date() }
     ) {
+        self.now = now
+        self.offlinePolicy = offlinePolicy
         self.baseURL = baseURL
-        self.session = session
-        self.storage = storage
-        self.storageContext = storageContext
-        self.storageGeneration = storageGeneration
+        self.session = session ?? Self.makeDefaultSession(responseCachePolicy: responseCachePolicy)
+        self.storage = responseCachePolicy == .enabled ? storage : nil
+        self.storageContext = responseCachePolicy == .enabled ? storageContext : nil
+        self.storageGeneration = responseCachePolicy == .enabled ? storageGeneration : nil
+        self.responseCachePolicy = responseCachePolicy
         self.accessToken = accessToken
         self.invalidateSession = invalidateSession
     }
 
      public func execute<Request: APIRequest>(_ request: Request) async throws -> Request.Response {
+        try await executeWithProvenance(request).value
+    }
+
+    /// 带结果来源的执行入口。
+    ///
+    /// 依据 R-RESULT：每次调用各自携带来源上下文，不使用共享的「最后一次请求来源」。
+     public func executeWithProvenance<Request: APIRequest>(
+        _ request: Request
+    ) async throws -> APIResult<Request.Response> {
         if request.authenticationPolicy == .required,
            accessToken()?.isEmpty != false {
             await invalidateSession()
@@ -43,12 +63,21 @@ public final class AlamofireRemoteAPIClient: APIClient {
         let storageIdentity = storageContext?.currentUserID
         let generationSnapshot = await storageGeneration?.snapshot()
         let urlRequest = try makeURLRequest(request)
-        let response = await session.request(urlRequest)
+        let dataRequest = session.request(urlRequest)
+        if responseCachePolicy == .disabled {
+            // 注入的 Session 也不能把本次响应写入它自己的 URLCache。
+            dataRequest.cacheResponse(using: .doNotCache)
+        }
+        let response = await dataRequest
             .serializingData()
             .response
 
         if let statusCode = response.response?.statusCode,
            !(200..<300).contains(statusCode) {
+            // 修改结果不确定时也要失效，避免后续读取返回旧事实。
+            if Self.isMutation(request), statusCode >= 500 {
+                await invalidateResponseCache()
+            }
             if let businessError = response.data.flatMap(APIJSONDecoder.businessError(from:)) {
                 if request.authenticationPolicy != .none,
                    businessError.requiresAuthentication {
@@ -62,7 +91,24 @@ public final class AlamofireRemoteAPIClient: APIClient {
             throw APIClientError.http(statusCode: statusCode)
         }
         if let error = response.error {
-            throw mapTransportError(error)
+            let failure = Self.transportFailure(from: error)
+            // 修改在传输层失败，远端是否已生效不确定。
+            if Self.isMutation(request) {
+                await invalidateResponseCache()
+            }
+            // 优先级：模式硬约束 → 端点资格 → 所选策略 → 缓存有效性。
+            // 只有明确断网才可能回退；超时、取消与其他原因保持原语义。
+            if failure.isDisconnection,
+               let cached = try? await offlineFallback(
+                   for: request,
+                   identity: storageIdentity
+               ) {
+                return APIResult(
+                    value: cached.value,
+                    provenance: .cache(savedAt: cached.savedAt, fallbackReason: failure)
+                )
+            }
+            throw APIClientError.transport(failure)
         }
         guard let data = response.data else {
             throw APIClientError.invalidResponse
@@ -73,7 +119,20 @@ public final class AlamofireRemoteAPIClient: APIClient {
             from: data,
             envelope: request.responseEnvelope
         )
-        if request.storagePolicy == .store,
+        // R-INVALIDATION：成功修改后使当前服务与会话的响应缓存失效。
+        // 修改响应形状与 GET 缓存不同，不得写入 GET 缓存，因此这里直接返回。
+        if Self.isMutation(request) {
+            await invalidateResponseCache()
+            return APIResult(value: value, provenance: .remote)
+        }
+        // `no-store` 是 RFC 9111 硬约束，端点保存资格不能覆盖它。
+        let cacheControl = APICacheControl(
+            headerValue: response.response?.value(forHTTPHeaderField: "Cache-Control")
+        )
+        if CachedResponseRecord.isPersistable(
+            cacheControl: cacheControl,
+            storagePolicy: request.storagePolicy
+        ),
            let storage,
            let storageContext,
            let storageIdentity,
@@ -81,21 +140,46 @@ public final class AlamofireRemoteAPIClient: APIClient {
             let key = StorageKey.make(
                 for: request,
                 schemaVersion: storageContext.schemaVersion,
-                environment: storageContext.environment,
+                service: storageContext.service,
                 userID: storageIdentity
             )
+            let record = CachedResponseRecord(
+                payload: data,
+                savedAt: now(),
+                requestIdentifier: request.identifier,
+                serviceNamespace: storageContext.serviceNamespace,
+                userID: storageIdentity,
+                cacheControl: cacheControl,
+                validators: APIResponseValidators(
+                    headers: response.response?.allHeaderFields ?? [:]
+                )
+            )
             do {
-                try await storage.save(data, for: key)
+                try await storage.save(try record.encoded(), for: key)
                 if !(await canWriteCache(generationSnapshot)) {
                     try await storage.remove(for: key)
                 }
             } catch {
+                // 网络成功后的缓存写入失败不得抹掉已取得的有效远端结果。
                 #if DEBUG
                 print("APIStorage save failed: \(error.localizedDescription)")
                 #endif
             }
         }
-        return value
+        return APIResult(value: value, provenance: .remote)
+    }
+
+    /// 是否为修改命令。只有只读 GET 参与响应缓存。
+    private static func isMutation<Request: APIRequest>(_ request: Request) -> Bool {
+        request.method != .get
+    }
+
+    /// 保守失效范围：使当前服务与会话的响应缓存失效。
+    ///
+    /// 推进世代可阻止旧在途读取重新写回缓存或覆盖新的页面结果。
+    private func invalidateResponseCache() async {
+        await storageGeneration?.invalidate()
+        try? await storage?.removeAll()
     }
 
     private func canWriteCache(_ snapshot: Int?) async -> Bool {
@@ -138,26 +222,98 @@ public final class AlamofireRemoteAPIClient: APIClient {
         request.headers.forEach { name, value in
             urlRequest.setValue(value, forHTTPHeaderField: name)
         }
+        if responseCachePolicy == .disabled {
+            urlRequest.cachePolicy = .reloadIgnoringLocalCacheData
+            urlRequest.setValue("no-cache, no-store", forHTTPHeaderField: "Cache-Control")
+        }
         return urlRequest
     }
 
-    private func mapTransportError(_ error: AFError) -> APIClientError {
-        if let urlError = error.underlyingError as? URLError {
-            switch urlError.code {
-            case .notConnectedToInternet: return .transport("网络连接失败，请检查网络设置")
-            case .timedOut: return .transport("请求超时，请稍后重试")
-            default: return .transport(urlError.localizedDescription)
-            }
+    /// 断网后的缓存回退。
+    ///
+    /// 任一条件不成立即返回 nil，由调用方保留原始连接错误：
+    /// 所选策略为 `useCache`、端点已登记离线资格、缓存存在且未损坏、
+    /// 身份匹配且仍在有效期内。`remoteOnly` 模式下 storage 为 nil，天然不可达。
+    private func offlineFallback<Request: APIRequest>(
+        for request: Request,
+        identity: String?
+    ) async throws -> (value: Request.Response, savedAt: Date)? {
+        guard offlinePolicy == .useCache,
+              let eligibility = request.offlineEligibility,
+              let storage,
+              let storageContext,
+              let identity else {
+            return nil
         }
-        return .transport(error.localizedDescription)
+        let key = StorageKey.make(
+            for: request,
+            schemaVersion: storageContext.schemaVersion,
+            service: storageContext.service,
+            userID: identity
+        )
+        guard let data = try await storage.load(for: key),
+              let record = try? CachedResponseRecord.decode(from: data),
+              record.matches(
+                  requestIdentifier: request.identifier,
+                  serviceNamespace: storageContext.serviceNamespace,
+                  userID: identity
+              ),
+              eligibility.isFresh(savedAt: record.savedAt, now: now()) else {
+            return nil
+        }
+        let value = try APIJSONDecoder.decode(
+            Request.Response.self,
+            from: record.payload,
+            envelope: request.responseEnvelope
+        )
+        return (value, record.savedAt)
     }
 
-     public static func makeDefaultSession() -> Session {
+    /// 将传输错误映射为结构化原因。
+    ///
+    /// 判定只依据错误类型与 `URLError.Code`，不解析本地化文案；
+    /// 未归类问题保留底层描述，但不被视为断网。
+    static func transportFailure(from error: AFError) -> APITransportFailure {
+        // Alamofire 主动取消不一定携带 underlyingError，需要单独识别。
+        if error.isExplicitlyCancelledError {
+            return .cancelled
+        }
+        if let urlError = error.underlyingError as? URLError {
+            return transportFailure(from: urlError)
+        }
+        return .other(error.localizedDescription)
+    }
+
+    static func transportFailure(from urlError: URLError) -> APITransportFailure {
+        switch urlError.code {
+        case .notConnectedToInternet:
+            return .notConnected
+        case .networkConnectionLost:
+            return .connectionLost
+        case .timedOut:
+            return .timedOut
+        case .cancelled:
+            return .cancelled
+        default:
+            return .other(urlError.localizedDescription)
+        }
+    }
+
+     public static func makeDefaultSession(responseCachePolicy: APIResponseCachePolicy = .enabled) -> Session {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 15
         configuration.timeoutIntervalForResource = 15
+        if responseCachePolicy == .disabled {
+            configuration.urlCache = nil
+            configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        }
         let interceptor = Interceptor(retriers: [APIRetryPolicy()])
-        return Session(configuration: configuration, interceptor: interceptor, eventMonitors: [LoggingMonitor()])
+        return Session(
+            configuration: configuration,
+            interceptor: interceptor,
+            cachedResponseHandler: responseCachePolicy == .disabled ? ResponseCacher.doNotCache : nil,
+            eventMonitors: [LoggingMonitor()]
+        )
     }
 }
 

@@ -48,7 +48,7 @@ final class RouteDetailViewModelTests: XCTestCase {
 
     func testSearchWhitespaceEquivalentQueryKeepsInitialStateWithoutCallingService() async {
         let service = RouteDiscoveryServiceStub(
-            searchError: APIClientError.transport("搜索服务不应被调用")
+            searchError: APIClientError.transport(.other("搜索服务不应被调用"))
         )
         let sut = RouteDiscoveryViewModel(service: service)
 
@@ -180,7 +180,7 @@ final class RouteDetailViewModelTests: XCTestCase {
     }
 
     func testRouteDetailUsesProductionComponentsForEveryAuditedSafeSection() throws {
-        let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
+        let source = try routeDetailPageSources()
         let componentCalls = [
             "RouteBusinessComponents.RouteSummary(",
             "RouteBusinessComponents.RouteIntroduction(",
@@ -490,7 +490,7 @@ final class RouteDetailViewModelTests: XCTestCase {
         XCTAssertEqual(presentation.elevationProfile?.samples, sut.elevationSamples)
         XCTAssertEqual(presentation.elevationProfile?.minElevation, 3_000)
         XCTAssertEqual(presentation.elevationProfile?.maxElevation, 3_200)
-        let source = try productionSource(at: "Features/Routes/RouteDetailView.swift")
+        let source = try routeDetailPageSources()
         XCTAssertTrue(source.contains("RouteBusinessComponents.ElevationProfile("))
     }
 
@@ -725,7 +725,7 @@ final class RouteDetailViewModelTests: XCTestCase {
         let detail = Self.detail(availability: .missing, mainTrack: nil)
         let service = RouteDetailServiceStub(
             detail: detail,
-            loadErrors: [APIClientError.transport("暂时不可用")]
+            loadErrors: [APIClientError.transport(.other("暂时不可用"))]
         )
         let sut = RouteDetailViewModel(service: service)
 
@@ -745,6 +745,14 @@ final class RouteDetailViewModelTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         return try String(contentsOf: walkRoot.appendingPathComponent(relativePath), encoding: .utf8)
+    }
+
+    /// 聚合页面与其实际消费的支持结构，避免把文件拆分误报为生产组件缺失。
+    private func routeDetailPageSources(file: StaticString = #filePath, line: UInt = #line) throws -> String {
+        let page = try productionSource(at: "Features/Routes/RouteDetailView.swift")
+        let support = try productionSource(at: "Features/Routes/RouteDetailViewSupport.swift")
+        XCTAssertTrue(page.contains("RouteDetailScrollOverlay("), "页面必须消费被审计的信息滚动层", file: file, line: line)
+        return [page, support].joined(separator: "\n")
     }
 
     private static let browseSummary = PublicRouteBrowseSummary(

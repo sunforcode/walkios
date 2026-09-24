@@ -14,22 +14,30 @@ public protocol AuthSession: AnyObject {
 }
 
 /// 认证管理器
-/// 负责 Token 的读取、保存和持久化（Keychain）
+/// 负责 Token 的读取、保存和持久化（Keychain）。
+///
+/// 依据 R-AUTH：由 App 按最终配置创建并注入同一实例；本类型不读取启动参数、
+/// Info.plist 或 Debug 偏好，也不提供全局单例。
 public final class AuthManager: AuthSession {
-     public static let shared = AuthManager()
+    private let keychainService: String
 
-    private let keychainService = "com.walk.app"
+    /// Keychain account，由最终服务身份与 Mock/真实决定。
+    public let persistenceNamespace: String
 
-    /// Keychain 账户键按数据源模式隔离：
-    /// mock 模式写入 auth_token_mock，避免覆盖 remote 模式的真实登录态。
-    private let tokenKey: String
-
-    private init() {
-        let rawMode = ProcessInfo.processInfo.environment["WALK_DATA_SOURCE_MODE"]
-            ?? (Bundle.main.infoDictionary?["WalkDataSourceMode"] as? String)
-            ?? ""
-        tokenKey = rawMode.lowercased() == "mock" ? "auth_token_mock" : "auth_token"
+    /// `keychainService` 可注入独立服务，供测试隔离凭据。
+    public init(persistenceNamespace: String, keychainService: String = "com.walk.app") {
+        self.keychainService = keychainService
+        self.persistenceNamespace = persistenceNamespace
     }
+
+    /// 认证命名空间：以最终服务身份为基础，再区分 Mock 与真实。
+    ///
+    /// 同一服务下 real / remoteOnly 共用真实会话；不同环境标识或不同地址隔离。
+    public static func namespace(for service: APIServiceIdentity, isMock: Bool) -> String {
+        "auth|\(isMock ? "mock" : "real")|\(service.storageNamespace)"
+    }
+
+    private var tokenKey: String { persistenceNamespace }
 
     /// 当前认证 Token
      public var currentToken: String? {

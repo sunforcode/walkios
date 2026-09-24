@@ -42,8 +42,8 @@
 	</array>
 	<key>WalkAPIBaseURL</key>
 	<string>$(WALK_API_BASE_URL)</string>
-	<key>WalkDataSourceMode</key>
-	<string>$(WALK_DATA_SOURCE_MODE)</string>
+	<key>WalkDataMode</key>
+	<string>$(WALK_DATA_MODE)</string>
 	<key>WalkEnvironment</key>
 	<string>$(WALK_ENVIRONMENT)</string>
 </dict>

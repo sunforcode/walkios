@@ -11,12 +11,14 @@ struct HomeView: View {
     init(
         onAuthenticate: @escaping (PendingAuthIntent) -> Void,
         onNavigate: @escaping (AppDestination) -> Void,
-        service: any PersonalTripServicing
+        service: any PersonalTripServicing,
+        authSession: any AuthSession
     ) {
         self.onAuthenticate = onAuthenticate
         self.onNavigate = onNavigate
         _viewModel = StateObject(wrappedValue: HomeViewModel(
-            service: service
+            service: service,
+            authSession: authSession
         ))
     }
 

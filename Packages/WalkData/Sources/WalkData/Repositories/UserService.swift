@@ -13,7 +13,7 @@ public final class AccountService: AccountServicing {
     private let apiClient: any APIClient
     private let authManager: AuthManager
 
-     public init(apiClient: any APIClient, authManager: AuthManager = .shared) {
+     public init(apiClient: any APIClient, authManager: AuthManager) {
         self.apiClient = apiClient
         self.authManager = authManager
     }

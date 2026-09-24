@@ -11,7 +11,7 @@ final class WalkComponentCatalogUITests: XCTestCase {
         for componentID in Self.componentIDs {
             let app = XCUIApplication()
             app.launchArguments = [
-                "-DataSourceMode", "mock",
+                "-WalkDataMode", "mock",
                 "-APIBaseURL", "https://api.example.invalid/walkbg/api/v1",
                 "-WalkEnvironment", "test",
                 "--component-preview", componentID, "default",
@@ -67,7 +67,7 @@ final class WalkComponentCatalogUITests: XCTestCase {
     func testUnknownComponentUsesUnsupportedMarker() {
         let app = XCUIApplication()
         app.launchArguments = [
-            "-DataSourceMode", "mock",
+            "-WalkDataMode", "mock",
             "-APIBaseURL", "https://api.example.invalid/walkbg/api/v1",
             "-WalkEnvironment", "test",
             "--component-preview", "UnknownComponent", "default",

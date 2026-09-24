@@ -1,0 +1,28 @@
+include: [base.yml]
+name: WalkIsolationDebug
+configs:
+  Debug: debug
+packages:
+  WalkDebugTools:
+    path: WalkDebugTools
+targets:
+  WalkIsolationProbe:
+    dependencies:
+      - package: WalkDebugTools
+schemes:
+  WalkIsolationDebug:
+    build:
+      targets:
+        WalkIsolationProbe: [run, test, analyze]
+        WalkIsolationUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets: [WalkIsolationUITests]
+    analyze:
+      config: Debug
+    profile:
+      config: Debug
+    archive:
+      config: Debug

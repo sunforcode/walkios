@@ -92,7 +92,7 @@ final class ProfileViewModel: ObservableObject {
         accountService: any AccountServicing,
         tripService: any PersonalTripServicing,
         equipmentService: any EquipmentServicing,
-        authSession: any AuthSession = AuthManager.shared,
+        authSession: any AuthSession,
         clearCachedResponses: @escaping () async -> Void = {}
     ) {
         self.authSession = authSession

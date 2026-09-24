@@ -9,7 +9,12 @@ enum PreviewHelpers {
     static let routeService = RouteService(apiClient: apiClient)
     static let personalTripService = PersonalTripService(apiClient: apiClient)
     static let equipmentService = EquipmentService(apiClient: apiClient)
-    static let accountService = AccountService(apiClient: apiClient)
+    /// 预览专用认证实例，使用独立 Keychain 服务，不读写 App 的真实凭据。
+    static let authManager = AuthManager(
+        persistenceNamespace: "auth|preview",
+        keychainService: "com.walk.app.preview"
+    )
+    static let accountService = AccountService(apiClient: apiClient, authManager: authManager)
 }
 
 extension TripListViewModel {

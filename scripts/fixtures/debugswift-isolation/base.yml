@@ -1,0 +1,35 @@
+name: WalkIsolationProbe
+options:
+  deploymentTarget:
+    iOS: "18.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    GENERATE_INFOPLIST_FILE: YES
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    LD_GENERATE_MAP_FILE: YES
+targets:
+  WalkIsolationProbe:
+    type: application
+    platform: iOS
+    sources: [App]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.walk.validation.isolation
+        # Keep the probe's complete link map in the main executable.
+        ENABLE_DEBUG_DYLIB: "NO"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        TARGETED_DEVICE_FAMILY: "1"
+  WalkIsolationUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: WalkIsolationProbe
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.walk.validation.isolation.tests
+        TEST_TARGET_NAME: WalkIsolationProbe

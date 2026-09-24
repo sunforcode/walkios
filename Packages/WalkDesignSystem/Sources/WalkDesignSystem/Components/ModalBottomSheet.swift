@@ -195,14 +195,9 @@ private struct ModalBottomSheetShape: Shape {
 }
 
 private extension View {
-    /// iOS 16.4 起内容贴合时禁用滚动弹动；更低版本保持系统默认。
-    @ViewBuilder
+    /// 内容贴合时禁用滚动弹动。
     func scrollBounceBehaviorBasedOnSizeIfAvailable() -> some View {
-        if #available(iOS 16.4, *) {
-            scrollBounceBehavior(.basedOnSize)
-        } else {
-            self
-        }
+        scrollBounceBehavior(.basedOnSize)
     }
 }
 

@@ -142,13 +142,15 @@ final class APIClientContractTests: XCTestCase {
         XCTAssertEqual(request.storagePolicy, .store)
     }
 
-    func testRemoteRouteDetailCanBeReadByLocalClient() async throws {
+    /// 远端成功响应按记录格式落盘，供后续策略读取。
+    /// 直接断言存储内容，不借道另一个客户端间接推断。
+    func testRemoteRouteDetailIsPersistedAsCacheRecord() async throws {
         let responseData = try Fixture.data("route-detail-route-1")
         let request = RouteAPI.Detail(id: "route-1", userID: "user-1")
         let storage = MemoryAPIStorage()
         let context = APIStorageContext(
             schemaVersion: "v1",
-            environment: "test",
+            service: .testService(environment: "test"),
             userID: "user-1"
         )
         let remote = AlamofireRemoteAPIClient(
@@ -160,9 +162,25 @@ final class APIClientContractTests: XCTestCase {
         )
 
         let remoteRoute = try await remote.execute(request)
-        let localRoute = try await LocalAPIClient(storage: storage, storageContext: context).execute(request)
+        let key = StorageKey.make(
+            for: request,
+            schemaVersion: "v1",
+            service: context.service,
+            userID: "user-1"
+        )
+        let storedData = try await storage.load(for: key)
+        let stored = try XCTUnwrap(storedData)
+        let record = try CachedResponseRecord.decode(from: stored)
 
-        XCTAssertEqual(localRoute, remoteRoute)
+        XCTAssertEqual(remoteRoute.id, "route-1")
+        XCTAssertEqual(record.payload, responseData)
+        XCTAssertTrue(
+            record.matches(
+                requestIdentifier: request.identifier,
+                serviceNamespace: context.serviceNamespace,
+                userID: "user-1"
+            )
+        )
     }
 
     func testRouteDetailEnumValuesMatchBackendContract() throws {
@@ -366,16 +384,16 @@ final class APIClientContractTests: XCTestCase {
 
         XCTAssertEqual(first.storagePolicy, .none)
         XCTAssertEqual(
-            StorageKey.make(for: first, schemaVersion: "v1", environment: "test", userID: "user-1"),
-            StorageKey.make(for: second, schemaVersion: "v1", environment: "test", userID: "user-1")
+            StorageKey.make(for: first, schemaVersion: "v1", service: .testService(environment: "test"), userID: "user-1"),
+            StorageKey.make(for: second, schemaVersion: "v1", service: .testService(environment: "test"), userID: "user-1")
         )
         XCTAssertNotEqual(
-            StorageKey.make(for: first, schemaVersion: "v1", environment: "test", userID: "user-1"),
-            StorageKey.make(for: first, schemaVersion: "v1", environment: "test", userID: "user-2")
+            StorageKey.make(for: first, schemaVersion: "v1", service: .testService(environment: "test"), userID: "user-1"),
+            StorageKey.make(for: first, schemaVersion: "v1", service: .testService(environment: "test"), userID: "user-2")
         )
         XCTAssertNotEqual(
-            StorageKey.make(for: first, schemaVersion: "v1", environment: "test", userID: "user-1"),
-            StorageKey.make(for: first, schemaVersion: "v1", environment: "production", userID: "user-1")
+            StorageKey.make(for: first, schemaVersion: "v1", service: .testService(environment: "test"), userID: "user-1"),
+            StorageKey.make(for: first, schemaVersion: "v1", service: .testService(environment: "production"), userID: "user-1")
         )
     }
 
@@ -383,7 +401,7 @@ final class APIClientContractTests: XCTestCase {
         let identity = MutableIdentity("user-1")
         let context = APIStorageContext(
             schemaVersion: "v1",
-            environment: "test",
+            service: .testService(environment: "test"),
             userIDProvider: { identity.value }
         )
 
@@ -415,7 +433,7 @@ final class APIClientContractTests: XCTestCase {
             storage: storage,
             storageContext: APIStorageContext(
                 schemaVersion: "v1",
-                environment: "test",
+                service: .testService(environment: "test"),
                 userIDProvider: { identity.value }
             ),
             accessToken: { "test-token" }
@@ -426,13 +444,13 @@ final class APIClientContractTests: XCTestCase {
         let expectedKey = StorageKey.make(
             for: request,
             schemaVersion: "v1",
-            environment: "test",
+            service: .testService(environment: "test"),
             userID: "user-a"
         )
         let wrongKey = StorageKey.make(
             for: request,
             schemaVersion: "v1",
-            environment: "test",
+            service: .testService(environment: "test"),
             userID: "user-b"
         )
         let expectedData = try await storage.load(for: expectedKey)
@@ -467,7 +485,7 @@ final class APIClientContractTests: XCTestCase {
             storage: storage,
             storageContext: APIStorageContext(
                 schemaVersion: "v1",
-                environment: "test",
+                service: .testService(environment: "test"),
                 userID: "user-a"
             ),
             storageGeneration: generation,
@@ -483,7 +501,7 @@ final class APIClientContractTests: XCTestCase {
         let key = StorageKey.make(
             for: request,
             schemaVersion: "v1",
-            environment: "test",
+            service: .testService(environment: "test"),
             userID: "user-a"
         )
         let cachedData = try await storage.load(for: key)
@@ -503,7 +521,7 @@ final class APIClientContractTests: XCTestCase {
             storage: storage,
             storageContext: APIStorageContext(
                 schemaVersion: "v1",
-                environment: "test",
+                service: .testService(environment: "test"),
                 userID: "user-a"
             ),
             storageGeneration: generation,
@@ -515,14 +533,15 @@ final class APIClientContractTests: XCTestCase {
         let key = StorageKey.make(
             for: request,
             schemaVersion: "v1",
-            environment: "test",
+            service: .testService(environment: "test"),
             userID: "user-a"
         )
         let cachedData = try await storage.load(for: key)
         XCTAssertNil(cachedData)
     }
 
-    func testRemoteLocalAndMockClientsExecuteSameTypedRequest() async throws {
+    /// 真实与 Mock 两类能力执行同一个类型化请求，业务调用面保持稳定。
+    func testRealAndMockClientsExecuteSameTypedRequest() async throws {
         let responseData = try Fixture.data("api-success")
         let storage = MemoryAPIStorage()
         let storedRequest = TestRequest(storagePolicy: .store)
@@ -531,39 +550,16 @@ final class APIClientContractTests: XCTestCase {
             baseURL: URL(string: "https://example.test/api/v1")!,
             session: session,
             storage: storage,
-            storageContext: .init(schemaVersion: "v1", environment: "test", userID: "user-1"),
+            storageContext: .init(schemaVersion: "v1", service: .testService(environment: "test"), userID: "user-1"),
             accessToken: { "test-token" }
         )
 
         let remoteValue = try await remote.execute(storedRequest)
         XCTAssertEqual(remoteValue.value, "ok")
 
-        let local = LocalAPIClient(
-            storage: storage,
-            storageContext: .init(schemaVersion: "v1", environment: "test", userID: "user-1")
-        )
-        let localValue = try await local.execute(storedRequest)
-        XCTAssertEqual(localValue.value, remoteValue.value)
-
         let mock = MockAPIClient(fixtures: [storedRequest.identifier: responseData])
         let mockValue = try await mock.execute(storedRequest)
         XCTAssertEqual(mockValue.value, remoteValue.value)
-    }
-
-    func testLocalCacheMissFailsWithoutRemoteFallback() async {
-        let local = LocalAPIClient(
-            storage: MemoryAPIStorage(),
-            storageContext: .init(schemaVersion: "v1", environment: "test", userID: "user-1")
-        )
-
-        do {
-            _ = try await local.execute(TestRequest())
-            XCTFail("Expected a cache miss")
-        } catch APIClientError.localDataNotFound {
-            // Expected.
-        } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
     }
 
     func testHTTPErrorParsesBusinessEnvelope() async {

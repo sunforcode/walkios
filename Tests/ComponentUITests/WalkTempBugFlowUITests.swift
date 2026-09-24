@@ -10,7 +10,7 @@ final class WalkTempBugFlowUITests: XCTestCase {
 
         let app = XCUIApplication()
         app.launchArguments = [
-            "-DataSourceMode", "mock",
+            "-WalkDataMode", "mock",
             "-APIBaseURL", "https://api.example.invalid/walkbg/api/v1",
             "-WalkEnvironment", "test",
         ]
@@ -116,7 +116,7 @@ final class WalkTempBugFlowUITests: XCTestCase {
 
         let app = XCUIApplication()
         app.launchArguments = [
-            "-DataSourceMode", "mock",
+            "-WalkDataMode", "mock",
             "-APIBaseURL", "https://api.example.invalid/walkbg/api/v1",
             "-WalkEnvironment", "test",
         ]

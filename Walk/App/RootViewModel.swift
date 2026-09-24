@@ -16,7 +16,7 @@ final class RootViewModel: ObservableObject {
     private let loadAccount: () async throws -> AccountResponse
 
     init(
-        authManager: AuthManager = .shared,
+        authManager: AuthManager,
         accountService: any AccountServicing
     ) {
         self.isLoggedIn = { authManager.isLoggedIn }

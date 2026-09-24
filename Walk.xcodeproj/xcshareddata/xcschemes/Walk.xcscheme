@@ -74,7 +74,7 @@
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
-            key = "WALK_DATA_SOURCE_MODE"
+            key = "WALK_DATA_MODE"
             value = "mock"
             isEnabled = "YES">
          </EnvironmentVariable>
@@ -107,23 +107,6 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
       </CommandLineArguments>
-      <EnvironmentVariables>
-         <EnvironmentVariable
-            key = "WALK_API_BASE_URL"
-            value = "https://vialu.cn/walkbg/api/v1"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
-            key = "WALK_DATA_SOURCE_MODE"
-            value = "remote"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
-            key = "WALK_ENVIRONMENT"
-            value = "development"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-      </EnvironmentVariables>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"

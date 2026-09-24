@@ -78,7 +78,7 @@ extension RouteBusinessComponents {
                     }
                     .frame(maxWidth: 390, alignment: .leading)
                     .padding(Spacing.lg)
-                    .padding(.bottom, Spacing.xl)
+                    .immersiveBottomContentPadding(Spacing.xl)
                 }
                 .contentShape(Rectangle())
             }

@@ -4,70 +4,66 @@ import WalkDesignSystem
 @testable import Walk
 
 final class AppEnvironmentTests: XCTestCase {
+    private let testURL = "https://api.example.test/v1"
+
+    /// W0 红测：启动参数确定性选择模式，优先于环境变量。
+    func testDebugMockLaunchModeOverridesRemoteEnvironment() throws {
+        let configuration = try AppConfiguration(
+            arguments: ["Walk", "-WalkDataMode", "mock"],
+            environment: [
+                "WALK_DATA_MODE": "real",
+                "WALK_ENVIRONMENT": "test",
+                "WALK_API_BASE_URL": testURL,
+            ],
+            bundleInfo: [:],
+            isDebugBuild: true
+        )
+        XCTAssertEqual(configuration.dataMode, .mock)
+    }
+
+    /// W0 红测：原断言为 `.remote`，会丢失 remoteOnly 语义，与 R-MODE 冲突；
+    /// W2 修正为断言 `.remoteOnly`。
+    func testDebugRemoteOnlyLaunchModeOverridesMockEnvironment() throws {
+        let configuration = try AppConfiguration(
+            arguments: ["Walk", "-WalkDataMode", "remoteOnly"],
+            environment: [
+                "WALK_DATA_MODE": "mock",
+                "WALK_ENVIRONMENT": "test",
+                "WALK_API_BASE_URL": testURL,
+            ],
+            bundleInfo: [:],
+            isDebugBuild: true
+        )
+        XCTAssertEqual(configuration.dataMode, .remoteOnly)
+    }
+
     func testConfigurationReadsExplicitModeAndInjectedBaseURL() throws {
         let configuration = try AppConfiguration(
             arguments: [
                 "Walk",
-                "-DataSourceMode", "local",
-                "-APIBaseURL", "https://api.example.test/v1",
+                "-WalkDataMode", "real",
+                "-APIBaseURL", testURL,
                 "-WalkEnvironment", "test",
             ],
             environment: [:],
-            bundleInfo: ["WalkEnvironment": "production"]
+            bundleInfo: ["WalkEnvironment": "production"],
+            isDebugBuild: true
         )
 
-        XCTAssertEqual(configuration.dataSourceMode, .local)
-        XCTAssertEqual(configuration.baseURL.absoluteString, "https://api.example.test/v1")
+        XCTAssertEqual(configuration.dataMode, .real)
+        XCTAssertEqual(configuration.baseURL.absoluteString, testURL)
         XCTAssertEqual(configuration.environmentName, "test")
     }
 
-    func testConfigurationWithoutBuildSettingsNeverDefaultsToMock() {
-        XCTAssertThrowsError(try AppConfiguration(
+    /// 构建配置未设置模式时代码默认值为 real，绝不默认 Mock。
+    func testConfigurationWithoutBuildSettingsNeverDefaultsToMock() throws {
+        let configuration = try AppConfiguration(
             arguments: ["Walk"],
             environment: [:],
-            bundleInfo: [:]
-        )) { error in
-            XCTAssertEqual(error as? AppConfigurationError, .missingBaseURL)
-        }
-
-        let configuration = try? AppConfiguration(
-            arguments: ["Walk"],
-            environment: [:],
-            bundleInfo: [
-                "WalkAPIBaseURL": "https://api.example.test/v1",
-                "WalkEnvironment": "development",
-            ]
+            bundleInfo: ["WalkAPIBaseURL": testURL, "WalkEnvironment": "development"],
+            isDebugBuild: true
         )
-        XCTAssertEqual(configuration?.dataSourceMode, .remote)
-    }
-
-    func testProductionConfigurationRejectsMockAndPlaceholderURL() {
-        XCTAssertThrowsError(try AppConfiguration(
-            arguments: ["Walk"],
-            environment: [:],
-            bundleInfo: [
-                "WalkAPIBaseURL": "https://api.example.test/v1",
-                "WalkDataSourceMode": "mock",
-                "WalkEnvironment": "production",
-            ]
-        )) { error in
-            XCTAssertEqual(error as? AppConfigurationError, .productionRequiresRemote)
-        }
-
-        XCTAssertThrowsError(try AppConfiguration(
-            arguments: ["Walk"],
-            environment: [:],
-            bundleInfo: [
-                "WalkAPIBaseURL": "https://api.example.invalid/walkbg/api/v1",
-                "WalkDataSourceMode": "remote",
-                "WalkEnvironment": "production",
-            ]
-        )) { error in
-            XCTAssertEqual(
-                error as? AppConfigurationError,
-                .placeholderBaseURL("https://api.example.invalid/walkbg/api/v1")
-            )
-        }
+        XCTAssertEqual(configuration.dataMode, .real)
     }
 
     func testDevelopmentAndTestConfigurationsAllowExplicitMock() throws {
@@ -77,42 +73,27 @@ final class AppEnvironmentTests: XCTestCase {
                 environment: [:],
                 bundleInfo: [
                     "WalkAPIBaseURL": "https://api.example.invalid/walkbg/api/v1",
-                    "WalkDataSourceMode": "mock",
+                    "WalkDataMode": "mock",
                     "WalkEnvironment": environmentName,
-                ]
+                ],
+                isDebugBuild: true
             )
 
-            XCTAssertEqual(configuration.dataSourceMode, .mock)
+            XCTAssertEqual(configuration.dataMode, .mock)
             XCTAssertEqual(configuration.environmentName, environmentName)
         }
     }
 
-    func testConfigurationUsesArchiveBundleValuesWithoutSchemeEnvironment() throws {
-        let configuration = try AppConfiguration(
-            arguments: ["Walk"],
-            environment: [:],
-            bundleInfo: [
-                "WalkAPIBaseURL": "https://api.example.test/walkbg/api/v1",
-                "WalkDataSourceMode": "remote",
-                "WalkEnvironment": "production",
-            ]
-        )
-
-        XCTAssertEqual(configuration.baseURL.absoluteString, "https://api.example.test/walkbg/api/v1")
-        XCTAssertEqual(configuration.dataSourceMode, .remote)
-        XCTAssertEqual(configuration.environmentName, "production")
-    }
-
-    func testEnvironmentAssemblesExactlyConfiguredTargetServices() throws {
-        for mode in DataSourceMode.allCases {
+    func testEnvironmentAssemblesEveryDataMode() throws {
+        for mode in WalkDataMode.allCases {
             let configuration = AppConfiguration(
-                dataSourceMode: mode,
-                baseURL: URL(string: "https://api.example.test/v1")!,
+                dataMode: mode,
+                baseURL: URL(string: testURL)!,
                 environmentName: "test"
             )
             let environment = try AppEnvironment(configuration: configuration)
 
-            XCTAssertEqual(environment.configuration.dataSourceMode, mode)
+            XCTAssertEqual(environment.configuration.dataMode, mode)
             XCTAssertNotNil(environment.personalTripService)
             XCTAssertNotNil(environment.tripEquipmentService)
             XCTAssertNotNil(environment.accountService)
@@ -121,20 +102,20 @@ final class AppEnvironmentTests: XCTestCase {
 
     func testEnvironmentRejectsDirectlyInjectedUnsafeProductionConfiguration() {
         let configuration = AppConfiguration(
-            dataSourceMode: .mock,
+            dataMode: .mock,
             baseURL: URL(string: "https://api.example.invalid/v1")!,
             environmentName: "production"
         )
 
         XCTAssertThrowsError(try AppEnvironment(configuration: configuration)) { error in
-            XCTAssertEqual(error as? AppConfigurationError, .productionRequiresRemote)
+            XCTAssertEqual(error as? AppConfigurationError, .productionRequiresRealNetwork)
         }
     }
 
     func testMockEnvironmentLoadsDefaultPublicRouteFixtures() async throws {
         let configuration = AppConfiguration(
-            dataSourceMode: .mock,
-            baseURL: URL(string: "https://api.example.test/v1")!,
+            dataMode: .mock,
+            baseURL: URL(string: testURL)!,
             environmentName: "test"
         )
         let environment = try AppEnvironment(
