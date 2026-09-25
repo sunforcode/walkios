@@ -37,7 +37,7 @@
 
 ## App 架构基准
 
-确认日期：2026-09-24。本节保存本轮讨论确定的 iOS **目标逻辑架构**，用于后续核对实现，不表示图中每项能力都已接入。当前代码的构成与差距见 [架构调研记录](../output/architecture-review-20260924.md)。
+确认日期：2026-09-24。本节保存本轮讨论确定的 iOS **目标逻辑架构**。W0–W6 完成后的实际落地见下文「当前架构」。
 
 ### 架构图
 
@@ -113,7 +113,7 @@ flowchart TB
 
 ### 重构目标与工作拆分
 
-阶段状态：第 1 步「目的与目标」已获用户认可；第 2 步「工作拆分」已记录；第 3 步「规范与约束」首版见下文；第 4 步已完成 W0 的[工程与测试基线修复](../output/refactor-w0-results-20260924.md)和[DebugSwift 最小接入与隔离验证](../output/debugswift-isolation-20260924.md)、W1 的[数据能力与缓存](../output/refactor-w1-results-20260925.md)，W2 的[App 配置与依赖装配](../output/refactor-w2-results-20260925.md)，W3 的[DebugTools 接入](../output/refactor-w3-results-20260925.md)，W4 的[App / Feature / Service 整理](../output/refactor-w4-results-20260925.md)，W5 的[共用基建归属整理](../output/refactor-w5-results-20260925.md)，以及 W6 的[整体验收](../output/refactor-w6-results-20260925.md)。W0–W6 均已完成，当前架构与验收入口见本节「当前架构」。SDK 网络观察仍关闭，开启前需按 R-DEBUG 补齐请求、缓存、认证与取消语义的证据。W1 建立的离线返回能力目前没有任何生产端点启用。
+阶段状态：第 1–3 步（目的与目标、工作拆分、规范与约束）已确定；第 4 步的 W0–W6 均已完成，当前架构与验收入口见本节「当前架构」，已知问题与未验证范围见「当前架构」末尾。各批次过程记录不入库，从 git 历史追溯。SDK 网络观察仍关闭，开启前需按 R-DEBUG 补齐请求、缓存、认证与取消语义的证据。W1 建立的离线返回能力目前没有任何生产端点启用。
 
 **重构目的**：把现有逻辑架构落实为职责明确、依赖清晰、容易修改和验证的代码结构，降低后续开发、问题定位和测试成本。衡量效果时关注修改位置是否明确、影响范围是否可控、结果是否可验证。
 
@@ -176,6 +176,22 @@ W0–W6 完成后的实际结构，是上文架构图与「职责与依赖」的
 | 关键流程回归 | `WALK_E2E_DESTINATION='<destination>' scripts/run_key_flow_regression.sh`（会重置该模拟器 Keychain） |
 | 视觉基线 / 组件目录 / 调试面板 | scheme `WalkBaseline` / `WalkComponents` / `WalkDebugTools` |
 | Release 产物隔离 | `python3 scripts/build.py --mode release --action archive` |
+
+已知问题（截至 W6 收尾）：
+
+- `DailyWeatherSummaryRow` 已在平台组件目录登记，但总 UI 索引缺少该对象，WalkComponents 的 2 项目录断言因此失败；需根仓 Change 补登记。
+- 仓库缺少已批准视觉基线目录 `WalkBaselineGoldens/approved/`，视觉验证目前只能做改动前后自对比。
+- `color.map.overnight` 为暂定取值（冻结原型未定义），待设计确认后只改取值。
+- `TripWeatherTrendChart` 借用 `color.map.waypoint` 表示降水，属于语义借用。
+
+未验证范围：真实后端联调（需要真实后端的用例始终跳过）；正式 App 中的断网回退（无端点登记离线资格）；SDK 网络观察；签名、真机与分发。
+
+验证中需知的陷阱：
+
+- 模拟器 Keychain 在卸载 App 后仍保留登录态；依赖未登录起点的 UI 测试须先重置 Keychain（`run_key_flow_regression.sh` 已处理）。
+- 真实网络模式拒绝 localhost / 127.0.0.1，受控服务须使用局域网地址。
+- 模拟器测试须用 `CODE_SIGN_IDENTITY=-` 本地临时签名；`CODE_SIGNING_ALLOWED=NO` 会使 Keychain 返回 -34018，认证用例假失败。
+- 单配置开发工程不能阻止原始 `xcodebuild -configuration Release`；发布产物以 `scripts/build.py` 的隔离报告为准。
 
 ### 重构规范与约束
 
@@ -278,7 +294,7 @@ Release 的编译/链接输入与最终产物不得包含 DebugSwift 及其资�
 
 **W0 已验证的 W3 工程方案**：共用 XcodeGen 模板，分别生成开发与生产依赖图；仅开发图引入 DebugTools → DebugSwift，生产图不声明二者。候选版本固定为已经实测的 DebugSwift 1.19.0。正式构建入口在启动工具前校验模式、configuration 和 action，开发入口拒绝 Release 与 archive；发布入口只生成生产图，并执行依赖、编译、link map、符号/动态依赖和资源检查。
 
-单配置工程不能阻止原始 `xcodebuild -configuration Release` 强行覆盖，因此不能把「开发工程没有 Release 配置」视为隔离保证；受支持入口及发布检查必须一并落地。最小宿主已验证面板和自定义信息展示，默认禁用网络等自动监控钩子；正式 App 接入、配置回调及监控语义仍由 W3 验证。完整证据与复现入口见 [W0 SDK 验证记录](../output/debugswift-isolation-20260924.md)。
+单配置工程不能阻止原始 `xcodebuild -configuration Release` 强行覆盖，因此不能把「开发工程没有 Release 配置」视为隔离保证；受支持入口及发布检查必须一并落地。最小宿主已验证面板和自定义信息展示，默认禁用网络等自动监控钩子；正式 App 接入与配置回调已在 W3 完成并由 `WalkDebugToolsUITests` 验证；监控语义仍未验证（网络观察保持关闭）。
 
 #### 7. 实施与验收
 

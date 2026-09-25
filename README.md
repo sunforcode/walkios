@@ -10,11 +10,9 @@
 
 实施规则统一见 [重构规范与约束](specs/README.md#重构规范与约束)，包括依赖、配置、断网策略、会话隔离、调试工具与验收要求。
 
-当前源码的真实组成见 [架构调研记录（2026-09-24）](output/architecture-review-20260924.md)：App → Feature → Service → 统一 APIClient 的主干已实际使用；物理基础模块为 WalkData 与 WalkDesignSystem。数据客户端当前仍按 `remote / local / mock` 装配，DebugSwift 与独立 DebugTools 尚未接入。目标设计与实现现状在上述两处分别记录。
+重构 W0–W6 已完成。当前实际架构、各层依赖约束的强制测试与全部验收入口见 [当前架构](specs/README.md#当前架构)；各批次的过程记录不入库，需要时从 git 历史追溯（W6 收尾提交 `2a0fc14` 及之前）。
 
-工程与测试基线的修复范围、当前验证证据和保留问题见 [W0 执行记录](output/refactor-w0-results-20260924.md)。
-
-DebugSwift 已在 W3 接入正式 App，只存在于开发依赖图；Release 产物的隔离证据见 [W3 执行记录](output/refactor-w3-results-20260925.md)。W0 的最小宿主验证见 [W0 SDK 验证记录](output/debugswift-isolation-20260924.md)。
+DebugSwift 只存在于开发依赖图，Release 产物由 `scripts/build.py --mode release` 执行隔离检查。
 
 ## 目录地图
 
@@ -41,7 +39,6 @@ Tests/                       # 独立测试 target
   BaselineTests/  BaselineUITests/  ComponentTests/  ComponentUITests/  DebugToolsUITests/
   DataModeE2EUITests/  KeyFlowUITests/
 scripts/                     # 构建入口 build.py、产物隔离检查、UI 基线与组件目录脚本
-output/                      # 调研记录与其他产物；不作为规范来源
 specs/                       # 平台规范：只承接总规范，不新增产品事实（见 specs/README.md）
 ```
 
