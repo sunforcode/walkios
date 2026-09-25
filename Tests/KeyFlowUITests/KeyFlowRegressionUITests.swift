@@ -22,17 +22,12 @@ final class KeyFlowRegressionUITests: XCTestCase {
 
     @MainActor
     func testFiveDomainsAndLogin() throws {
-        // 路线：发现页 → 全部路线 → 详情
-        // 发现页路线卡片当前不在无障碍树中（存量缺陷，见 W6 记录），经「全部路线」进入详情。
+        // 路线：发现页卡片 → 详情
         tab("路线")
-        let allRoutes = app.buttons["全部路线"].firstMatch
-        XCTAssertTrue(allRoutes.waitForExistence(timeout: 10), "路线发现页未出现")
+        let routeScene = button(labelContaining: "长海子")
+        XCTAssertTrue(routeScene.waitForExistence(timeout: 10), "路线发现页未展示路线")
         capture("01-routes-discovery")
-        allRoutes.tap()
-        let routeRow = button(labelContaining: "长海子")
-        XCTAssertTrue(routeRow.waitForExistence(timeout: 10), "全部路线未展示路线")
-        capture("01b-route-list")
-        routeRow.tap()
+        routeScene.tap()
         XCTAssertTrue(app.buttons["立即出发"].firstMatch.waitForExistence(timeout: 10), "路线详情未加载")
         capture("02-route-detail")
 
@@ -77,6 +72,17 @@ final class KeyFlowRegressionUITests: XCTestCase {
         scrollTo(myEquipment).tap()
         Thread.sleep(forTimeInterval: 1.5)
         capture("09-personal-equipment")
+    }
+
+    /// 路线发现页当前路线卡片必须在无障碍树中可达（VoiceOver 可读、可激活）。
+    /// 依据 PAGE-ROUTES：换页后只让当前 RouteScene 进入焦点顺序，而不是全部隐藏。
+    @MainActor
+    func testDiscoveryCurrentRouteIsAccessible() throws {
+        tab("路线")
+        let routeScene = button(labelContaining: "长海子")
+        XCTAssertTrue(routeScene.waitForExistence(timeout: 10), "发现页当前路线卡片不在无障碍树中")
+        routeScene.tap()
+        XCTAssertTrue(app.buttons["立即出发"].firstMatch.waitForExistence(timeout: 10), "从发现页卡片未进入路线详情")
     }
 
     // MARK: - Helpers

@@ -180,7 +180,6 @@
 		EDB61C1EECCE58C5061DEBB0 /* WalkDesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 3C67268D6E82C5A6CABCA113 /* WalkDesignSystem */; };
 		EE0766BB57EECA13FDF42486 /* AboutPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EEAA4602377584A30575758 /* AboutPage.swift */; };
 		EF19305891D39D79979EC343 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 989F4A37E71A6DE2F72BCCE6 /* Assets.xcassets */; };
-		EF549ECF8CCDD18419008483 /* WalkTempBugFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30F74B0A26FDF8303E2B6B9C /* WalkTempBugFlowUITests.swift */; };
 		F21A5142DA53A5172E7000D9 /* AuthenticationFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CA4945E7F554BB6481E8A2 /* AuthenticationFlowTests.swift */; };
 		F48AAFD05D3ED072F22B6FCA /* HomePreviewFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CC20865F273E014516AA858 /* HomePreviewFixtures.swift */; };
 		F49AADA7CC405BF39D368CE3 /* DebugToolsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EF6AE865BDD5EF9F04163E9 /* DebugToolsUITests.swift */; };
@@ -291,7 +290,6 @@
 		2E909438209BC93D7FD58157 /* PersonalEquipmentForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalEquipmentForm.swift; sourceTree = "<group>"; };
 		2EEAA4602377584A30575758 /* AboutPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutPage.swift; sourceTree = "<group>"; };
 		3037F4D4FE98D518FF965A1F /* HomeAndRootViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeAndRootViewModelTests.swift; sourceTree = "<group>"; };
-		30F74B0A26FDF8303E2B6B9C /* WalkTempBugFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkTempBugFlowUITests.swift; sourceTree = "<group>"; };
 		31DEE23EB48BC984DA24DEF9 /* trip-generation-trip-created.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "trip-generation-trip-created.json"; sourceTree = "<group>"; };
 		335FBD35B2C482D7C778D577 /* TripEquipmentSummaryCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripEquipmentSummaryCard.swift; sourceTree = "<group>"; };
 		33CA4945E7F554BB6481E8A2 /* AuthenticationFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationFlowTests.swift; sourceTree = "<group>"; };
@@ -718,7 +716,6 @@
 			isa = PBXGroup;
 			children = (
 				39BA7B94429E249E6838DEAE /* WalkComponentCatalogUITests.swift */,
-				30F74B0A26FDF8303E2B6B9C /* WalkTempBugFlowUITests.swift */,
 			);
 			path = ComponentUITests;
 			sourceTree = "<group>";
@@ -1339,7 +1336,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				8CADC0E4F0E38BE9B2544356 /* WalkComponentCatalogUITests.swift in Sources */,
-				EF549ECF8CCDD18419008483 /* WalkTempBugFlowUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

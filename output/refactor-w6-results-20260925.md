@@ -76,7 +76,7 @@ W0–W6 全部完成。W6 按 R-VERIFY 的验收面逐项收集了新鲜证据�
 | 平台登记 / 构建入口 / DebugSwift / UI 对比工具脚本测试 | 通过 |
 | `openspec validate --specs --strict`（根仓） | 15/15 通过 |
 
-测试数由 438 增加到 443：新增 `ArchitectureDependencyTests` 4 项和 `HTTPClientCacheBypassTests` 1 项。
+测试数由 438 增加到 443：新增 `ArchitectureDependencyTests` 4 项和 `HTTPClientCacheBypassTests` 1 项。收尾修复又新增 `RouteDiscoveryAccessibilityTests` 2 项，WalkTests 最终为 445 项，0 失败；关键流程两项 UI 测试均通过。
 
 服务器切换：Debug 设置在服务器维度的写入与解析由 W2、W3 的单元测试和 UI 测试覆盖；三种数据模式 E2E 另外证明了通过启动参数指定的服务地址会被正式 App 真实使用。
 
@@ -89,9 +89,14 @@ W0–W6 全部完成。W6 按 R-VERIFY 的验收面逐项收集了新鲜证据�
 
 ### 存量问题（重构前即存在，本轮没有修复）
 
-1. **路线发现页的路线卡片不在无障碍树中。** `RouteDiscoveryView` 用 `.accessibilityHidden(index != activeIndex)` 隐藏非当前页，但 `activeRouteID` 由 `scrollPosition` 驱动，初始化时机与分页不同步，导致当前卡片也被隐藏，VoiceOver 读不到，UI 测试也点不到。已确认 `d6654ec`（重构前）就是这段相同的代码。关键流程回归暂时绕道「全部路线」进入详情。建议单独修复，并补一条无障碍 UI 断言。
-2. **`DailyWeatherSummaryRow` 的 UI 登记缺口**（W1 记录）：需要走根仓 Change。
-3. **`WalkTempBugFlowUITests`**：依赖模拟器残留登录态，登录判定有误（W4 记录）。它覆盖的场景已被 `WalkKeyFlowUITests` 取代，建议删除，等待用户决定。
+1. **路线发现页的路线卡片不在无障碍树中——W6 收尾已修复。**
+   - 根因：`.accessibilityHidden(index != activeIndex)` 在 `activeIndex == nil` 时对每张卡片都成立。`activeRouteID` 只在 `onChange(of: routes)` 中初始化，而路线在分页视图挂载前就已加载完成时，这个 onChange 不会触发，于是所有卡片都被隐藏。`d6654ec`（重构前）就是这段相同的代码。
+   - 定位：先写失败的 UI 断言 `testDiscoveryCurrentRouteIsAccessible`；再临时去掉隐藏修饰，断言转为通过，由此确认根因。
+   - 修复：新增 `hidesFromAccessibility(index:activeIndex:)`，未定位当前页时不隐藏任何卡片；分页挂载时（`onAppear`）同样定位首条路线。补充 2 项单元测试，UI 断言转绿。
+   - 视觉：改动前后的发现页截图只有状态栏时钟区域不同（0.08% 像素，y 79–117），页面本身无变化。
+   - 关键流程回归已改回直接从发现页卡片进入路线详情。
+2. **`DailyWeatherSummaryRow` 的 UI 登记缺口**（W1 记录）：需要走根仓 Change。WalkComponents 组仍因此失败 2 项目录断言（本地 80 / 权威 79），这是唯一剩余的失败。
+3. **`WalkTempBugFlowUITests`：已删除。** 它依赖模拟器残留登录态，登录判定也有误，覆盖的场景已由 `WalkKeyFlowUITests` 取代。
 
 ### 未验证范围
 
@@ -103,7 +108,6 @@ W0–W6 全部完成。W6 按 R-VERIFY 的验收面逐项收集了新鲜证据�
 
 ## 后续建议
 
-- 修复路线发现页无障碍问题（存量问题 1），修好后关键流程回归改回直接从发现页进入。
 - 补齐已批准视觉基线目录。
 - 设计确认过夜点颜色后，只需修改 `color.map.overnight` 的取值。
 - 如果要启用离线返回，先在根仓规定离线读取行为，再逐个端点登记离线资格。

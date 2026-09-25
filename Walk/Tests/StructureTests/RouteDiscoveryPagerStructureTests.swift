@@ -49,3 +49,18 @@ final class RouteDiscoveryPagerStructureTests: XCTestCase {
         )
     }
 }
+
+/// 路线发现页焦点顺序：只有已定位当前页时才隐藏其他页。
+final class RouteDiscoveryAccessibilityTests: XCTestCase {
+    func testUnlocatedPagerKeepsEveryCardAccessible() {
+        for index in 0..<3 {
+            XCTAssertFalse(RouteDiscoveryView.hidesFromAccessibility(index: index, activeIndex: nil))
+        }
+    }
+
+    func testLocatedPagerHidesOnlyNonCurrentCards() {
+        XCTAssertFalse(RouteDiscoveryView.hidesFromAccessibility(index: 1, activeIndex: 1))
+        XCTAssertTrue(RouteDiscoveryView.hidesFromAccessibility(index: 0, activeIndex: 1))
+        XCTAssertTrue(RouteDiscoveryView.hidesFromAccessibility(index: 2, activeIndex: 1))
+    }
+}

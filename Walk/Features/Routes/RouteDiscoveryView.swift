@@ -134,18 +134,19 @@ struct RouteDiscoveryView: View {
                 ForEach(Array(viewModel.routes.enumerated()), id: \.element.routeId) { index, route in
                     routeCard(route)
                         .frame(height: cardHeight)
-                        // 换页后只让当前 RouteScene 进入焦点顺序。
-                        .accessibilityHidden(index != activeIndex)
+                        // 换页后只让当前 RouteScene 进入焦点顺序；尚未定位当前页时全部保持可达，
+                        // 避免 activeIndex 为 nil 时 `index != nil` 把所有卡片都隐藏。
+                        .accessibilityHidden(Self.hidesFromAccessibility(index: index, activeIndex: activeIndex))
                 }
             }
             .scrollTargetLayout()
         }
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: $activeRouteID)
+        // routes 可能在分页视图挂载前已加载完成，onChange 不会补发；挂载时同样定位首条。
+        .onAppear { locateFirstRouteIfNeeded(viewModel.routes) }
         .onChange(of: viewModel.routes) { _, routes in
-            if activeRouteID == nil {
-                activeRouteID = routes.first?.routeId
-            }
+            locateFirstRouteIfNeeded(routes)
         }
         .onChange(of: activeRouteID) { previous, current in
             // 首次赋值是初始定位，不作换页公告。
@@ -201,6 +202,17 @@ struct RouteDiscoveryView: View {
     /// 当前分页索引：由 activeRouteID 派生；未定位时所有卡保持可见。
     private var activeIndex: Int? {
         viewModel.routes.firstIndex(where: { $0.routeId == activeRouteID })
+    }
+
+    /// 只有已定位当前页时，才把非当前页移出焦点顺序。
+    static func hidesFromAccessibility(index: Int, activeIndex: Int?) -> Bool {
+        guard let activeIndex else { return false }
+        return index != activeIndex
+    }
+
+    private func locateFirstRouteIfNeeded(_ routes: [PublicRouteBrowseSummary]) {
+        guard activeRouteID == nil || !routes.contains(where: { $0.routeId == activeRouteID }) else { return }
+        activeRouteID = routes.first?.routeId
     }
 
     /// 可访问性等价动作 `selectAdjacentRoute`：切换相邻路线；首尾不循环，
