@@ -64,3 +64,33 @@ final class RouteDiscoveryAccessibilityTests: XCTestCase {
         XCTAssertTrue(RouteDiscoveryView.hidesFromAccessibility(index: 2, activeIndex: 1))
     }
 }
+
+/// 登录页弹出与键盘动画的性能约束。
+///
+/// 缺陷：LoginView 用 1 秒循环刷新整页 @State `now`，导致场景、Lottie、面板每秒整页重算，
+/// 与 fullScreenCover 弹出、键盘升起动画叠加，真机明显卡顿；背景随键盘安全区逐帧重新布局。
+final class LoginPresentationPerformanceStructureTests: XCTestCase {
+    private func loginSource() throws -> String {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Features/Profile/LoginView.swift")
+        return try String(contentsOf: url, encoding: .utf8)
+    }
+
+    func testLoginPageHasNoPerSecondWholePageRefresh() throws {
+        let source = try loginSource()
+        XCTAssertFalse(
+            source.contains("while !Task.isCancelled"),
+            "登录页不得用常驻循环定时刷新整页状态"
+        )
+        XCTAssertTrue(source.contains(".task(id: nextCooldownDeadline)"), "冷却刷新只在存在未到期冷却时触发")
+    }
+
+    func testLoginBackgroundDoesNotRelayoutWithKeyboard() throws {
+        let source = try loginSource()
+        let scene = try XCTUnwrap(source.range(of: "LoginNightRidgeScene(phase: viewModel.phase)"))
+        let tail = source[scene.upperBound...].prefix(260)
+        XCTAssertTrue(tail.contains(".ignoresSafeArea(.keyboard)"), "背景场景不随键盘重新布局")
+        XCTAssertTrue(tail.contains(".drawingGroup()"), "静态背景合成为单层")
+    }
+}

@@ -242,12 +242,17 @@ struct LoginView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .bottom) {
+                // 背景层忽略键盘安全区：键盘升起只移动面板，不让场景随键盘逐帧重新布局。
+                // 静态场景（模糊光斑、等高线、山脊、路线光效）合成为单层位图后再参与动画。
                 LoginNightRidgeScene(phase: viewModel.phase)
+                    .drawingGroup()
                     .ignoresSafeArea()
+                    .ignoresSafeArea(.keyboard)
 
                 if !reduceMotion {
                     LoginAmbientAnimation()
                         .ignoresSafeArea()
+                        .ignoresSafeArea(.keyboard)
                 }
 
                 AuthPanel(
@@ -283,11 +288,17 @@ struct LoginView: View {
             viewModel.cancelPendingOperations()
             if !didResolveAuthenticationFlow { onCancel() }
         }
-        .task {
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-                now = Date()
+        // 冷却状态只取决于「重发 / 重试可用时刻」是否已过。原先每秒刷新 now 会让整页
+        // （场景、Lottie、面板）每秒重算一次并与弹出、键盘动画叠加造成卡顿；
+        // 现在只在存在未到期冷却时，于最近的到期时刻刷新一次。
+        .task(id: nextCooldownDeadline) {
+            guard let deadline = nextCooldownDeadline else { return }
+            let interval = deadline.timeIntervalSinceNow
+            if interval > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000) + 50_000_000)
             }
+            guard !Task.isCancelled else { return }
+            now = Date()
         }
     }
 
@@ -355,6 +366,14 @@ struct LoginView: View {
             return nil
         }
         return "请输入有效手机号"
+    }
+
+    /// 最近一个尚未到期的冷却时刻；没有冷却时为 nil，页面不做任何定时刷新。
+    private var nextCooldownDeadline: Date? {
+        [viewModel.resendAvailableAt, viewModel.retryAvailableAt]
+            .compactMap { $0 }
+            .filter { $0 > now }
+            .min()
     }
 
     private var activeRetryAvailableAt: Date? {

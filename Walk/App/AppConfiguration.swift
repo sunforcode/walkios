@@ -264,17 +264,61 @@ struct AppConfiguration: Equatable {
 
     static func process() throws -> AppConfiguration {
 #if DEBUG
-        let settings = DebugSettingsStore().load()
-#else
-        let settings: DebugSettings? = nil
-#endif
-        return try AppConfiguration(
+        return try resolveProcess(
             arguments: ProcessInfo.processInfo.arguments,
             environment: ProcessInfo.processInfo.environment,
             bundleInfo: Bundle.main.infoDictionary ?? [:],
-            debugSettings: settings
+            store: DebugSettingsStore()
+        ).configuration
+#else
+        return try AppConfiguration(
+            arguments: ProcessInfo.processInfo.arguments,
+            environment: ProcessInfo.processInfo.environment,
+            bundleInfo: Bundle.main.infoDictionary ?? [:]
         )
+#endif
     }
+
+#if DEBUG
+    struct ProcessResolution {
+        let configuration: AppConfiguration
+        /// 已保存的 Debug 设置无法组成合法配置时被清除，这里记录原因。
+        let discardedSettingsError: AppConfigurationError?
+    }
+
+    /// 个人保存的 Debug 设置不应让 App 无法启动：它们不合法时清除并回落到下一级来源重新解析。
+    /// 显式启动参数、环境变量与构建配置出错仍然直接失败（R-CONFIG：显式配置错误不静默降级）。
+    static func resolveProcess(
+        arguments: [String],
+        environment: [String: String],
+        bundleInfo: [String: Any],
+        store: DebugSettingsStore,
+        isDebugBuild: Bool = AppConfiguration.isDebugBuild
+    ) throws -> ProcessResolution {
+        let saved = store.load()
+        do {
+            let configuration = try AppConfiguration(
+                arguments: arguments,
+                environment: environment,
+                bundleInfo: bundleInfo,
+                debugSettings: saved,
+                isDebugBuild: isDebugBuild
+            )
+            return ProcessResolution(configuration: configuration, discardedSettingsError: nil)
+        } catch let error as AppConfigurationError where saved != nil {
+            let configuration = try AppConfiguration(
+                arguments: arguments,
+                environment: environment,
+                bundleInfo: bundleInfo,
+                debugSettings: nil,
+                isDebugBuild: isDebugBuild
+            )
+            store.clear()
+            print("[Walk] 已保存的 Debug 设置无效，已清除并使用构建默认值：\(error)")
+            return ProcessResolution(configuration: configuration, discardedSettingsError: error)
+        }
+    }
+#endif
 }
 
 // MARK: - 来源

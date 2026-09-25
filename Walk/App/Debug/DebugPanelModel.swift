@@ -88,8 +88,17 @@ final class DebugPanelModel {
                 }
             }),
             DebugActionSection(title: "服务器", actions: Self.servers.map { entry in
-                .init(title: entry.title) { [store] in
-                    Self.update(store) { .init(dataMode: $0?.dataMode, server: entry.server, offlinePolicy: $0?.offlinePolicy) }
+                .init(title: entry.title) { [store, effective] in
+                    Self.update(store) { saved in
+                        // 线上服务不接受 Mock（R-CONFIG）；选择线上时数据模式随之切到真实网络。
+                        let mode = saved?.dataMode ?? effective.dataMode
+                        let requiresRealNetwork = entry.server.environmentName.caseInsensitiveCompare("production") == .orderedSame
+                        return .init(
+                            dataMode: requiresRealNetwork && !mode.usesRealNetwork ? .real : saved?.dataMode,
+                            server: entry.server,
+                            offlinePolicy: saved?.offlinePolicy
+                        )
+                    }
                 }
             }),
             DebugActionSection(title: "断网策略", actions: OfflinePolicy.allCases.map { policy in

@@ -117,6 +117,7 @@
 		9BFB9ED54EE476AB85DA70A6 /* TripEquipment.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD13202C3BA0EB22D2EDBD7B /* TripEquipment.swift */; };
 		9F321FFBB7B33CCBBEAEB547 /* TripDayOverviewEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2226C3C47E3352D5F0B68D91 /* TripDayOverviewEntry.swift */; };
 		A3E187281EA07B41A4C542E8 /* TripDetailPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 459B9642F3D109B663F4BB04 /* TripDetailPresentationTests.swift */; };
+		A49774944B57E77570939633 /* DebugSettingsStartupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64141AE45C92414D6DB7CA63 /* DebugSettingsStartupTests.swift */; };
 		A529D6BCE66B258879C201B6 /* RoutePointDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E930C856240C4B4EFD7194A /* RoutePointDetail.swift */; };
 		A79D044551717B72135646CA /* GenerationWaitingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8E1438524A285DF42A09AE5 /* GenerationWaitingView.swift */; };
 		A9BDC7F057FE1A68EEED9523 /* WalkDebugTools in Frameworks */ = {isa = PBXBuildFile; productRef = 4E6773BEF9CCC807AB4E3D33 /* WalkDebugTools */; };
@@ -324,6 +325,7 @@
 		5DD94FE7E6E361693A771F3E /* APIClientContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClientContractTests.swift; sourceTree = "<group>"; };
 		626825336E9D71C487FED0BB /* LoginRidgeAmbient.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = LoginRidgeAmbient.json; sourceTree = "<group>"; };
 		633D01F254FB05ED38E4C9D3 /* TripEquipmentGearRings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripEquipmentGearRings.swift; sourceTree = "<group>"; };
+		64141AE45C92414D6DB7CA63 /* DebugSettingsStartupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugSettingsStartupTests.swift; sourceTree = "<group>"; };
 		65F2EC0EC9327E2310049434 /* TripStatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripStatusBadge.swift; sourceTree = "<group>"; };
 		68A5AEBF6589BF8F4051C60B /* PersonalEquipmentSummaryCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalEquipmentSummaryCard.swift; sourceTree = "<group>"; };
 		6A9487C7CB4511672953E099 /* DateCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateCopy.swift; sourceTree = "<group>"; };
@@ -908,6 +910,7 @@
 				78BEF5208B0E0086F34E87B5 /* DebugBuildDefaultsTests.swift */,
 				70509A601A22DD2987FC6C9D /* DebugDataAccessTests.swift */,
 				845BA80B0080A92B3085BF45 /* DebugPanelModelTests.swift */,
+				64141AE45C92414D6DB7CA63 /* DebugSettingsStartupTests.swift */,
 				249BACEF611AEAB1255435A7 /* DebugSettingsStoreTests.swift */,
 				9C89638D1EBD3E178C4F3A0C /* HTTPClientCacheBypassTests.swift */,
 				8F138B2873C801BCD3689957 /* OfflinePolicyConfigurationTests.swift */,
@@ -1503,6 +1506,7 @@
 				F577A47099A1F1FD666D5CFA /* DebugBuildDefaultsTests.swift in Sources */,
 				8BE8D52A2766FB71FE43C824 /* DebugDataAccessTests.swift in Sources */,
 				B638D1A429C1332078C2CA9C /* DebugPanelModelTests.swift in Sources */,
+				A49774944B57E77570939633 /* DebugSettingsStartupTests.swift in Sources */,
 				1CBD8756BF4961CE2A031ACA /* DebugSettingsStoreTests.swift in Sources */,
 				47E994883436C31A0D351EDF /* DebugToolsBoundaryTests.swift in Sources */,
 				B261D8625C5918A881FB5511 /* DesignSystemBoundaryTests.swift in Sources */,
