@@ -69,10 +69,21 @@ public enum AppColors {
      public static let heatmapMedium = Color(red: 88 / 255, green: 168 / 255, blue: 120 / 255)
      public static let heatmapHigh = interactionPrimary
      public static let mapRoute = interactionPrimary
-     public static let mapStart = statusProgress
+     /// color.map.start：route-map 规范要求起点为蓝色（冻结原型 #2563eb）。
+     public static let mapStart = Color(red: 37 / 255, green: 99 / 255, blue: 235 / 255)
      public static let mapEnd = danger
      public static let mapWaypoint = info
      public static let mapPOI = warning
+
+    // MARK: - Map point categories
+    // 每个地图点位类别唯一 Token，取值与来源见 docs/ui/tokens.md「地图点位取值」。
+     public static let mapKeyPoint = Color(red: 161 / 255, green: 98 / 255, blue: 7 / 255)
+     public static let mapInterest = Color(red: 37 / 255, green: 99 / 255, blue: 235 / 255)
+     public static let mapCamp = Color(red: 124 / 255, green: 58 / 255, blue: 237 / 255)
+     /// 冻结原型未定义过夜点，暂沿用现有生产取值。
+     public static let mapOvernight = Color(red: 109 / 255, green: 40 / 255, blue: 217 / 255)
+     public static let mapWater = Color(red: 8 / 255, green: 145 / 255, blue: 178 / 255)
+     public static let mapSupply = Color(red: 194 / 255, green: 65 / 255, blue: 12 / 255)
 
     // MARK: - Route detail overlay compatibility
      public static let sheetBackground = Color.clear

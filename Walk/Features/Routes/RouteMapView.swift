@@ -678,12 +678,12 @@ struct RouteMapView: UIViewRepresentable {
             switch type {
             case .start: return UIColor(AppColors.mapStart)
             case .end: return UIColor(AppColors.mapEnd)
-            case .waypoint: return UIColor(red: 161 / 255, green: 98 / 255, blue: 7 / 255, alpha: 1)
-            case .interest: return UIColor(red: 37 / 255, green: 99 / 255, blue: 235 / 255, alpha: 1)
-            case .camp: return UIColor(red: 124 / 255, green: 58 / 255, blue: 237 / 255, alpha: 1)
-            case .overnight: return UIColor(red: 109 / 255, green: 40 / 255, blue: 217 / 255, alpha: 1)
-            case .water: return UIColor(red: 8 / 255, green: 145 / 255, blue: 178 / 255, alpha: 1)
-            case .supply: return UIColor(red: 194 / 255, green: 65 / 255, blue: 12 / 255, alpha: 1)
+            case .waypoint: return UIColor(AppColors.mapKeyPoint)
+            case .interest: return UIColor(AppColors.mapInterest)
+            case .camp: return UIColor(AppColors.mapCamp)
+            case .overnight: return UIColor(AppColors.mapOvernight)
+            case .water: return UIColor(AppColors.mapWater)
+            case .supply: return UIColor(AppColors.mapSupply)
             case .poi: return UIColor(AppColors.mapPOI)
             case .trackPoint: return UIColor(AppColors.mapRoute)
             }

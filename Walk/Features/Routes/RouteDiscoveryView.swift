@@ -571,8 +571,8 @@ private struct RouteRowSkeletonList: View {
     var body: some View {
         VStack(spacing: Spacing.md) {
             ForEach(0..<3, id: \.self) { _ in
-                RouteListRow(title: " ") {
-                    RouteThumbnailPlaceholder(systemImage: "map")
+                RouteSkeletonRow(title: " ") {
+                    RouteSkeletonThumbnail(systemImage: "map")
                 } metadata: {
                     VStack(alignment: .leading, spacing: Spacing.sm) {
                         RoundedRectangle(cornerRadius: Radius.sm)

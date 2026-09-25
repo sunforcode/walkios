@@ -15,38 +15,6 @@ public enum StatePresentationVariant {
 
 // MARK: - Page shells and headers
 
-public struct PageHeroHeader: View {
-     public static let titleLineLimit = 2
-     public static let subtitleLineLimit = 1
-
-     public let title: String
-     public let subtitle: String
-
-     public var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text(title)
-                .font(.heroTitle)
-                .tracking(-1.4)
-                .lineLimit(Self.titleLineLimit)
-
-            Text(subtitle)
-                .font(.heroSubtitle)
-                .foregroundStyle(AppColors.textSecondary)
-                .lineLimit(Self.subtitleLineLimit)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-    }
-
-    public init(
-        title: String,
-        subtitle: String
-    ) {
-        self.title = title
-        self.subtitle = subtitle
-    }
-}
-
 /// 任务栈二级页唯一骨架（合同见 `docs/ui/components/common/utility-page/spec.md`）：
 /// 拥有背景承载、导航行（内嵌 `UtilityNavigationHeader`）、可选标题区（`PageTitleBlock`）、
 /// 内容滚动所有权与固定底部动作区（`FixedActionArea`）。
@@ -393,20 +361,6 @@ public enum PinnedWindowSafeAreaInsets {
     }
 }
 
-/// 我的页已登录态背景：底部渐变叠加层，用于图片之上渐变过渡到页面底色。
-/// 收归于设计系统组件，避免 Feature 文件自建渐变。
-public struct MePageBackgroundOverlay: View {
-    public init() {}
-
-    public var body: some View {
-        LinearGradient(
-            colors: [AppColors.pageBase.opacity(0), AppColors.pageBase],
-            startPoint: .init(x: 0.5, y: 0.72),
-            endPoint: .bottom
-        )
-    }
-}
-
 extension UtilityPageContainer where Background == LinearGradient {
     public init(@ViewBuilder content: () -> Content) {
         self.init(
@@ -535,43 +489,6 @@ public struct IconButton: View {
         self.accessibilityLabel = accessibilityLabel
         self.variant = variant
         self.isDisabled = isDisabled
-        self.action = action
-    }
-}
-
-/// Compatibility wrapper for existing call sites. New code should use `IconButton`.
-public struct GlassIconButton: View {
-     public let systemName: String
-     public var size: CGFloat = Spacing.navBarHeight
-     public var backgroundColor: Color = AppColors.surfaceGlass
-     public let action: () -> Void
-
-     public var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.navTitle)
-                .foregroundStyle(AppColors.textPrimary)
-                .frame(width: size, height: size)
-                .background(backgroundColor)
-                .clipShape(Circle())
-                .overlay {
-                    Circle().stroke(AppColors.borderPrimary, lineWidth: 1)
-                }
-                .frame(minWidth: 44, minHeight: 44)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(WalkPressButtonStyle())
-    }
-
-    public init(
-        systemName: String,
-        size: CGFloat = Spacing.navBarHeight,
-        backgroundColor: Color = AppColors.surfaceGlass,
-        action: @escaping () -> Void
-    ) {
-        self.systemName = systemName
-        self.size = size
-        self.backgroundColor = backgroundColor
         self.action = action
     }
 }
@@ -1149,27 +1066,6 @@ public struct FixedActionArea<Content: View>: View {
     }
 }
 
-public struct WalkPill<Content: View>: View {
-    private let content: Content
-
-     public init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-
-     public var body: some View {
-        content
-            .font(.label)
-            .foregroundStyle(AppColors.textSecondary)
-            .padding(.horizontal, Spacing.md)
-            .padding(.vertical, Spacing.sm)
-            .background(AppColors.surfaceGlass)
-            .clipShape(Capsule())
-            .overlay {
-                Capsule().stroke(AppColors.borderPrimary, lineWidth: 1)
-            }
-    }
-}
-
 // MARK: - Rows
 
 public enum ListRowVariant {
@@ -1222,76 +1118,6 @@ public struct ListRow<Content: View>: View {
                         .frame(height: 1)
                 }
             }
-    }
-}
-
-public struct RouteThumbnailPlaceholder: View {
-     public var systemImage = "photo"
-
-     public var body: some View {
-        ZStack {
-            AppColors.surfaceElevated
-            Image(systemName: systemImage)
-                .font(.ornament(20, weight: .medium))
-                .foregroundStyle(AppColors.textWeak)
-        }
-        .accessibilityHidden(true)
-    }
-
-    public init(
-        systemImage: String = "photo"
-    ) {
-        self.systemImage = systemImage
-    }
-}
-
-public struct RouteListRow<Thumbnail: View, Metadata: View>: View {
-     public let title: String
-     public var showsDisclosure = true
-    private let thumbnail: Thumbnail
-    private let metadata: Metadata
-
-     public init(
-        title: String,
-        showsDisclosure: Bool = true,
-        @ViewBuilder thumbnail: () -> Thumbnail,
-        @ViewBuilder metadata: () -> Metadata
-    ) {
-        self.title = title
-        self.showsDisclosure = showsDisclosure
-        self.thumbnail = thumbnail()
-        self.metadata = metadata()
-    }
-
-     public var body: some View {
-        ListRow {
-            HStack(spacing: Spacing.md) {
-                thumbnail
-                    .frame(width: 82, height: 84)
-                    .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-
-                VStack(alignment: .leading, spacing: Spacing.sm) {
-                    Text(title)
-                        .font(.listTitle)
-                        .foregroundStyle(AppColors.textPrimary)
-                        .lineLimit(2)
-
-                    metadata
-                        .font(.micro)
-                        .foregroundStyle(AppColors.textSecondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                if showsDisclosure {
-                    Image(systemName: "chevron.right")
-                        .font(.contextTitle)
-                        .foregroundStyle(AppColors.textWeak)
-                        .frame(width: 18)
-                }
-            }
-            .frame(minHeight: 84)
-        }
     }
 }
 
@@ -1833,50 +1659,6 @@ public struct AvatarButton: View {
         self.state = state
         self.accessibilityLabel = accessibilityLabel
         self.action = action
-    }
-}
-
-public struct Checklist<Summary: View, Content: View>: View {
-    @Binding var isExpanded: Bool
-    private let summary: Summary
-    private let content: Content
-
-     public init(
-        isExpanded: Binding<Bool>,
-        @ViewBuilder summary: () -> Summary,
-        @ViewBuilder content: () -> Content
-    ) {
-        self._isExpanded = isExpanded
-        self.summary = summary()
-        self.content = content()
-    }
-
-     public var body: some View {
-        WalkPanel(variant: .default) {
-            VStack(alignment: .leading, spacing: Spacing.md) {
-                Button {
-                    isExpanded.toggle()
-                } label: {
-                    HStack(spacing: Spacing.md) {
-                        summary
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.dateTitle)
-                            .foregroundStyle(AppColors.textWeak)
-                            .frame(width: 44, height: 44)
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityValue(isExpanded ? "已展开" : "已折叠")
-
-                if isExpanded {
-                    Rectangle()
-                        .fill(AppColors.surfaceDivider)
-                        .frame(height: 1)
-                    content
-                }
-            }
-        }
     }
 }
 

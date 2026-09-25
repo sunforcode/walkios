@@ -52,7 +52,7 @@ extension TripBusinessComponents {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.ornament(14, weight: .semibold))
                         .foregroundStyle(AppColors.textWeak)
                         .frame(width: 18)
                         .accessibilityHidden(true)

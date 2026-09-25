@@ -32,12 +32,13 @@ enum RouteMapPointCategory: Equatable {
 
     var color: Color {
         switch self {
-        case .keyPoint: AppColors.mapWaypoint
-        case .interest: AppColors.info
-        case .camp: AppColors.statusCompleted
-        case .overnight: AppColors.interactionPrimary
-        case .water: AppColors.mapRoute
-        case .supply: AppColors.warning
+        // 与生产地图 RouteMapView 使用同一组类别 Token（add-map-point-category-tokens）。
+        case .keyPoint: AppColors.mapKeyPoint
+        case .interest: AppColors.mapInterest
+        case .camp: AppColors.mapCamp
+        case .overnight: AppColors.mapOvernight
+        case .water: AppColors.mapWater
+        case .supply: AppColors.mapSupply
         }
     }
 }
@@ -183,9 +184,10 @@ extension RouteBusinessComponents {
         }
 
         private func terminalMarker(title: String, color: Color) -> some View {
+            // 与生产地图及冻结原型一致：标记字为白色，保证深色类别底上的可读性。
             Text(title)
                 .font(.microStrong)
-                .foregroundStyle(AppColors.pageBase)
+                .foregroundStyle(AppColors.textPrimary)
                 .frame(width: 28, height: 28)
                 .background(color, in: Circle())
                 .overlay(Circle().stroke(AppColors.pageBase, lineWidth: 2))
@@ -199,7 +201,7 @@ extension RouteBusinessComponents {
             } label: {
                 Text(point.category.glyph)
                     .font(.microStrong)
-                    .foregroundStyle(AppColors.pageBase)
+                    .foregroundStyle(AppColors.textPrimary)
                     .frame(width: 28, height: 28)
                     .background(point.category.color, in: Circle())
                     .overlay {

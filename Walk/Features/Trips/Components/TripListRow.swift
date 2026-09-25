@@ -82,7 +82,7 @@ extension TripBusinessComponents {
                 .frame(width: 42, height: 42)
                 .overlay {
                     Image(systemName: "point.topleft.down.curvedto.point.bottomright.up")
-                        .font(.system(size: 17, weight: .medium))
+                        .font(.ornament(17, weight: .medium))
                         .foregroundStyle(AppColors.interactionPrimary)
                 }
                 .accessibilityHidden(true)

@@ -44,7 +44,7 @@ output/                      # 调研记录与其他产物；不作为规范来�
 specs/                       # 平台规范：只承接总规范，不新增产品事实（见 specs/README.md）
 ```
 
-依赖规则：App → Features → WalkData / WalkDesignSystem；WalkData 不依赖 Features 与 WalkDesignSystem，WalkDesignSystem 不 import 业务模型。Feature 只能引用本域与 `Features/Shared/` 的类型，不引用 App 根实现；Shared 不依赖任何业务域，只放组件、投影与格式化工具，不放页面与 ViewModel。以上由 `FeatureBoundaryTests` 强制。只有 App 的 `Walk/App/Debug/` 使用 WalkDebugTools，Feature、WalkData、WalkDesignSystem 不得依赖它，由 `DebugToolsBoundaryTests` 强制。
+依赖规则：App → Features → WalkData / WalkDesignSystem；WalkData 不依赖 Features 与 WalkDesignSystem，WalkDesignSystem 不 import 业务模型。Feature 只能引用本域与 `Features/Shared/` 的类型，不引用 App 根实现；Shared 不依赖任何业务域，只放组件、投影与格式化工具，不放页面与 ViewModel。以上由 `FeatureBoundaryTests` 强制。WalkDesignSystem 的公开类型不得以业务域或具体页面命名，由 `DesignSystemBoundaryTests` 强制。只有 App 的 `Walk/App/Debug/` 使用 WalkDebugTools，Feature、WalkData、WalkDesignSystem 不得依赖它，由 `DebugToolsBoundaryTests` 强制。
 
 ## 约定
 

@@ -74,8 +74,18 @@ final class DesignSystemTests: XCTestCase {
         )
     }
 
+    /// tokens.md「使用限制」：页面和组件只消费 Token，不得出现裸值。
+    /// 只拦截数值字面量颜色；数据携带的颜色（如分段 `colorHex`）不属于样式裸值。
+    func testFeatureSourcesUseColorTokensOnly() throws {
+        let violations = try allFeatureSources().compactMap { name, source -> String? in
+            regexMatches(#"\b(UI)?Color\(\s*red:"#, in: source) ? "\(name): raw numeric color; use AppColors token" : nil
+        }
+        XCTAssertTrue(violations.isEmpty, violations.joined(separator: "\n"))
+    }
+
     func testFeatureSourcesUseTypographyTokensOnly() throws {
-        let violations = try violations(in: "Features") { source in
+        // W5：Token 约束覆盖业务组件目录，不沿用页面级规则的组件豁免。
+        let violations = try allFeatureSources().flatMap { name, source -> [String] in
             var found: [String] = []
             if regexMatches(#"\.system\(size:"#, in: source) {
                 found.append("raw .system(size:) font; use AppTypography tokens or Font.ornament")
@@ -87,7 +97,7 @@ final class DesignSystemTests: XCTestCase {
             if regexMatches(#"AppTypography\.(body|caption)\b"#, in: source) {
                 found.append("legacy AppTypography body/caption name; use appBody/appCaption")
             }
-            return found
+            return found.map { "\(name): \($0)" }
         }
 
         XCTAssertTrue(violations.isEmpty, violations.joined(separator: "\n"))
@@ -268,7 +278,7 @@ final class DesignSystemTests: XCTestCase {
     /// 切取 `PageShell` 的源码区域，避免断言命中文件内其他容器写法。
     private func pageShellRegion(in source: String) throws -> Substring {
         let startMarker = "public struct PageShell"
-        let endMarker = "public struct MePageBackgroundOverlay"
+        let endMarker = "\npublic enum PinnedWindowSafeAreaInsets"
         let start = try XCTUnwrap(source.range(of: startMarker), "SharedPrimitives.swift 应包含 \(startMarker)")
         let end = try XCTUnwrap(source.range(of: endMarker, range: start.upperBound..<source.endIndex), "SharedPrimitives.swift 应包含 \(endMarker)")
         return source[start.lowerBound..<end.lowerBound]
@@ -338,10 +348,18 @@ final class DesignSystemTests: XCTestCase {
         assertColor(AppColors.danger, red: 248, green: 113, blue: 113)
         assertColor(AppColors.dangerBackground, red: 239, green: 68, blue: 68, alpha: 0.10)
         assertColor(AppColors.mapRoute, red: 139, green: 214, blue: 173)
-        assertColor(AppColors.mapStart, red: 74, green: 222, blue: 128)
+        // add-map-point-category-tokens：起点按 route-map 规范为蓝色（冻结原型 #2563eb）。
+        assertColor(AppColors.mapStart, red: 37, green: 99, blue: 235)
         assertColor(AppColors.mapEnd, red: 248, green: 113, blue: 113)
         assertColor(AppColors.mapWaypoint, red: 96, green: 165, blue: 250)
         assertColor(AppColors.mapPOI, red: 255, green: 183, blue: 77)
+        // 地图点位类别：每类唯一 Token，取值见 docs/ui/tokens.md「地图点位取值」。
+        assertColor(AppColors.mapKeyPoint, red: 161, green: 98, blue: 7)
+        assertColor(AppColors.mapInterest, red: 37, green: 99, blue: 235)
+        assertColor(AppColors.mapCamp, red: 124, green: 58, blue: 237)
+        assertColor(AppColors.mapOvernight, red: 109, green: 40, blue: 217)
+        assertColor(AppColors.mapWater, red: 8, green: 145, blue: 178)
+        assertColor(AppColors.mapSupply, red: 194, green: 65, blue: 12)
         assertColor(AppColors.sheetBackground, red: 0, green: 0, blue: 0, alpha: 0)
         assertColor(AppColors.sheetTextPrimary, red: 255, green: 255, blue: 255)
         assertColor(AppColors.sheetTextSecondary, red: 186, green: 205, blue: 194)
@@ -427,16 +445,9 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(violations.isEmpty, violations.joined(separator: "\n"))
     }
 
-    func testPageHeroHeaderUsesThreeLineTextBudget() {
-        XCTAssertEqual(PageHeroHeader.titleLineLimit, 2)
-        XCTAssertEqual(PageHeroHeader.subtitleLineLimit, 1)
-        _ = PageHeroHeader(title: "标题", subtitle: "副标题")
-    }
-
     func testSharedPrimitivesAreConstructible() {
         _ = WalkPanel(variant: .default) { Text("Panel") }
         _ = WalkPanel(surface: .glass) { Text("Glass panel") }
-        _ = WalkPill { Text("Pill") }
         _ = InfoTag(title: "已确认", tone: .info)
         _ = NoticeView(message: "信息待核验", tone: .warning)
         _ = UnavailableStateView(
@@ -446,7 +457,6 @@ final class DesignSystemTests: XCTestCase {
             actionTitle: "重试",
             action: {}
         )
-        _ = GlassIconButton(systemName: "xmark", action: {})
         _ = UtilityPageContainer { Text("Utility") }
         _ = ImmersivePageContainer { Text("Immersive") }
         _ = LoadingView()
@@ -806,7 +816,7 @@ final class DesignSystemTests: XCTestCase {
         }
         XCTAssertEqual(
             Set(files),
-            Set(["HomeView.swift", "RouteDiscoveryView.swift"]),
+            Set(["HomeView.swift", "RouteDiscoveryView.swift", "MePageBackgroundOverlay.swift"]),
             "S1：Feature 内自建渐变仅允许登记文件（获批氛围元素与图片可读性覆盖层），禁止新增"
         )
     }
@@ -1406,6 +1416,19 @@ final class DesignSystemTests: XCTestCase {
             }
         }
         XCTAssertTrue(violations.isEmpty, violations.joined(separator: "\n"))
+    }
+
+    /// Token 类守卫使用：覆盖 Features 下全部源码，包括业务组件目录。
+    /// Token 约束（tokens.md「使用限制」）对页面和组件同样适用，不能沿用页面级规则的组件豁免。
+    private func allFeatureSources() throws -> [(name: String, source: String)] {
+        let featureRoot = try XCTUnwrap(walkRoot().appendingPathComponent("Features"))
+        var result: [(name: String, source: String)] = []
+        let enumerator = FileManager.default.enumerator(at: featureRoot, includingPropertiesForKeys: nil)
+        for case let fileURL as URL in enumerator ?? NSEnumerator() where fileURL.pathExtension == "swift" {
+            let relative = String(fileURL.standardizedFileURL.path.dropFirst(featureRoot.standardizedFileURL.path.count + 1))
+            result.append((relative, try String(contentsOf: fileURL, encoding: .utf8)))
+        }
+        return result.sorted { $0.name < $1.name }
     }
 
     private func featureFiles() throws -> [(name: String, source: String)] {

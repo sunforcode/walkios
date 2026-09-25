@@ -18,6 +18,7 @@
 		084BBA3E9C5A18E901B444D0 /* WalkApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BDC5156855F5C97B0A5CD37 /* WalkApp.swift */; };
 		0B63700009F97E809FD73E6E /* RouteIntroduction.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB80044BA5FF757D45DAA3F /* RouteIntroduction.swift */; };
 		0C35C72632D40B83D4C89404 /* PersonalEquipmentForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E909438209BC93D7FD58157 /* PersonalEquipmentForm.swift */; };
+		0C5E8CB44F7CAB294CFB8F50 /* MePageBackgroundOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0951A656F4A0DE1B4E09781 /* MePageBackgroundOverlay.swift */; };
 		0DA1441CC86BC0C4150A4761 /* TripBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8879E4C5B335866FA76B8FD6 /* TripBrowseView.swift */; };
 		0EDBF07C294883E0E290D431 /* OfflinePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077B9C5ADFDA9CAA9D4EAEB8 /* OfflinePolicyTests.swift */; };
 		0EF768C35CF18ADE8020AA58 /* route-detail-route-1.json in Resources */ = {isa = PBXBuildFile; fileRef = 9ECEA452C0E382D9EC3CC475 /* route-detail-route-1.json */; };
@@ -91,6 +92,7 @@
 		7A1940D47155CB856D9BCC23 /* route-detail-route-1.json in Resources */ = {isa = PBXBuildFile; fileRef = 9ECEA452C0E382D9EC3CC475 /* route-detail-route-1.json */; };
 		7B5EF9949A508616FCE0DD9B /* PrivacySettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44E902759F3769B6C62B5810 /* PrivacySettingsPage.swift */; };
 		7DB0E31CA6CC05A8261DE686 /* BaselineScenarioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00F01D6D70D5DEF40781A8 /* BaselineScenarioTests.swift */; };
+		7E97BDE2BE78B7CC170C7377 /* RouteRowSkeleton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C116B062FDC0E52C94004B4 /* RouteRowSkeleton.swift */; };
 		80BDC03A2606DBD39C88D6CA /* ChecklistPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D33AF519EC5C0BAA13D932E /* ChecklistPanel.swift */; };
 		8281D1008E773D7A2A2C1937 /* RootNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8E22D229924EA038309A79 /* RootNavigation.swift */; };
 		82824A04F102CB46CFF911EB /* TripDayWeatherViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FF79212EEA9635C99458BC /* TripDayWeatherViews.swift */; };
@@ -122,6 +124,7 @@
 		B180DEF6DA6E955F1A878037 /* AppEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E98F60E972B1733706C39BB /* AppEnvironmentTests.swift */; };
 		B1964AC1F7E47201368B5283 /* WalkDesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 195472448AE00109452BB5E1 /* WalkDesignSystem */; };
 		B1FAA930018081ADFE609AE1 /* RouteFactSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4EE69D98D191BE05CE0B2EF /* RouteFactSection.swift */; };
+		B261D8625C5918A881FB5511 /* DesignSystemBoundaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98AFF0F7F2DCA94981D6FEE4 /* DesignSystemBoundaryTests.swift */; };
 		B3D980A99B67B53FA363AFD9 /* HomeStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = F92D69D2AAE84277EE788DFF /* HomeStyle.swift */; };
 		B41DAF062FC26D87D1C69A72 /* RouteDetailViewSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3A71A2D797F198E01454229 /* RouteDetailViewSupport.swift */; };
 		B5CB8AC21496730301BD091A /* ProfileDetailsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ECBBCD33D80E58314797C00 /* ProfileDetailsPage.swift */; };
@@ -244,6 +247,7 @@
 		084D062E9770FDE7CA6D2705 /* WalkDebugTools */ = {isa = PBXFileReference; lastKnownFileType = folder; name = WalkDebugTools; path = Packages/WalkDebugTools; sourceTree = SOURCE_ROOT; };
 		086995954588E27F9AF8CAA7 /* AccountMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountMenuView.swift; sourceTree = "<group>"; };
 		088861674ABE041F85A4CE54 /* AppConfigurationParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfigurationParsingTests.swift; sourceTree = "<group>"; };
+		0C116B062FDC0E52C94004B4 /* RouteRowSkeleton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteRowSkeleton.swift; sourceTree = "<group>"; };
 		0F5BA3DABAF6061D083FAFFF /* InlineListNameEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineListNameEditor.swift; sourceTree = "<group>"; };
 		0FC6E32634B053C055945353 /* CreateTripView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateTripView.swift; sourceTree = "<group>"; };
 		10FEF6A4EAD9A10540C329CC /* WalkComponentTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = WalkComponentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -341,6 +345,7 @@
 		98429AFAE1B7F7591BCC4EAD /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = Localizable.strings; sourceTree = "<group>"; };
 		9878834B2440100CB4296C2E /* SettingsPageShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPageShell.swift; sourceTree = "<group>"; };
 		989F4A37E71A6DE2F72BCCE6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		98AFF0F7F2DCA94981D6FEE4 /* DesignSystemBoundaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystemBoundaryTests.swift; sourceTree = "<group>"; };
 		98E9F3013C72249EE3B59845 /* RouteDiscoveryPagerStructureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteDiscoveryPagerStructureTests.swift; sourceTree = "<group>"; };
 		9BE98B519B6E61201E52A331 /* ProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewModel.swift; sourceTree = "<group>"; };
 		9D87B8EF3A43FA26D482F027 /* BaselineFixtureProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaselineFixtureProvider.swift; sourceTree = "<group>"; };
@@ -401,6 +406,7 @@
 		E83F0C00DB4898387879D16F /* TripDayArrangement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripDayArrangement.swift; sourceTree = "<group>"; };
 		E8D61A2BC55DAB3E1DE82E25 /* AddEquipmentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddEquipmentView.swift; sourceTree = "<group>"; };
 		E97866946C82E9D85B310759 /* RouteWrapLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteWrapLayout.swift; sourceTree = "<group>"; };
+		F0951A656F4A0DE1B4E09781 /* MePageBackgroundOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MePageBackgroundOverlay.swift; sourceTree = "<group>"; };
 		F42CDF1D5DBB8BA5E178A975 /* DataModeAssemblyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataModeAssemblyTests.swift; sourceTree = "<group>"; };
 		F59EDE35D4D7EAED79810C5E /* EntryFormPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryFormPage.swift; sourceTree = "<group>"; };
 		F684C23D02E329E8B843F98B /* TripBusinessComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripBusinessComponents.swift; sourceTree = "<group>"; };
@@ -558,6 +564,7 @@
 				CAFB47B006E5C2318BE82C3A /* EntryPageContract.swift */,
 				731C4B1ECA4794EA0F814BF3 /* HelpFeedbackPage.swift */,
 				5BD9EE1A2232D44623BAD79F /* LoginView.swift */,
+				F0951A656F4A0DE1B4E09781 /* MePageBackgroundOverlay.swift */,
 				C05E19053889BB0613B46534 /* NotificationSettingsPage.swift */,
 				44E902759F3769B6C62B5810 /* PrivacySettingsPage.swift */,
 				9ECBBCD33D80E58314797C00 /* ProfileDetailsPage.swift */,
@@ -620,6 +627,7 @@
 				A2FA1452843ECFAEA1E714FA /* RouteDiscoveryView.swift */,
 				0454CBE9A88B424E1CE77B7E /* RouteDiscoveryViewModel.swift */,
 				3CEF2F8CE76373334004E5A4 /* RouteMapView.swift */,
+				0C116B062FDC0E52C94004B4 /* RouteRowSkeleton.swift */,
 				FC5623F9E1513C0EA8FA4342 /* Components */,
 			);
 			path = Routes;
@@ -723,6 +731,7 @@
 			isa = PBXGroup;
 			children = (
 				85CE75F3435A4A8B15EEAE00 /* DebugToolsBoundaryTests.swift */,
+				98AFF0F7F2DCA94981D6FEE4 /* DesignSystemBoundaryTests.swift */,
 				A09CB26EB7E7F0454DE6696E /* FeatureBoundaryTests.swift */,
 				98E9F3013C72249EE3B59845 /* RouteDiscoveryPagerStructureTests.swift */,
 				81F923F27DC4083F6B924E30 /* SecondaryPageShellStructureTests.swift */,
@@ -1284,6 +1293,7 @@
 				4148EC7F06C5926237F29465 /* InlineListNameEditor.swift in Sources */,
 				9592DDD75CAF52965C4202D4 /* LocationService.swift in Sources */,
 				2BEE12DBEA9726A02CD730F8 /* LoginView.swift in Sources */,
+				0C5E8CB44F7CAB294CFB8F50 /* MePageBackgroundOverlay.swift in Sources */,
 				F9DA6F9C6318F1A31259416B /* NotificationSettingsPage.swift in Sources */,
 				0C35C72632D40B83D4C89404 /* PersonalEquipmentForm.swift in Sources */,
 				D9C15D2D04E76FDB359D99C2 /* PersonalEquipmentSummaryCard.swift in Sources */,
@@ -1313,6 +1323,7 @@
 				A529D6BCE66B258879C201B6 /* RoutePointDetail.swift in Sources */,
 				BD0594A24CA677AE0831B436 /* RoutePointSection.swift in Sources */,
 				EB39328571E906A9F3202217 /* RouteReferenceDayList.swift in Sources */,
+				7E97BDE2BE78B7CC170C7377 /* RouteRowSkeleton.swift in Sources */,
 				19117C9CFE42BD536203903B /* RouteScene.swift in Sources */,
 				AA1B86F5E258206A48BF8EB2 /* RouteSegmentList.swift in Sources */,
 				D617CC1D62491CD118D70C40 /* RouteSpanCard.swift in Sources */,
@@ -1387,6 +1398,7 @@
 				B638D1A429C1332078C2CA9C /* DebugPanelModelTests.swift in Sources */,
 				1CBD8756BF4961CE2A031ACA /* DebugSettingsStoreTests.swift in Sources */,
 				47E994883436C31A0D351EDF /* DebugToolsBoundaryTests.swift in Sources */,
+				B261D8625C5918A881FB5511 /* DesignSystemBoundaryTests.swift in Sources */,
 				24B69D19FA8F8963C8D37245 /* DesignSystemTests.swift in Sources */,
 				E65B8B32DAB6E7600CD601DC /* EquipmentListViewModelTests.swift in Sources */,
 				299801B5CA59938853D6DE47 /* EquipmentServiceTests.swift in Sources */,
