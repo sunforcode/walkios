@@ -16,7 +16,9 @@ targets:
     settings:
       configs:
         Debug:
-          WALK_API_BASE_URL: https://api.example.invalid/walkbg/api/v1
+          # 默认模式为 mock（不发请求）；服务器仍指向真实后端，使调试面板切到 real / remoteOnly 时
+          # 有可用地址。真实网络模式拒绝占位地址（R-CONFIG），占位地址会导致启动失败。
+          WALK_API_BASE_URL: https://vialu.cn/walkbg/api/v1
           WALK_DATA_MODE: mock
           WALK_ENVIRONMENT: development
 

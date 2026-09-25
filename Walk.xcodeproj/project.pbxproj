@@ -182,6 +182,7 @@
 		F21A5142DA53A5172E7000D9 /* AuthenticationFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CA4945E7F554BB6481E8A2 /* AuthenticationFlowTests.swift */; };
 		F48AAFD05D3ED072F22B6FCA /* HomePreviewFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CC20865F273E014516AA858 /* HomePreviewFixtures.swift */; };
 		F49AADA7CC405BF39D368CE3 /* DebugToolsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EF6AE865BDD5EF9F04163E9 /* DebugToolsUITests.swift */; };
+		F577A47099A1F1FD666D5CFA /* DebugBuildDefaultsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78BEF5208B0E0086F34E87B5 /* DebugBuildDefaultsTests.swift */; };
 		F59EB9779453DADA7185B473 /* OfflinePolicyConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F138B2873C801BCD3689957 /* OfflinePolicyConfigurationTests.swift */; };
 		F63F2E81A6D062E43403E33E /* WalkDebugTools in Frameworks */ = {isa = PBXBuildFile; productRef = 8A46AC12B31242955A15BB6E /* WalkDebugTools */; };
 		F68E3660EEAB9C52BA9E239D /* WalkBaselineScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD191466600C20E4E44978EF /* WalkBaselineScreenshotTests.swift */; };
@@ -336,6 +337,7 @@
 		74ED2E97F8E3A7A019F59AEB /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		7657AB709AF3F476FC82C769 /* EquipmentDeletionImpact.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EquipmentDeletionImpact.swift; sourceTree = "<group>"; };
 		77229C10EE65D130227B8DAD /* EquipmentListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EquipmentListView.swift; sourceTree = "<group>"; };
+		78BEF5208B0E0086F34E87B5 /* DebugBuildDefaultsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugBuildDefaultsTests.swift; sourceTree = "<group>"; };
 		78DE4D2BBE52F70F37A164EA /* api-failure.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "api-failure.json"; sourceTree = "<group>"; };
 		7A92926E394FAC96A82F1FCD /* TripBrowseViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripBrowseViewModel.swift; sourceTree = "<group>"; };
 		7B5123B860E7BC6E8ED07FB6 /* RootNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootNavigationTests.swift; sourceTree = "<group>"; };
@@ -903,6 +905,7 @@
 				4220713B85C7DC92992A7D60 /* CachedResponseRecordTests.swift */,
 				B0A2333EF76AA33C65B586B8 /* CacheInvalidationTests.swift */,
 				F42CDF1D5DBB8BA5E178A975 /* DataModeAssemblyTests.swift */,
+				78BEF5208B0E0086F34E87B5 /* DebugBuildDefaultsTests.swift */,
 				70509A601A22DD2987FC6C9D /* DebugDataAccessTests.swift */,
 				845BA80B0080A92B3085BF45 /* DebugPanelModelTests.swift */,
 				249BACEF611AEAB1255435A7 /* DebugSettingsStoreTests.swift */,
@@ -1497,6 +1500,7 @@
 				8485CF12C5A7A971A2CE97DA /* CacheInvalidationTests.swift in Sources */,
 				017E35CC43F5CB81EEB9AE5D /* CachedResponseRecordTests.swift in Sources */,
 				25CDBD03D88C100577DDD59A /* DataModeAssemblyTests.swift in Sources */,
+				F577A47099A1F1FD666D5CFA /* DebugBuildDefaultsTests.swift in Sources */,
 				8BE8D52A2766FB71FE43C824 /* DebugDataAccessTests.swift in Sources */,
 				B638D1A429C1332078C2CA9C /* DebugPanelModelTests.swift in Sources */,
 				1CBD8756BF4961CE2A031ACA /* DebugSettingsStoreTests.swift in Sources */,
@@ -1678,7 +1682,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.walk.app;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				WALK_API_BASE_URL = "https://api.example.invalid/walkbg/api/v1";
+				WALK_API_BASE_URL = "https://vialu.cn/walkbg/api/v1";
 				WALK_DATA_MODE = mock;
 				WALK_ENVIRONMENT = development;
 			};
