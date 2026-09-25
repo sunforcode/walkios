@@ -29,7 +29,6 @@
 		1721D4CB96120FC1ECD5C1ED /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = BEB0FFE2D6D817793B1C1ECB /* Alamofire */; };
 		17CBB1D30C61EF1DBFBB1079 /* WalkDesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 5FF13D1CE1CAAC6454C13CE0 /* WalkDesignSystem */; };
 		19117C9CFE42BD536203903B /* RouteScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1180AFB6C1D13FFA1FA0B022 /* RouteScene.swift */; };
-		19ACAC6460F2934F9501A52A /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 98429AFAE1B7F7591BCC4EAD /* Localizable.strings */; };
 		1C7900AEF73DE67A16837D30 /* APIClientContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DD94FE7E6E361693A771F3E /* APIClientContractTests.swift */; };
 		1C9DBC9F33ED55B58AA250A6 /* DebugShakeEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 564B5C33726D03D2812EF705 /* DebugShakeEntry.swift */; };
 		1CBD8756BF4961CE2A031ACA /* DebugSettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 249BACEF611AEAB1255435A7 /* DebugSettingsStoreTests.swift */; };
@@ -360,7 +359,6 @@
 		95FF79212EEA9635C99458BC /* TripDayWeatherViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripDayWeatherViews.swift; sourceTree = "<group>"; };
 		970849E829C0ECF00D1BDF41 /* WalkDebugToolsUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = WalkDebugToolsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		97E468B6AF57BCDA83F17874 /* WalkComponentUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = WalkComponentUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		98429AFAE1B7F7591BCC4EAD /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = Localizable.strings; sourceTree = "<group>"; };
 		9878834B2440100CB4296C2E /* SettingsPageShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPageShell.swift; sourceTree = "<group>"; };
 		989F4A37E71A6DE2F72BCCE6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		98AFF0F7F2DCA94981D6FEE4 /* DesignSystemBoundaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystemBoundaryTests.swift; sourceTree = "<group>"; };
@@ -872,7 +870,6 @@
 			isa = PBXGroup;
 			children = (
 				800B8075511C611A4A5A8D6A /* Info.plist */,
-				98429AFAE1B7F7591BCC4EAD /* Localizable.strings */,
 				626825336E9D71C487FED0BB /* LoginRidgeAmbient.json */,
 				8650AA3150A8FAA267569CEE /* MockAPI */,
 			);
@@ -1298,7 +1295,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				EF19305891D39D79979EC343 /* Assets.xcassets in Resources */,
-				19ACAC6460F2934F9501A52A /* Localizable.strings in Resources */,
 				CA476650A891A378096BB40B /* LoginRidgeAmbient.json in Resources */,
 				0EF768C35CF18ADE8020AA58 /* route-detail-route-1.json in Resources */,
 			);

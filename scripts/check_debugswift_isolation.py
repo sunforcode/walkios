@@ -50,8 +50,8 @@ def file_evidence(path):
 
 
 def module_hits(lines):
-    # Exact case matters: the fixture directory "debugswift-isolation" and
-    # shared output directory "debugswift-w0" are not SDK linkage evidence.
+    # Exact case matters: path fragments such as "debugswift" in build output
+    # directories are not SDK linkage evidence.
     result = {}
     for module in MODULES:
         hits = [line.strip()[:350] for line in lines if module in line]

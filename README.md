@@ -38,7 +38,7 @@ Walk/                        # 主 target 源码
 Tests/                       # 独立测试 target
   BaselineTests/  BaselineUITests/  ComponentTests/  ComponentUITests/  DebugToolsUITests/
   DataModeE2EUITests/  KeyFlowUITests/
-scripts/                     # 构建入口 build.py、产物隔离检查、UI 基线与组件目录脚本
+scripts/                     # 构建入口 build.py、Release 产物隔离检查、UI 基线对比、E2E 与关键流程回归
 specs/                       # 平台规范：只承接总规范，不新增产品事实（见 specs/README.md）
 ```
 
@@ -46,7 +46,7 @@ specs/                       # 平台规范：只承接总规范，不新增产�
 
 ## 约定
 
-- 本地包的 `Package.swift`、源码与 fixture 属于仓库输入，不忽略整个 `Packages/`。第三方依赖由 SwiftPM 按固定版本恢复，App 的 `Package.resolved` 随工程保留；不依赖 `.swiftpm-packages/` 下的手工下载内容。
+- 本地包的 `Package.swift`、源码与 fixture 属于仓库输入，不忽略整个 `Packages/`。第三方依赖由 SwiftPM 按固定版本恢复，App 的 `Package.resolved` 随工程保留。
 - 工程由 XcodeGen 生成：修改 `project-base.yml`、`project.yml` 或源码目录结构后运行 `xcodegen generate`，不直接编辑 `Walk.xcodeproj`。
 - 仓内 `Walk.xcodeproj` 只有 Debug 配置。出包与 Release 验证只走 `scripts/build.py --mode release`，它每次重新生成生产工程并自动执行产物隔离检查；不要在 Xcode 中对开发工程选择 Release 或 Archive。
 - 页面组件归 `Features/<域>/`，跨页面通用组件归 `DesignSystem/Components/`，绑定业务对象的组件沉淀到 `Features/<域>/Components/`；分类标准见根仓 `docs/ui/`。
