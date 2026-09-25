@@ -210,7 +210,7 @@ struct TripEquipmentView: View {
             }
 
             if projection.editable, editorMode != nil {
-                AccountEquipmentBusinessComponents.InlineEquipmentEditor(
+                SharedBusinessComponents.InlineEquipmentEditor(
                     projection: InlineEquipmentEditorProjection(
                         title: editorMode?.title ?? "本次装备",
                         name: editorName,

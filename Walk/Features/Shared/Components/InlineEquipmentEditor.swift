@@ -21,7 +21,7 @@ struct InlineEquipmentEditorProjection: Equatable {
     var isLoading = false
 }
 
-extension AccountEquipmentBusinessComponents {
+extension SharedBusinessComponents {
     struct InlineEquipmentEditor: View {
         let projection: InlineEquipmentEditorProjection
         let onChangeField: (InlineEquipmentEditorField, String) -> Void
@@ -110,7 +110,7 @@ extension AccountEquipmentBusinessComponents {
 #if DEBUG
 #Preview("InlineEquipmentEditor.default") {
     BusinessComponentPreviewHost {
-        AccountEquipmentBusinessComponents.InlineEquipmentEditor.preview(
+        SharedBusinessComponents.InlineEquipmentEditor.preview(
             BusinessComponentPreviewFixtures.inlineEquipmentDefault
         )
     }
@@ -118,7 +118,7 @@ extension AccountEquipmentBusinessComponents {
 
 #Preview("InlineEquipmentEditor.validationError") {
     BusinessComponentPreviewHost {
-        AccountEquipmentBusinessComponents.InlineEquipmentEditor.preview(
+        SharedBusinessComponents.InlineEquipmentEditor.preview(
             BusinessComponentPreviewFixtures.inlineEquipmentValidationError
         )
     }
@@ -126,13 +126,13 @@ extension AccountEquipmentBusinessComponents {
 
 #Preview("InlineEquipmentEditor.saveFailed") {
     BusinessComponentPreviewHost {
-        AccountEquipmentBusinessComponents.InlineEquipmentEditor.preview(
+        SharedBusinessComponents.InlineEquipmentEditor.preview(
             BusinessComponentPreviewFixtures.inlineEquipmentSaveFailed
         )
     }
 }
 
-private extension AccountEquipmentBusinessComponents.InlineEquipmentEditor {
+private extension SharedBusinessComponents.InlineEquipmentEditor {
     static func preview(_ projection: InlineEquipmentEditorProjection) -> Self {
         Self(
             projection: projection,

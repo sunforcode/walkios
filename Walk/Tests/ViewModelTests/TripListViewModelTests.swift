@@ -39,12 +39,11 @@ final class TripListViewModelTests: XCTestCase {
 
     func testTripListPageUsesProductionTripListRowWithoutLegacyWrapper() throws {
         let pageSource = try productionSource(at: "Features/Trips/TripListView.swift")
-        let legacySource = try productionSource(at: "Features/Trips/TripRowView.swift")
 
         XCTAssertTrue(pageSource.contains("TripBusinessComponents.TripListRow("))
         XCTAssertFalse(pageSource.contains("TripRowView(trip:"))
-        XCTAssertFalse(legacySource.contains("struct TripRowView: View"))
-        XCTAssertFalse(legacySource.contains("struct TripArtworkView: View"))
+        // W4：遗留包装文件已删除。
+        XCTAssertThrowsError(try productionSource(at: "Features/Trips/TripRowView.swift"))
     }
 
     private func productionSource(at relativePath: String) throws -> String {
@@ -805,8 +804,8 @@ final class CreateTripViewModelTests: XCTestCase {
             .appendingPathComponent("Features/Trips/CreateTripView.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-        XCTAssertTrue(source.contains("RouteBusinessComponents.GenerationRouteSummaryCard("))
-        XCTAssertTrue(source.contains("RouteBusinessComponents.GenerationWaitingView("))
+        XCTAssertTrue(source.contains("SharedBusinessComponents.GenerationRouteSummaryCard("))
+        XCTAssertTrue(source.contains("SharedBusinessComponents.GenerationWaitingView("))
         XCTAssertFalse(source.contains("private struct GenerationRouteSummaryCard"))
         XCTAssertFalse(source.contains("private struct GenerationWaitingView"))
     }

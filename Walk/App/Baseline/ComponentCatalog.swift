@@ -289,22 +289,22 @@ enum ComponentCatalog {
             )
         },
         entry("GenerationRouteSummaryCard", .business) {
-            RouteBusinessComponents.GenerationRouteSummaryCard(
+            SharedBusinessComponents.GenerationRouteSummaryCard(
                 projection: BusinessComponentPreviewFixtures.generationRouteDefault
             )
         },
         entry("GenerationWaitingView", .business) {
-            RouteBusinessComponents.GenerationWaitingView(
+            SharedBusinessComponents.GenerationWaitingView(
                 projection: BusinessComponentPreviewFixtures.generationWaiting,
                 reduceMotionOverride: true
             )
             .frame(minHeight: 560)
         },
         entry("HeatmapCalendar", .business) {
-            TripBusinessComponents.HeatmapCalendar(days: BusinessComponentPreviewFixtures.heatmapDefault)
+            SharedBusinessComponents.HeatmapCalendar(days: BusinessComponentPreviewFixtures.heatmapDefault)
         },
         entry("InlineEquipmentEditor", .business) {
-            AccountEquipmentBusinessComponents.InlineEquipmentEditor(
+            SharedBusinessComponents.InlineEquipmentEditor(
                 projection: BusinessComponentPreviewFixtures.inlineEquipmentDefault,
                 onChangeField: { _, _ in },
                 onChangeQuantity: { _ in },
@@ -403,7 +403,7 @@ enum ComponentCatalog {
             )
         },
         entry("TripCalendarCard", .business) {
-            TripBusinessComponents.TripCalendarCard(
+            SharedBusinessComponents.TripCalendarCard(
                 projection: BusinessComponentPreviewFixtures.tripCalendarDefault,
                 onActivate: {}
             )

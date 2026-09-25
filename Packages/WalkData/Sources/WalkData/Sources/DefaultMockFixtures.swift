@@ -2,30 +2,11 @@ import Foundation
 
 public enum DefaultMockFixtures {
      public static func all(bundle: Bundle = .main) -> [String: Data] {
-        tripFixtures(bundle: bundle)
-            .merging(accountFixtures()) { _, account in account }
+        accountFixtures()
             .merging(personalTripFixtures()) { _, personalTrip in personalTrip }
             .merging(tripEquipmentFixtures()) { _, tripEquipment in tripEquipment }
             .merging(routeFixtures()) { _, route in route }
             .merging(equipmentFixtures()) { _, equipment in equipment }
-    }
-
-     public static func tripFixtures(bundle: Bundle = .main) -> [String: Data] {
-        var fixtures: [String: Data] = [:]
-
-        if let data = load("trip-list", bundle: bundle) {
-            fixtures[TripAPI.List().identifier] = data
-        }
-        let emptyHistory = Data("""
-        {"success":true,"message":"success","data":{"content":[],"number":0,"size":20,"totalElements":0,"totalPages":0,"first":true,"last":true},"timestamp":1724544001,"code":200}
-        """.utf8)
-        fixtures[TripAPI.List(status: .completed).identifier] = emptyHistory
-        fixtures[TripAPI.List(status: .cancelled).identifier] = emptyHistory
-        if let data = load("trip-detail-trip-1", bundle: bundle) ?? load("trip-detail", bundle: bundle) {
-            fixtures[TripAPI.Detail(id: "trip-1").identifier] = data
-        }
-
-        return fixtures
     }
 
      public static func accountFixtures() -> [String: Data] {
@@ -289,10 +270,4 @@ public enum DefaultMockFixtures {
         """
     }
 
-    private static func load(_ name: String, bundle: Bundle) -> Data? {
-        let url = bundle.url(forResource: name, withExtension: "json", subdirectory: "MockAPI")
-            ?? bundle.url(forResource: name, withExtension: "json")
-        guard let url else { return nil }
-        return try? Data(contentsOf: url)
-    }
 }

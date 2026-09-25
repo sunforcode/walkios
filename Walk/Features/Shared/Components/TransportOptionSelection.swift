@@ -37,7 +37,7 @@ struct TransportOptionSelectionProjection: Equatable {
     let selectedTransportOptionID: String?
 }
 
-extension RouteBusinessComponents {
+extension SharedBusinessComponents {
     struct TransportOptionSelection: View {
         let projection: TransportOptionSelectionProjection
         let onSelectTransportOption: (String) -> Void
@@ -131,7 +131,7 @@ extension RouteBusinessComponents {
 #if DEBUG
 #Preview("TransportOptionSelection.unselected") {
     BusinessComponentPreviewHost {
-        RouteBusinessComponents.TransportOptionSelection(
+        SharedBusinessComponents.TransportOptionSelection(
             projection: BusinessComponentPreviewFixtures.transportSelectionUnselected,
             onSelectTransportOption: { _ in }
         )
@@ -140,7 +140,7 @@ extension RouteBusinessComponents {
 
 #Preview("TransportOptionSelection.selected") {
     BusinessComponentPreviewHost {
-        RouteBusinessComponents.TransportOptionSelection(
+        SharedBusinessComponents.TransportOptionSelection(
             projection: BusinessComponentPreviewFixtures.transportSelectionSelected,
             onSelectTransportOption: { _ in }
         )
@@ -149,7 +149,7 @@ extension RouteBusinessComponents {
 
 #Preview("TransportOptionSelection.partial") {
     BusinessComponentPreviewHost {
-        RouteBusinessComponents.TransportOptionSelection(
+        SharedBusinessComponents.TransportOptionSelection(
             projection: BusinessComponentPreviewFixtures.transportSelectionPartial,
             onSelectTransportOption: { _ in }
         )
@@ -158,7 +158,7 @@ extension RouteBusinessComponents {
 
 #Preview("TransportOptionSelection.longContent") {
     BusinessComponentPreviewHost {
-        RouteBusinessComponents.TransportOptionSelection(
+        SharedBusinessComponents.TransportOptionSelection(
             projection: BusinessComponentPreviewFixtures.transportSelectionLong,
             onSelectTransportOption: { _ in }
         )

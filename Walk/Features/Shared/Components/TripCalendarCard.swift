@@ -7,7 +7,7 @@ struct TripCalendarCardProjection: Equatable {
     var emptyHint: String?
 }
 
-extension TripBusinessComponents {
+extension SharedBusinessComponents {
     struct TripCalendarCard: View {
         let projection: TripCalendarCardProjection
         let onActivate: () -> Void
@@ -35,7 +35,7 @@ extension TripBusinessComponents {
                             .foregroundStyle(AppColors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        TripBusinessComponents.HeatmapCalendar(days: projection.days)
+                        SharedBusinessComponents.HeatmapCalendar(days: projection.days)
 
                         if let emptyHint = tripNonEmpty(projection.emptyHint) {
                             Text(emptyHint)
@@ -58,7 +58,7 @@ extension TripBusinessComponents {
 #if DEBUG
 #Preview("TripCalendarCard.default") {
     BusinessComponentPreviewHost {
-        TripBusinessComponents.TripCalendarCard(
+        SharedBusinessComponents.TripCalendarCard(
             projection: BusinessComponentPreviewFixtures.tripCalendarDefault,
             onActivate: {}
         )
@@ -67,7 +67,7 @@ extension TripBusinessComponents {
 
 #Preview("TripCalendarCard.empty") {
     BusinessComponentPreviewHost {
-        TripBusinessComponents.TripCalendarCard(
+        SharedBusinessComponents.TripCalendarCard(
             projection: BusinessComponentPreviewFixtures.tripCalendarEmpty,
             onActivate: {}
         )

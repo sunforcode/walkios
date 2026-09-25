@@ -113,7 +113,7 @@ flowchart TB
 
 ### 重构目标与工作拆分
 
-阶段状态：第 1 步「目的与目标」已获用户认可；第 2 步「工作拆分」已记录；第 3 步「规范与约束」首版见下文；第 4 步已完成 W0 的[工程与测试基线修复](../output/refactor-w0-results-20260924.md)和[DebugSwift 最小接入与隔离验证](../output/debugswift-isolation-20260924.md)、W1 的[数据能力与缓存](../output/refactor-w1-results-20260925.md)，W2 的[App 配置与依赖装配](../output/refactor-w2-results-20260925.md)，以及 W3 的[DebugTools 接入](../output/refactor-w3-results-20260925.md)。W4–W6 尚未执行。SDK 网络观察仍关闭，开启前需按 R-DEBUG 补齐请求、缓存、认证与取消语义的证据。W1 建立的离线返回能力目前没有任何生产端点启用。
+阶段状态：第 1 步「目的与目标」已获用户认可；第 2 步「工作拆分」已记录；第 3 步「规范与约束」首版见下文；第 4 步已完成 W0 的[工程与测试基线修复](../output/refactor-w0-results-20260924.md)和[DebugSwift 最小接入与隔离验证](../output/debugswift-isolation-20260924.md)、W1 的[数据能力与缓存](../output/refactor-w1-results-20260925.md)，W2 的[App 配置与依赖装配](../output/refactor-w2-results-20260925.md)，W3 的[DebugTools 接入](../output/refactor-w3-results-20260925.md)，以及 W4 的[App / Feature / Service 整理](../output/refactor-w4-results-20260925.md)。W5–W6 尚未执行。SDK 网络观察仍关闭，开启前需按 R-DEBUG 补齐请求、缓存、认证与取消语义的证据。W1 建立的离线返回能力目前没有任何生产端点启用。
 
 **重构目的**：把现有逻辑架构落实为职责明确、依赖清晰、容易修改和验证的代码结构，降低后续开发、问题定位和测试成本。衡量效果时关注修改位置是否明确、影响范围是否可控、结果是否可验证。
 
@@ -370,10 +370,10 @@ Release 的编译/链接输入与最终产物不得包含 DebugSwift 及其资�
 | `equipment-list-row` | L2b 业务独立 | `EquipmentListRow` | `Walk/Features/Equipment/Components/EquipmentListRow.swift` |
 | `focus-trip-summary` | L2b 业务独立 | `FocusTripSummary` | `Walk/Features/Home/Components/FocusTripSummary.swift` |
 | `gear-ring` | L2a 业务原子 | `GearRing` | `Walk/Features/Trips/Components/GearRing.swift` |
-| `generation-equipment-selection` | L2c 业务组合 | `GenerationEquipmentSelection` | `Walk/Features/Routes/Components/GenerationEquipmentSelection.swift` |
-| `generation-route-summary-card` | L2b 业务独立 | `GenerationRouteSummaryCard` | `Walk/Features/Routes/Components/GenerationRouteSummaryCard.swift` |
-| `generation-waiting-view` | L2b 业务独立 | `GenerationWaitingView` | `Walk/Features/Routes/Components/GenerationWaitingView.swift` |
-| `inline-equipment-editor` | L2b 业务独立 | `InlineEquipmentEditor` | `Walk/Features/Trips/Components/InlineEquipmentEditor.swift` |
+| `generation-equipment-selection` | L2c 业务组合 | `GenerationEquipmentSelection` | `Walk/Features/Shared/Components/GenerationEquipmentSelection.swift` |
+| `generation-route-summary-card` | L2b 业务独立 | `GenerationRouteSummaryCard` | `Walk/Features/Shared/Components/GenerationRouteSummaryCard.swift` |
+| `generation-waiting-view` | L2b 业务独立 | `GenerationWaitingView` | `Walk/Features/Shared/Components/GenerationWaitingView.swift` |
+| `inline-equipment-editor` | L2b 业务独立 | `InlineEquipmentEditor` | `Walk/Features/Shared/Components/InlineEquipmentEditor.swift` |
 | `inline-list-name-editor` | L2b 业务独立 | `InlineListNameEditor` | `Walk/Features/Equipment/Components/InlineListNameEditor.swift` |
 | `personal-equipment-form` | L2b 业务独立 | `PersonalEquipmentForm` | `Walk/Features/Equipment/Components/PersonalEquipmentForm.swift` |
 | `personal-equipment-summary-card` | L2b 业务独立 | `PersonalEquipmentSummaryCard` | `Walk/Features/Profile/Components/PersonalEquipmentSummaryCard.swift` |
@@ -392,9 +392,9 @@ Release 的编译/链接输入与最终产物不得包含 DebugSwift 及其资�
 | `route-span-card` | L2b 业务独立 | `RouteSpanCard` | `Walk/Features/Routes/Components/RouteSpanCard.swift` |
 | `route-summary` | L2b 业务独立 | `RouteSummary` | `Walk/Features/Routes/Components/RouteSummary.swift` |
 | `search-route-result-row` | L2b 业务独立 | `SearchRouteResultRow` | `Walk/Features/Routes/Components/SearchRouteResultRow.swift` |
-| `transport-option-selection` | L2b 业务独立 | `TransportOptionSelection` | `Walk/Features/Routes/Components/TransportOptionSelection.swift` |
+| `transport-option-selection` | L2b 业务独立 | `TransportOptionSelection` | `Walk/Features/Shared/Components/TransportOptionSelection.swift` |
 | `trek-day-badge` | L2a 业务原子 | `TrekDayBadge` | `Walk/Features/Trips/Components/TrekDayBadge.swift` |
-| `trip-calendar-card` | L2b 业务独立 | `TripCalendarCard` | `Walk/Features/Trips/Components/TripCalendarCard.swift` |
+| `trip-calendar-card` | L2b 业务独立 | `TripCalendarCard` | `Walk/Features/Shared/Components/TripCalendarCard.swift` |
 | `trip-cover-header` | L2b 业务独立 | `TripCoverHeader` | `Walk/Features/Trips/Components/TripCoverHeader.swift` |
 | `trip-day-arrangement` | L2c 业务组合 | `TripDayArrangement` | `Walk/Features/Trips/Components/TripDayArrangement.swift` |
 | `trip-day-overview-entry` | L2b 业务独立 | `TripDayOverviewEntry` | `Walk/Features/Trips/Components/TripDayOverviewEntry.swift` |

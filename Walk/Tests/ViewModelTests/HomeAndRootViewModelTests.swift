@@ -303,7 +303,7 @@ final class HomeAndRootViewModelTests: XCTestCase {
         let rootSource = try productionSource(at: "App/RootView.swift")
         let loginSource = try productionSource(at: "Features/Profile/LoginView.swift")
 
-        XCTAssertTrue(rootSource.contains("intent: pendingAuthIntent"))
+        XCTAssertTrue(rootSource.contains("intent: authFlow.pending?.intent"))
         XCTAssertTrue(loginSource.contains("let intent: PendingAuthIntent?"))
         XCTAssertTrue(loginSource.contains("case .homeStart"))
         XCTAssertTrue(loginSource.contains("case .createTrip"))

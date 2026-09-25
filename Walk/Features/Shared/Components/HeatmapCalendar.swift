@@ -25,7 +25,7 @@ struct TripHeatmapDayProjection: Identifiable, Equatable {
     var id: String { businessDate }
 }
 
-extension TripBusinessComponents {
+extension SharedBusinessComponents {
     struct HeatmapCalendar: View {
         static let requiredDayCount = 365
         let days: [TripHeatmapDayProjection]
@@ -72,7 +72,7 @@ extension TripBusinessComponents {
 #if DEBUG
 #Preview("HeatmapCalendar.default") {
     BusinessComponentPreviewHost {
-        TripBusinessComponents.HeatmapCalendar(
+        SharedBusinessComponents.HeatmapCalendar(
             days: BusinessComponentPreviewFixtures.heatmapDefault
         )
     }
@@ -80,7 +80,7 @@ extension TripBusinessComponents {
 
 #Preview("HeatmapCalendar.empty") {
     BusinessComponentPreviewHost {
-        TripBusinessComponents.HeatmapCalendar(
+        SharedBusinessComponents.HeatmapCalendar(
             days: BusinessComponentPreviewFixtures.heatmapEmpty
         )
     }

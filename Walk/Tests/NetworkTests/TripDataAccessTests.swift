@@ -4,43 +4,9 @@ import WalkDesignSystem
 @testable import Walk
 
 final class TripDataAccessTests: XCTestCase {
-    func testTripListFixtureDecodesBackendContractAndMapsPage() throws {
-        let envelope: APIEnvelope<PageDTO<TripResponseDTO>> = try TripFixture.decode("trip-list")
-        let dtoPage = try envelope.unwrap()
-        let page = dtoPage.map(Trip.init(dto:))
 
-        XCTAssertEqual(page.items.count, 1)
-        XCTAssertEqual(page.number, 0)
-        XCTAssertEqual(page.totalElements, 1)
-        XCTAssertEqual(page.items[0].routeId, "route-primary")
-        XCTAssertEqual(dtoPage.items[0].routeIDs, ["route-primary", "route-secondary"])
-        XCTAssertEqual(dtoPage.items[0].primaryRouteID, "route-primary")
-        XCTAssertEqual(page.items[0].status, .inProgress)
-        XCTAssertEqual(page.items[0].startDate?.timeIntervalSince1970, 1_724_544_000)
-    }
 
-    func testTripDetailFixturePreservesUnknownStatus() throws {
-        let envelope: APIEnvelope<TripResponseDTO> = try TripFixture.decode("trip-detail-unknown-status")
-        let trip = Trip(dto: try envelope.unwrap())
 
-        XCTAssertEqual(trip.status, .unknown(9))
-        XCTAssertEqual(trip.status.rawValue, 9)
-    }
-
-    func testTripErrorFixtureUsesFlatEnvelope() throws {
-        let envelope: APIEnvelope<TripResponseDTO> = try TripFixture.decode("trip-error")
-
-        XCTAssertThrowsError(try envelope.unwrap()) { error in
-            XCTAssertEqual(error as? APIClientError, .business(message: "行程不存在", code: 404))
-        }
-    }
-
-    func testDefaultMockFixturesIncludeHistoricalTripQueries() {
-        let fixtures = DefaultMockFixtures.tripFixtures(bundle: Bundle(for: TripDataAccessTests.self))
-
-        XCTAssertNotNil(fixtures[TripAPI.List(status: .completed).identifier])
-        XCTAssertNotNil(fixtures[TripAPI.List(status: .cancelled).identifier])
-    }
 
     func testDefaultMockFixturesProvideOneCompleteConsistentThreeDayTrip() async throws {
         let client = MockAPIClient(fixtures: DefaultMockFixtures.all(bundle: Bundle(for: TripDataAccessTests.self)))
@@ -108,7 +74,7 @@ final class TripDataAccessTests: XCTestCase {
         XCTAssertEqual(period.wind?.value?.direction, "西南风")
     }
 
-    func testLegacyTripWeatherResponseDoesNotDecodeAsCurrentContract() async {
+    func testRetiredWeatherResponseShapeDoesNotDecodeAsCurrentContract() async {
         let payload = Data(
             #"{"data":{"tripId":"trip-1","revision":"revision-1","routeName":"贡嘎环线","startDate":"2026-08-25","endDate":"2026-08-25","days":[{"tripDayId":"day-1","dayNumber":1,"date":"2026-08-25","primaryStage":"徒步日 1","weather":{"condition":{"value":"多云"}}}]}}"#.utf8
         )
@@ -126,78 +92,7 @@ final class TripDataAccessTests: XCTestCase {
         }
     }
 
-    func testLegacyTripRequestsUseRelocatedControllerPathAndStoragePolicy() throws {
-        let list = TripAPI.List(
-            keyword: "山",
-            status: .completed,
-            organizerID: "owner",
-            participantID: "member",
-            page: 2,
-            size: 10,
-            sort: ["createdAt,desc"]
-        )
-        XCTAssertEqual(list.method, .get)
-        XCTAssertEqual(list.path, "/legacy/trips")
-        XCTAssertEqual(Dictionary(uniqueKeysWithValues: list.query.map { ($0.name, $0.value ?? "") })["status"], "2")
-        XCTAssertEqual(list.storagePolicy, .none)
 
-        XCTAssertEqual(TripAPI.Detail(id: "trip-1").storagePolicy, .store)
-        XCTAssertEqual(TripAPI.Detail(id: "trip-1").path, "/legacy/trips/trip-1")
-        XCTAssertEqual(TripAPI.Create(input: TripCreateRequestDTO(
-            name: "新行程",
-            description: nil,
-            startDate: nil,
-            endDate: nil,
-            organizerID: nil,
-            routeIDs: [],
-            primaryRouteID: nil,
-            budget: nil,
-            notes: nil,
-            privacySetting: 0,
-            coverURL: nil
-        )).path, "/legacy/trips")
-        XCTAssertEqual(TripAPI.Delete(id: "trip-1").method, .delete)
-        XCTAssertEqual(TripAPI.Delete(id: "trip-1").path, "/legacy/trips/trip-1")
-        XCTAssertEqual(TripAPI.UpdateStatus(id: "trip-1", status: .cancelled).path, "/legacy/trips/trip-1/status")
-        XCTAssertEqual(TripAPI.UpdateStatus(id: "trip-1", status: .cancelled).query.first?.value, "3")
-
-        let create = TripCreateRequestDTO(
-            name: "新行程",
-            description: nil,
-            startDate: Date(timeIntervalSince1970: 1_724_544_000),
-            endDate: nil,
-            organizerID: "owner",
-            routeIDs: ["route-1"],
-            primaryRouteID: "route-1",
-            budget: nil,
-            notes: nil,
-            privacySetting: 0,
-            coverURL: nil
-        )
-        let json = try XCTUnwrap(TripAPI.Create(input: create).body)
-        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: json) as? [String: Any])
-        XCTAssertEqual(object["start_date"] as? Int, 1_724_544_000)
-        XCTAssertEqual(object["primary_route_id"] as? String, "route-1")
-        XCTAssertEqual(object["route_ids"] as? [String], ["route-1"])
-    }
-
-    func testRepositoryMapsListDetailAndEmptyDeleteUsingOneClient() async throws {
-        let list = try TripFixture.data("trip-list")
-        let detail = try TripFixture.data("trip-detail")
-        let empty = try TripFixture.data("api-empty")
-        let fixtures = [
-            TripAPI.List().identifier: list,
-            TripAPI.Detail(id: "trip-1").identifier: detail,
-            TripAPI.Delete(id: "trip-1").identifier: empty
-        ]
-        let repository = DefaultTripRepository(client: MockAPIClient(fixtures: fixtures))
-
-        let page = try await repository.fetchTrips()
-        let fetchedTrip = try await repository.fetchTrip(id: "trip-1")
-        XCTAssertEqual(page.items.first?.id, "trip-1")
-        XCTAssertEqual(fetchedTrip.routeId, "route-primary")
-        try await repository.deleteTrip(id: "trip-1")
-    }
 
     func testPersonalTripRequestsUseTargetPathsDataEnvelopeAndNoQueries() {
         assertTargetRequest(PersonalTripAPI.Focus(), path: "/trips/focus")
@@ -299,6 +194,8 @@ final class TripDataAccessTests: XCTestCase {
             .joined(separator: "\n")
 
         XCTAssertFalse(source.contains("TripRepository"))
+        XCTAssertNil(source.range(of: #"(?<![A-Za-z])TripAPI\."#, options: .regularExpression), "不得引用已删除的旧 TripAPI")
+        XCTAssertFalse(source.contains("TripResponseDTO"))
         XCTAssertFalse(source.contains("LegacyAPIClient"))
         XCTAssertFalse(source.contains("MockData"))
         XCTAssertFalse(source.contains("userId"))
@@ -707,15 +604,4 @@ final class TripDataAccessTests: XCTestCase {
 
 private struct TestDataEnvelope<Value: Encodable>: Encodable {
     let data: Value
-}
-
-private enum TripFixture {
-    static func data(_ name: String) throws -> Data {
-        let url = try XCTUnwrap(Bundle(for: TripDataAccessTests.self).url(forResource: name, withExtension: "json"))
-        return try Data(contentsOf: url)
-    }
-
-    static func decode<T: Decodable>(_ name: String) throws -> T {
-        try APIJSONDecoder.make().decode(T.self, from: data(name))
-    }
 }

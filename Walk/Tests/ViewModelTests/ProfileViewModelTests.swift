@@ -165,7 +165,7 @@ final class ProfileViewModelTests: XCTestCase {
     func testProfilePageUsesProductionComponentsWithoutPrivateDuplicatesOrMediaParsing() throws {
         let source = try productionSource(at: "Features/Profile/ProfileView.swift")
         let calendarComponentSource = try productionSource(
-            at: "Features/Trips/Components/TripCalendarCard.swift"
+            at: "Features/Shared/Components/TripCalendarCard.swift"
         )
         let accountMenuSource = try productionSource(
             at: "Features/Profile/AccountMenuView.swift"
@@ -174,13 +174,13 @@ final class ProfileViewModelTests: XCTestCase {
             at: "Features/Profile/Components/PersonalEquipmentSummaryCard.swift"
         )
 
-        XCTAssertTrue(source.contains("TripBusinessComponents.TripCalendarCard("))
+        XCTAssertTrue(source.contains("SharedBusinessComponents.TripCalendarCard("))
         XCTAssertTrue(source.contains("PersonalEquipmentSummaryCard("))
         XCTAssertTrue(source.contains("onOpenAccountMenu("), "头像入口弹出账户菜单")
         XCTAssertTrue(source.contains("avatarLabel: profile.nickname"))
         XCTAssertFalse(source.contains("fullScreenCover"), "头像入口不再弹覆盖层")
         XCTAssertFalse(source.contains("AccountMenuSheet"), "AccountMenuSheet 已退役，承载迁至 AccountMenuView")
-        XCTAssertTrue(calendarComponentSource.contains("TripBusinessComponents.HeatmapCalendar("))
+        XCTAssertTrue(calendarComponentSource.contains("SharedBusinessComponents.HeatmapCalendar("))
         XCTAssertTrue(accountMenuSource.contains("AccountEquipmentBusinessComponents.ProfileIdentityHeader("))
         XCTAssertTrue(accountMenuSource.contains("SettingsListRow("))
         XCTAssertTrue(accountMenuSource.contains("viewModel.logout()"), "退出登录在账户菜单页内转发")

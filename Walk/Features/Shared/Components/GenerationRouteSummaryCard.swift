@@ -33,7 +33,7 @@ struct GenerationRouteSummaryProjection: Equatable {
     var estimatedDuration: String?
 }
 
-extension RouteBusinessComponents {
+extension SharedBusinessComponents {
     struct GenerationRouteSummaryCard: View {
         let projection: GenerationRouteSummaryProjection
 
@@ -81,7 +81,7 @@ extension RouteBusinessComponents {
 #if DEBUG
 #Preview("GenerationRouteSummaryCard.default") {
     BusinessComponentPreviewHost {
-        RouteBusinessComponents.GenerationRouteSummaryCard(
+        SharedBusinessComponents.GenerationRouteSummaryCard(
             projection: BusinessComponentPreviewFixtures.generationRouteDefault
         )
     }
@@ -89,7 +89,7 @@ extension RouteBusinessComponents {
 
 #Preview("GenerationRouteSummaryCard.partial") {
     BusinessComponentPreviewHost {
-        RouteBusinessComponents.GenerationRouteSummaryCard(
+        SharedBusinessComponents.GenerationRouteSummaryCard(
             projection: BusinessComponentPreviewFixtures.generationRoutePartial
         )
     }
@@ -97,7 +97,7 @@ extension RouteBusinessComponents {
 
 #Preview("GenerationRouteSummaryCard.ineligible") {
     BusinessComponentPreviewHost {
-        RouteBusinessComponents.GenerationRouteSummaryCard(
+        SharedBusinessComponents.GenerationRouteSummaryCard(
             projection: BusinessComponentPreviewFixtures.generationRouteIneligible
         )
     }
@@ -105,7 +105,7 @@ extension RouteBusinessComponents {
 
 #Preview("GenerationRouteSummaryCard.longContent") {
     BusinessComponentPreviewHost {
-        RouteBusinessComponents.GenerationRouteSummaryCard(
+        SharedBusinessComponents.GenerationRouteSummaryCard(
             projection: BusinessComponentPreviewFixtures.generationRouteLong
         )
     }

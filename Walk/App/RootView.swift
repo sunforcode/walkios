@@ -5,10 +5,8 @@ import WalkDesignSystem
 struct RootView: View {
     @ObservedObject private var appEnvironment: AppEnvironment
     @State private var shell = AppShellState()
-    @State private var pendingAuthIntent: PendingAuthIntent?
-    @State private var pendingAuthTab: AppTab?
-    /// account-access：认证链路确认的焦点行程结果，execute(.homeStart) 只消费该结果。
-    @State private var confirmedFocusTripExists: Bool?
+    /// 认证编排：待处理意图、来源 tab 与焦点行程确认结果（account-access / app-flow）。
+    @State private var authFlow = AuthenticationFlow()
     @State private var authenticationGeneration = 0
     /// S5：搜索会话状态提升到 App 层，返回后再进 PAGE-SEARCH 恢复 query 与结果。
     @StateObject private var routeSearchModel: RouteDiscoveryViewModel
@@ -86,19 +84,15 @@ struct RootView: View {
     private var loginCover: some View {
         LoginView(
             accountService: appEnvironment.accountService,
-            intent: pendingAuthIntent,
-            onConfirmFocusTrip: pendingAuthIntent == .homeStart
+            intent: authFlow.pending?.intent,
+            onConfirmFocusTrip: authFlow.pending?.intent == .homeStart
                 ? { [appEnvironment] in
                     try await appEnvironment.personalTripService.focus().trip != nil
                 }
                 : nil,
-            onConfirmedFocusTrip: { confirmedFocusTripExists = $0 },
+            onConfirmedFocusTrip: { authFlow.recordFocusConfirmation($0) },
             onAuthenticated: completeAuthentication,
-            onCancel: {
-                confirmedFocusTripExists = nil
-                pendingAuthIntent = nil
-                pendingAuthTab = nil
-            }
+            onCancel: { authFlow.cancel() }
         )
     }
 
@@ -171,23 +165,29 @@ struct RootView: View {
         in tab: AppTab,
         force: Bool = false
     ) {
-        if appEnvironment.authManager.isLoggedIn && !force {
-            execute(intent, in: tab)
-            return
-        }
-        pendingAuthIntent = intent
-        pendingAuthTab = tab
-        shell.presentLogin()
+        apply(authFlow.request(
+            intent,
+            from: tab,
+            isLoggedIn: appEnvironment.authManager.isLoggedIn,
+            force: force
+        ))
     }
 
     private func completeAuthentication() {
-        let intent = pendingAuthIntent
-        let tab = pendingAuthTab ?? shell.selectedTab
         shell.dismissLogin()
-        pendingAuthIntent = nil
-        pendingAuthTab = nil
         authenticationGeneration += 1
-        if let intent { execute(intent, in: tab) }
+        apply(authFlow.complete(currentTab: shell.selectedTab))
+    }
+
+    private func apply(_ effect: AuthenticationFlow.Effect) {
+        switch effect {
+        case .none:
+            break
+        case .presentLogin:
+            shell.presentLogin()
+        case let .execute(intent, tab):
+            execute(intent, in: tab)
+        }
     }
 
     private func execute(_ intent: PendingAuthIntent, in tab: AppTab) {
@@ -196,8 +196,7 @@ struct RootView: View {
             // account-access：焦点行程结果由认证链路确认（confirmingFocus/focusError），
             // 无法确认时不会走到这里；此处只消费已确认结果，不再自行 catch 落回首页。
             // 无焦点行程同样回到首页空态，不自动进入全部路线（app-flow）。
-            guard confirmedFocusTripExists != nil else { return }
-            confirmedFocusTripExists = nil
+            guard authFlow.consumeFocusConfirmation() else { return }
             shell.setPath([], for: .home)
             shell.selectTab(.home)
         case .profile:

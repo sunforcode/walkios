@@ -23,7 +23,7 @@ struct GenerationEquipmentSelectionProjection: Equatable {
     var hasPartialWeight: Bool { missingWeightItemCount > 0 }
 }
 
-extension RouteBusinessComponents {
+extension SharedBusinessComponents {
     struct GenerationEquipmentSelection: View {
         let projection: GenerationEquipmentSelectionProjection
         let onManageEquipment: () -> Void
@@ -132,7 +132,7 @@ extension RouteBusinessComponents {
 #if DEBUG
 #Preview("GenerationEquipmentSelection.default") {
     BusinessComponentPreviewHost {
-        RouteBusinessComponents.GenerationEquipmentSelection(
+        SharedBusinessComponents.GenerationEquipmentSelection(
             projection: BusinessComponentPreviewFixtures.generationEquipmentDefault,
             onManageEquipment: {},
             onSelectEquipmentList: { _ in }
@@ -142,7 +142,7 @@ extension RouteBusinessComponents {
 
 #Preview("GenerationEquipmentSelection.selected") {
     BusinessComponentPreviewHost {
-        RouteBusinessComponents.GenerationEquipmentSelection(
+        SharedBusinessComponents.GenerationEquipmentSelection(
             projection: BusinessComponentPreviewFixtures.generationEquipmentSelected,
             onManageEquipment: {},
             onSelectEquipmentList: { _ in }
@@ -152,7 +152,7 @@ extension RouteBusinessComponents {
 
 #Preview("GenerationEquipmentSelection.noPersonalEquipment") {
     BusinessComponentPreviewHost {
-        RouteBusinessComponents.GenerationEquipmentSelection(
+        SharedBusinessComponents.GenerationEquipmentSelection(
             projection: BusinessComponentPreviewFixtures.generationEquipmentNoPersonalEquipment,
             onManageEquipment: {},
             onSelectEquipmentList: { _ in }
@@ -162,7 +162,7 @@ extension RouteBusinessComponents {
 
 #Preview("GenerationEquipmentSelection.noEquipmentLists") {
     BusinessComponentPreviewHost {
-        RouteBusinessComponents.GenerationEquipmentSelection(
+        SharedBusinessComponents.GenerationEquipmentSelection(
             projection: BusinessComponentPreviewFixtures.generationEquipmentNoLists,
             onManageEquipment: {},
             onSelectEquipmentList: { _ in }
@@ -172,7 +172,7 @@ extension RouteBusinessComponents {
 
 #Preview("GenerationEquipmentSelection.empty") {
     BusinessComponentPreviewHost {
-        RouteBusinessComponents.GenerationEquipmentSelection(
+        SharedBusinessComponents.GenerationEquipmentSelection(
             projection: BusinessComponentPreviewFixtures.generationEquipmentEmpty,
             onManageEquipment: {},
             onSelectEquipmentList: { _ in }
@@ -182,7 +182,7 @@ extension RouteBusinessComponents {
 
 #Preview("GenerationEquipmentSelection.partialWeight") {
     BusinessComponentPreviewHost {
-        RouteBusinessComponents.GenerationEquipmentSelection(
+        SharedBusinessComponents.GenerationEquipmentSelection(
             projection: BusinessComponentPreviewFixtures.generationEquipmentPartialWeight,
             onManageEquipment: {},
             onSelectEquipmentList: { _ in }
@@ -192,7 +192,7 @@ extension RouteBusinessComponents {
 
 #Preview("GenerationEquipmentSelection.longContent") {
     BusinessComponentPreviewHost {
-        RouteBusinessComponents.GenerationEquipmentSelection(
+        SharedBusinessComponents.GenerationEquipmentSelection(
             projection: BusinessComponentPreviewFixtures.generationEquipmentLong,
             onManageEquipment: {},
             onSelectEquipmentList: { _ in }

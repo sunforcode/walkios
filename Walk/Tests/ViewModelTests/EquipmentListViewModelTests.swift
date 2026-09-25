@@ -522,7 +522,7 @@ final class TripEquipmentViewModelTests: XCTestCase {
     func testTripEquipmentPageUsesProductionInlineEditorWithoutCrossBoundaryRows() throws {
         let source = try productionSource(at: "Features/Trips/TripEquipment.swift")
 
-        XCTAssertTrue(source.contains("AccountEquipmentBusinessComponents.InlineEquipmentEditor("))
+        XCTAssertTrue(source.contains("SharedBusinessComponents.InlineEquipmentEditor("))
         XCTAssertTrue(source.contains("InlineEquipmentEditorProjection("))
         XCTAssertTrue(source.contains("name: editorName"))
         XCTAssertTrue(source.contains("quantity: editorQuantity"))

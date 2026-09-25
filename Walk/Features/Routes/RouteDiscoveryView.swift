@@ -23,7 +23,7 @@ struct RouteDiscoveryView: View {
     @State private var activeRouteID: String?
 
     init(
-        routeService: RouteService,
+        routeService: any RouteDiscoveryServicing,
         onNavigate: @escaping (AppDestination) -> Void = { _ in }
     ) {
         self.onNavigate = onNavigate
@@ -253,7 +253,7 @@ struct RouteCollectionView: View {
     private let onNavigate: (AppDestination) -> Void
 
     init(
-        routeService: RouteService,
+        routeService: any RouteDiscoveryServicing,
         showsBackButton: Bool = true,
         onNavigate: @escaping (AppDestination) -> Void = { _ in }
     ) {

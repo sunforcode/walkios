@@ -774,12 +774,6 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertFalse(source.contains("init(status: some StatusBadgeModel)"))
     }
 
-    func testTripLayoutMatchesApprovedContract() {
-        XCTAssertEqual(TripLayout.listCoverSize, 52)
-        XCTAssertEqual(TripLayout.compactListCoverSize, 48)
-        XCTAssertEqual(TripLayout.detailCoverHeight, 275)
-    }
-
     func testTripDetailDoesNotUseMockTrackFallback() throws {
         let source = try productionSource(at: "Features/Trips/TripDetailViewModel.swift")
 
@@ -812,7 +806,7 @@ final class DesignSystemTests: XCTestCase {
         }
         XCTAssertEqual(
             Set(files),
-            Set(["HomeView.swift", "RouteDiscoveryView.swift", "TripRowView.swift"]),
+            Set(["HomeView.swift", "RouteDiscoveryView.swift"]),
             "S1：Feature 内自建渐变仅允许登记文件（获批氛围元素与图片可读性覆盖层），禁止新增"
         )
     }
@@ -1211,7 +1205,8 @@ final class DesignSystemTests: XCTestCase {
 
         let root = try productionSource(at: "App/RootView.swift")
         XCTAssertTrue(root.contains("onConfirmFocusTrip"), "RootView 提供焦点确认处理器")
-        XCTAssertTrue(root.contains("confirmedFocusTripExists"), "execute(.homeStart) 消费认证链路确认结果，不再自行 catch 落回首页")
+        // W4：确认结果由 AuthenticationFlow 持有，行为由 AuthenticationFlowTests 覆盖。
+        XCTAssertTrue(root.contains("authFlow.consumeFocusConfirmation()"), "execute(.homeStart) 消费认证链路确认结果，不再自行 catch 落回首页")
     }
 
     /// PAGE-EQUIPMENT-EDIT 6.4 修订（E1）：页题说明钉入原型 copy。
@@ -1277,7 +1272,7 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(profile.contains("viewModel.retryCalendar()"), "行程日历 Section 提供独立重试")
         XCTAssertTrue(profile.contains("viewModel.retryEquipment()"), "装备 Section 提供独立重试")
         // 按 PAGE-ME / PAGE-ACCOUNT-MENU 权威，查看入口、脱敏账号与关于行由 TripCalendarCard / AccountMenuView 承载，不在我的页。
-        let calendarCard = try productionSource(at: "Features/Trips/Components/TripCalendarCard.swift")
+        let calendarCard = try productionSource(at: "Features/Shared/Components/TripCalendarCard.swift")
         XCTAssertTrue(calendarCard.contains("查看全部"), "行程日历查看入口在 TripCalendarCard 组件内")
         // 按 PAGE-ACCOUNT-MENU 权威，脱敏账号摘要由设置主页身份头部 ProfileIdentityHeader 组件承载。
         let identityHeader = try productionSource(at: "Features/Profile/Components/ProfileIdentityHeader.swift")

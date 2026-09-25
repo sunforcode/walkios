@@ -42,7 +42,7 @@ struct ProfileCalendarPresentation: Equatable {
                     level: Self.heatmapLevel(for: $0.tripCount)
                 )
             },
-            emptyHint: days.count == TripBusinessComponents.HeatmapCalendar.requiredDayCount && !hasTrips
+            emptyHint: days.count == SharedBusinessComponents.HeatmapCalendar.requiredDayCount && !hasTrips
                 ? "过去 365 天还没有个人行程"
                 : nil
         )

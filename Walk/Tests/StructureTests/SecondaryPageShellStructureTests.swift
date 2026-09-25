@@ -40,9 +40,8 @@ final class SecondaryPageShellStructureTests: XCTestCase {
         "Profile/ProfileView.swift": "tab 根页，非二级页",
         "Profile/AccountMenuView.swift": "PAGE-ACCOUNT-MENU 以底部模态 Sheet 承载，不进入任务栈",
         "Profile/LoginView.swift": "登录模态流程页，非任务栈二级页",
-        "Routes/Components/GenerationWaitingView.swift": "RouteBusinessComponents 业务组件（生成等待态），非页面",
+        "Shared/Components/GenerationWaitingView.swift": "SharedBusinessComponents 业务组件（生成等待态），非页面",
         "Routes/RouteMapView.swift": "地图组件，非页面",
-        "Trips/TripRowView.swift": "行程行组件，非页面",
     ]
 
     // MARK: 断言

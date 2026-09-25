@@ -7,7 +7,7 @@ struct GenerationWaitingProjection: Equatable {
     let description: String
 }
 
-extension RouteBusinessComponents {
+extension SharedBusinessComponents {
     struct GenerationWaitingView: View {
         @Environment(\.accessibilityReduceMotion) private var environmentReduceMotion
         let projection: GenerationWaitingProjection
@@ -70,7 +70,7 @@ extension RouteBusinessComponents {
 #if DEBUG
 #Preview("GenerationWaitingView.default") {
     BusinessComponentPreviewHost {
-        RouteBusinessComponents.GenerationWaitingView(
+        SharedBusinessComponents.GenerationWaitingView(
             projection: BusinessComponentPreviewFixtures.generationWaiting
         )
         .frame(minHeight: 560)
@@ -79,7 +79,7 @@ extension RouteBusinessComponents {
 
 #Preview("GenerationWaitingView.reduceMotion") {
     BusinessComponentPreviewHost {
-        RouteBusinessComponents.GenerationWaitingView(
+        SharedBusinessComponents.GenerationWaitingView(
             projection: BusinessComponentPreviewFixtures.generationWaiting,
             reduceMotionOverride: true
         )

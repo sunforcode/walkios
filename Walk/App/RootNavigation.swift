@@ -2,13 +2,6 @@ import SwiftUI
 import WalkData
 import WalkDesignSystem
 
-enum PendingAuthIntent: Equatable {
-    case homeStart
-    case profile
-    case createTrip(routeID: String)
-    case reauthenticate
-}
-
 /// 一级导航的三个一级根 Page；系统 tab bar 的 tab 项由该枚举提供标题与图标。
 enum AppTab: String, CaseIterable, Identifiable, Hashable {
     case home
@@ -32,52 +25,6 @@ enum AppTab: String, CaseIterable, Identifiable, Hashable {
         case .profile: "person"
         }
     }
-}
-
-enum AppDestination: Hashable {
-    case routeList
-    case routeSearch
-    case routeDetail(String)
-    case profileDetails
-    case notificationSettings
-    case privacySettings
-    case helpAndFeedback
-    case about
-    case tripList
-    case createTrip(routeID: String)
-    case tripDetail(String)
-    case tripBrowse(tripID: String, dayNumber: Int)
-    case tripEquipment(String)
-    case personalEquipment
-    case equipmentEdit(equipmentID: String?)
-    case tripWeather(String)
-
-    var pageID: String {
-        switch self {
-        case .routeList: "PAGE-ROUTE-LIST"
-        case .routeSearch: "PAGE-SEARCH"
-        case .routeDetail: "PAGE-ROUTE-DETAIL"
-        case .profileDetails, .notificationSettings, .privacySettings,
-             .helpAndFeedback, .about: "PAGE-ME"
-        case .tripList: "PAGE-TRIPS"
-        case .createTrip: "PAGE-TRIP-CREATE"
-        case .tripDetail: "PAGE-TRIP-DETAIL"
-        case .tripBrowse: "PAGE-TRIP-BROWSE"
-        case .tripEquipment: "PAGE-TRIP-EQUIPMENT"
-        case .personalEquipment: "PAGE-MY-EQUIPMENT"
-        case .equipmentEdit: "PAGE-EQUIPMENT-EDIT"
-        case .tripWeather: "PAGE-TRIP-WEATHER"
-        }
-    }
-}
-
-enum EntryPageContract {
-    static let profileFields = ["昵称", "脱敏手机号", "头像"]
-    static let notificationOptions = ["通知总开关", "行程提醒", "天气提醒"]
-    static let privacyOptions = ["资料可见性", "位置共享", "匿名分析"]
-    static let feedbackFields = ["反馈分类", "反馈内容"]
-    static let tripFields = ["出发城市", "开始日期", "装备清单（可选）"]
-    static let equipmentFields = ["名称", "拥有数量", "单件克重（可选）"]
 }
 
 struct AppShellState: Equatable {
@@ -163,7 +110,7 @@ struct AppShellState: Equatable {
 }
 
 enum RootNavigation {
-    static let minimumHitSize: CGFloat = 44
+    static let minimumHitSize = HitTarget.minimum
     static let toolButtonHitSize = minimumHitSize
 
     // 一级导航由系统 tab bar 承载：不增加独立胶囊；沉浸式场景延伸至系统边缘。
@@ -225,17 +172,4 @@ enum RootNavigation {
         UINavigationBar.appearance().compactAppearance = appearance
         UINavigationBar.appearance().scrollEdgeAppearance = appearance
     }
-}
-
-enum HomeStyle {
-// 与路线、我的两个一级页共用同一色彩序列（pageOuter→pageMiddle→pageBase），
-// 只保留首页特有的渐变方向与山形剪影作为页面构图差异。
-static let gradientStops: [Gradient.Stop] = [
-.init(color: AppColors.pageOuter, location: 0),
-.init(color: AppColors.pageMiddle, location: 0.46),
-.init(color: AppColors.pageBase, location: 1),
-]
-    static let gradientStartPoint = UnitPoint(x: 0, y: 0)
-    static let gradientEndPoint = UnitPoint(x: 1, y: 1)
-    static let weatherPlaceholder = "天气摘要暂不可用"
 }

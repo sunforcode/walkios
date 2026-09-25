@@ -67,7 +67,7 @@ struct EntrySettingsRow<Trailing: View>: View {
                 }
             }
             .padding(.horizontal, Spacing.lg)
-            .frame(minHeight: RootNavigation.toolButtonHitSize)
+            .frame(minHeight: HitTarget.minimum)
 
             if showsDivider {
                 Rectangle()
@@ -128,7 +128,7 @@ struct EntryToggle: View {
         Toggle(title, isOn: $isOn)
             .tint(AppColors.interactionPrimary)
             .foregroundStyle(AppColors.textPrimary)
-            .frame(minHeight: RootNavigation.toolButtonHitSize)
+            .frame(minHeight: HitTarget.minimum)
             .accessibilityLabel(title)
     }
 }

@@ -31,7 +31,8 @@ Walk/                        # 主 target 源码
     Baseline/                # 视觉基线与组件目录基建（基线场景、截图目录、组件清单）
     Debug/                   # Debug 设置、调试面板模型与摇一摇入口（仅 DEBUG 编译）
   Features/                  # 页面按业务域组织（Home/Routes/Trips/Equipment/Profile），另有 Shared
-    <域>/Components/         # 业务组件沉淀在所属域内，由组件目录与基线体系治理
+    <域>/Components/         # 只被本域使用的业务组件
+    Shared/                  # 跨域合同：Navigation/（导航意图、触控下限）与 Components/（被两个及以上域使用的业务组件与投影）
   Support/                   # 跨域工具（LocationService）
   Preview Content/           # SwiftUI Preview 与业务 Mock 数据（通用 fixture 委托给 WalkDesignSystem）
   Resources/                 # Info.plist、本地化、MockAPI 资源
@@ -43,7 +44,7 @@ output/                      # 调研记录与其他产物；不作为规范来�
 specs/                       # 平台规范：只承接总规范，不新增产品事实（见 specs/README.md）
 ```
 
-依赖规则：App → Features → WalkData / WalkDesignSystem；WalkData 不依赖 Features 与 WalkDesignSystem，Features 之间禁止横向依赖，WalkDesignSystem 不 import 业务模型。只有 App 的 `Walk/App/Debug/` 使用 WalkDebugTools，Feature、WalkData、WalkDesignSystem 不得依赖它，由 `DebugToolsBoundaryTests` 强制。
+依赖规则：App → Features → WalkData / WalkDesignSystem；WalkData 不依赖 Features 与 WalkDesignSystem，WalkDesignSystem 不 import 业务模型。Feature 只能引用本域与 `Features/Shared/` 的类型，不引用 App 根实现；Shared 不依赖任何业务域，只放组件、投影与格式化工具，不放页面与 ViewModel。以上由 `FeatureBoundaryTests` 强制。只有 App 的 `Walk/App/Debug/` 使用 WalkDebugTools，Feature、WalkData、WalkDesignSystem 不得依赖它，由 `DebugToolsBoundaryTests` 强制。
 
 ## 约定
 

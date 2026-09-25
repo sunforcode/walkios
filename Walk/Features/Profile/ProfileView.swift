@@ -121,7 +121,7 @@ struct ProfileView: View {
                 retry: { Task { await viewModel.retryCalendar() } }
             )
         } else if let calendar = viewModel.tripCalendar {
-            TripBusinessComponents.TripCalendarCard(
+            SharedBusinessComponents.TripCalendarCard(
                 projection: ProfileCalendarPresentation(calendar: calendar).tripCalendarCardProjection,
                 onActivate: { onNavigate(.tripList) }
             )

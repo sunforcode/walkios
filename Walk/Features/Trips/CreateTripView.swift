@@ -300,7 +300,7 @@ struct CreateTripView: View {
 
     private var generatingView: some View {
         UtilityPageContainer {
-            RouteBusinessComponents.GenerationWaitingView(
+            SharedBusinessComponents.GenerationWaitingView(
                 projection: GenerationWaitingProjection(
                     title: "正在组织你的出行信息",
                     description: "请稍候，完成后将直接进入个人行程。"
@@ -331,7 +331,7 @@ struct CreateTripView: View {
     private func ineligiblePage(context: PersonalTripGenerationContext) -> some View {
         UtilityPage(title: "生成行程") {
             VStack(alignment: .leading, spacing: Spacing.md) {
-                RouteBusinessComponents.GenerationRouteSummaryCard(
+                SharedBusinessComponents.GenerationRouteSummaryCard(
                     projection: CreateTripRouteSummaryPresentation(route: context.route).componentProjection
                 )
                 ForEach(Array((context.route.generationEligibility.missingReasons ?? []).enumerated()), id: \.offset) { _, reason in
@@ -360,7 +360,7 @@ struct CreateTripView: View {
             }
         ) {
             VStack(alignment: .leading, spacing: Spacing.xl) {
-                RouteBusinessComponents.GenerationRouteSummaryCard(
+                SharedBusinessComponents.GenerationRouteSummaryCard(
                     projection: CreateTripRouteSummaryPresentation(route: context.route).componentProjection
                 )
                 requiredInputs(routeType: context.route.routeType)
@@ -482,7 +482,7 @@ struct CreateTripView: View {
 
     private func equipmentSection(_ context: PersonalTripGenerationContext) -> some View {
         let summary = context.personalEquipmentSummary
-        return RouteBusinessComponents.GenerationEquipmentSelection(
+        return SharedBusinessComponents.GenerationEquipmentSelection(
             projection: GenerationEquipmentSelectionProjection(
                 equipmentItemCount: summary.equipmentItemCount,
                 equipmentListCount: summary.equipmentListCount,
@@ -508,7 +508,7 @@ struct CreateTripView: View {
     }
 
     private func transportSection(_ selection: PersonalTripTransportSelection) -> some View {
-        RouteBusinessComponents.TransportOptionSelection(
+        SharedBusinessComponents.TransportOptionSelection(
             projection: TransportOptionSelectionProjection(
                 selectionID: selection.selectionID,
                 options: selection.options.map { option in
