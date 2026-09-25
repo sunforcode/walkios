@@ -82,7 +82,7 @@ class BuildEntryTests(unittest.TestCase):
         self.assertEqual(plan.scheme, "Walk")
 
     def test_debug_scheme_allow_list(self) -> None:
-        for scheme in ("Walk", "WalkBaseline", "WalkComponents", "WalkDebugTools"):
+        for scheme in ("Walk", "WalkBaseline", "WalkComponents", "WalkDebugTools", "WalkDataModeE2E", "WalkKeyFlows"):
             with self.subTest(scheme=scheme):
                 plan = entry.plan([
                     "--mode", "debug", "--action", "test", "--scheme", scheme,

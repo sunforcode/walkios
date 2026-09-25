@@ -24,7 +24,7 @@ import sys
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEV_SCHEMES = ("Walk", "WalkBaseline", "WalkComponents", "WalkDebugTools")
+DEV_SCHEMES = ("Walk", "WalkBaseline", "WalkComponents", "WalkDebugTools", "WalkDataModeE2E", "WalkKeyFlows")
 RESOLVED_FILE = Path("project.xcworkspace/xcshareddata/swiftpm/Package.resolved")
 RELEASE_PROJECT = "WalkRelease.xcodeproj"
 

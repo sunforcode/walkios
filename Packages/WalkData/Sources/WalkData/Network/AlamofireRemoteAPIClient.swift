@@ -63,11 +63,9 @@ public final class AlamofireRemoteAPIClient: APIClient {
         let storageIdentity = storageContext?.currentUserID
         let generationSnapshot = await storageGeneration?.snapshot()
         let urlRequest = try makeURLRequest(request)
-        let dataRequest = session.request(urlRequest)
-        if responseCachePolicy == .disabled {
-            // 注入的 Session 也不能把本次响应写入它自己的 URLCache。
-            dataRequest.cacheResponse(using: .doNotCache)
-        }
+        // R-STORAGE：HTTP 客户端不得另外绕过所选策略返回缓存；响应复用只由应用响应缓存决定。
+        // 注入的 Session 同样不得把响应写入它自己的 URLCache。
+        let dataRequest = session.request(urlRequest).cacheResponse(using: .doNotCache)
         let response = await dataRequest
             .serializingData()
             .response
@@ -222,8 +220,10 @@ public final class AlamofireRemoteAPIClient: APIClient {
         request.headers.forEach { name, value in
             urlRequest.setValue(value, forHTTPHeaderField: name)
         }
+        // 任何模式都网络优先读取，不使用 HTTP 客户端缓存（R-CACHE-POLICY / R-STORAGE）。
+        urlRequest.cachePolicy = .reloadIgnoringLocalCacheData
         if responseCachePolicy == .disabled {
-            urlRequest.cachePolicy = .reloadIgnoringLocalCacheData
+            // remoteOnly 额外要求中间层不复用或保存本次响应。
             urlRequest.setValue("no-cache, no-store", forHTTPHeaderField: "Cache-Control")
         }
         return urlRequest
@@ -303,15 +303,14 @@ public final class AlamofireRemoteAPIClient: APIClient {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 15
         configuration.timeoutIntervalForResource = 15
-        if responseCachePolicy == .disabled {
-            configuration.urlCache = nil
-            configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        }
+        // HTTP 客户端在任何模式下都不持有响应缓存；应用响应缓存是唯一的复用来源。
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         let interceptor = Interceptor(retriers: [APIRetryPolicy()])
         return Session(
             configuration: configuration,
             interceptor: interceptor,
-            cachedResponseHandler: responseCachePolicy == .disabled ? ResponseCacher.doNotCache : nil,
+            cachedResponseHandler: ResponseCacher.doNotCache,
             eventMonitors: [LoggingMonitor()]
         )
     }

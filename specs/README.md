@@ -113,7 +113,7 @@ flowchart TB
 
 ### 重构目标与工作拆分
 
-阶段状态：第 1 步「目的与目标」已获用户认可；第 2 步「工作拆分」已记录；第 3 步「规范与约束」首版见下文；第 4 步已完成 W0 的[工程与测试基线修复](../output/refactor-w0-results-20260924.md)和[DebugSwift 最小接入与隔离验证](../output/debugswift-isolation-20260924.md)、W1 的[数据能力与缓存](../output/refactor-w1-results-20260925.md)，W2 的[App 配置与依赖装配](../output/refactor-w2-results-20260925.md)，W3 的[DebugTools 接入](../output/refactor-w3-results-20260925.md)，W4 的[App / Feature / Service 整理](../output/refactor-w4-results-20260925.md)，以及 W5 的[共用基建归属整理](../output/refactor-w5-results-20260925.md)。W6 尚未执行。SDK 网络观察仍关闭，开启前需按 R-DEBUG 补齐请求、缓存、认证与取消语义的证据。W1 建立的离线返回能力目前没有任何生产端点启用。
+阶段状态：第 1 步「目的与目标」已获用户认可；第 2 步「工作拆分」已记录；第 3 步「规范与约束」首版见下文；第 4 步已完成 W0 的[工程与测试基线修复](../output/refactor-w0-results-20260924.md)和[DebugSwift 最小接入与隔离验证](../output/debugswift-isolation-20260924.md)、W1 的[数据能力与缓存](../output/refactor-w1-results-20260925.md)，W2 的[App 配置与依赖装配](../output/refactor-w2-results-20260925.md)，W3 的[DebugTools 接入](../output/refactor-w3-results-20260925.md)，W4 的[App / Feature / Service 整理](../output/refactor-w4-results-20260925.md)，W5 的[共用基建归属整理](../output/refactor-w5-results-20260925.md)，以及 W6 的[整体验收](../output/refactor-w6-results-20260925.md)。W0–W6 均已完成，当前架构与验收入口见本节「当前架构」。SDK 网络观察仍关闭，开启前需按 R-DEBUG 补齐请求、缓存、认证与取消语义的证据。W1 建立的离线返回能力目前没有任何生产端点启用。
 
 **重构目的**：把现有逻辑架构落实为职责明确、依赖清晰、容易修改和验证的代码结构，降低后续开发、问题定位和测试成本。衡量效果时关注修改位置是否明确、影响范围是否可控、结果是否可验证。
 
@@ -154,6 +154,28 @@ W1 与 W2 共享第 3 步确定的配置合同：WalkData 只接收所需策略�
 - 分批修改与验证约束：保护已有改动、区分存量失败、为新增行为建立针对性测试；测试验证可观察行为和依赖边界，减少对文件名与源码字符串的绑定。
 
 这些议题的首版规则统一记录在下节。SDK 版本及工程隔离方案的可行性由 W0 验证，接口级离线资格及有效期需要逐项登记，不能从现有 `.store` 标记推导。
+
+### 当前架构
+
+W0–W6 完成后的实际结构，是上文架构图与「职责与依赖」的落地：
+
+| 逻辑层 | 承载 | 依赖约束的强制 |
+|---|---|---|
+| App | `Walk/App/`：`WalkApp` 入口、`AppConfiguration` 解析、`AppEnvironment` 唯一生产装配、`AuthenticationFlow` 认证编排、`RootView`/`RootNavigation` 全局导航；`Walk/App/Debug/` 仅 DEBUG 编译 | `ArchitectureDependencyTests`（生产依赖只由 `AppEnvironment` 装配） |
+| Feature | `Walk/Features/<Home/Routes/Trips/Equipment/Profile>`；跨域合同在 `Features/Shared/`（Navigation、跨域业务组件） | `FeatureBoundaryTests`（不跨域、不引用 App）、`ArchitectureDependencyTests`（不装配依赖、不读配置） |
+| Service / 数据 | `Packages/WalkData`：Service 协议、统一请求协议、Mock 与真实实现、`OfflinePolicy`、缓存记录、认证 | `ArchitectureDependencyTests`（只依赖 Foundation 族与 Alamofire） |
+| Theme / 通用 UI | `Packages/WalkDesignSystem` | `ArchitectureDependencyTests`（只依赖 UI 框架）、`DesignSystemBoundaryTests`（不以业务命名）、`DesignSystemTests`（Token 取值与 Feature 裸值守卫） |
+| DebugTools | `Packages/WalkDebugTools` → DebugSwift 1.19.0，仅开发依赖图 | `DebugToolsBoundaryTests`；Release 由 `scripts/build.py` 产物隔离检查 |
+
+验收入口：
+
+| 验收面 | 入口 |
+|---|---|
+| 单元与结构 | `python3 scripts/build.py --mode debug --action test --scheme Walk --destination '<destination>'` |
+| 三种数据模式 E2E | `WALK_E2E_DESTINATION='<destination>' scripts/run_data_mode_e2e.sh [局域网 IP]` |
+| 关键流程回归 | `WALK_E2E_DESTINATION='<destination>' scripts/run_key_flow_regression.sh`（会重置该模拟器 Keychain） |
+| 视觉基线 / 组件目录 / 调试面板 | scheme `WalkBaseline` / `WalkComponents` / `WalkDebugTools` |
+| Release 产物隔离 | `python3 scripts/build.py --mode release --action archive` |
 
 ### 重构规范与约束
 
@@ -432,3 +454,5 @@ Token 承载家族位于 `Packages/WalkDesignSystem/Sources/WalkDesignSystem/The
 ```bash
 python3 scripts/tests/test_platform_spec_registry.py
 ```
+
+平台实现的完整验收入口见「当前架构」。

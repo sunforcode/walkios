@@ -38,6 +38,34 @@ targets:
         TEST_TARGET_NAME: Walk
         GENERATE_INFOPLIST_FILE: YES
 
+  WalkDataModeE2EUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Tests/DataModeE2EUITests
+    dependencies:
+      - target: Walk
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.walk.app.data-mode-e2e-ui-tests
+        TEST_TARGET_NAME: Walk
+        GENERATE_INFOPLIST_FILE: YES
+
+  WalkKeyFlowUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Tests/KeyFlowUITests
+    dependencies:
+      - target: Walk
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.walk.app.key-flow-ui-tests
+        TEST_TARGET_NAME: Walk
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   Walk:
     build:
@@ -115,6 +143,42 @@ schemes:
       config: Debug
       targets:
         - WalkDebugToolsUITests
+    profile:
+      config: Debug
+    analyze:
+      config: Debug
+    archive:
+      config: Debug
+
+  WalkDataModeE2E:
+    build:
+      targets:
+        Walk: all
+        WalkDataModeE2EUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - WalkDataModeE2EUITests
+    profile:
+      config: Debug
+    analyze:
+      config: Debug
+    archive:
+      config: Debug
+
+  WalkKeyFlows:
+    build:
+      targets:
+        Walk: all
+        WalkKeyFlowUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - WalkKeyFlowUITests
     profile:
       config: Debug
     analyze:

@@ -39,6 +39,7 @@ Walk/                        # 主 target 源码
   Tests/                     # 主 target 的单元测试与 Fixtures
 Tests/                       # 独立测试 target
   BaselineTests/  BaselineUITests/  ComponentTests/  ComponentUITests/  DebugToolsUITests/
+  DataModeE2EUITests/  KeyFlowUITests/
 scripts/                     # 构建入口 build.py、产物隔离检查、UI 基线与组件目录脚本
 output/                      # 调研记录与其他产物；不作为规范来源
 specs/                       # 平台规范：只承接总规范，不新增产品事实（见 specs/README.md）
@@ -69,6 +70,17 @@ xcodebuild test -project Walk.xcodeproj -scheme Walk -destination 'platform=iOS 
 ## 调试工具
 
 Debug 构建中摇一摇设备（模拟器：Device → Shake）打开 DebugSwift 面板，在 App 分组查看「当前生效」「重启后生效」，并通过自定义动作切换数据模式、服务器、断网策略，或清除响应缓存、恢复构建默认值。设置只在重启后生效。Baseline 与组件预览不挂载该入口。
+
+## 端到端验收
+
+```bash
+# 三种数据模式：在局域网地址启动受控服务，核对请求到达与应用响应缓存
+WALK_E2E_DESTINATION='platform=iOS Simulator,id=<UDID>' scripts/run_data_mode_e2e.sh [局域网 IP]
+# 关键流程：Mock 模式五域主链路与登录（运行前卸载 App 并重置该模拟器 Keychain）
+WALK_E2E_DESTINATION='platform=iOS Simulator,id=<UDID>' scripts/run_key_flow_regression.sh
+```
+
+真实网络模式拒绝 localhost / 127.0.0.1 占位地址，受控服务因此使用局域网地址，只在运行期间监听。
 
 ## 出包
 
