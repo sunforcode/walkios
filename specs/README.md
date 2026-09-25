@@ -113,7 +113,7 @@ flowchart TB
 
 ### 重构目标与工作拆分
 
-阶段状态：第 1 步「目的与目标」已获用户认可；第 2 步「工作拆分」已记录；第 3 步「规范与约束」首版见下文；第 4 步已完成 W0 的[工程与测试基线修复](../output/refactor-w0-results-20260924.md)和[DebugSwift 最小接入与隔离验证](../output/debugswift-isolation-20260924.md)、W1 的[数据能力与缓存](../output/refactor-w1-results-20260925.md)，以及 W2 的[App 配置与依赖装配](../output/refactor-w2-results-20260925.md)。W3–W6 尚未执行，SDK 正式接入仍归 W3。W1 建立的离线返回能力目前没有任何生产端点启用。
+阶段状态：第 1 步「目的与目标」已获用户认可；第 2 步「工作拆分」已记录；第 3 步「规范与约束」首版见下文；第 4 步已完成 W0 的[工程与测试基线修复](../output/refactor-w0-results-20260924.md)和[DebugSwift 最小接入与隔离验证](../output/debugswift-isolation-20260924.md)、W1 的[数据能力与缓存](../output/refactor-w1-results-20260925.md)，W2 的[App 配置与依赖装配](../output/refactor-w2-results-20260925.md)，以及 W3 的[DebugTools 接入](../output/refactor-w3-results-20260925.md)。W4–W6 尚未执行。SDK 网络观察仍关闭，开启前需按 R-DEBUG 补齐请求、缓存、认证与取消语义的证据。W1 建立的离线返回能力目前没有任何生产端点启用。
 
 **重构目的**：把现有逻辑架构落实为职责明确、依赖清晰、容易修改和验证的代码结构，降低后续开发、问题定位和测试成本。衡量效果时关注修改位置是否明确、影响范围是否可控、结果是否可验证。
 

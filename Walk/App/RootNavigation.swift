@@ -43,7 +43,6 @@ enum AppDestination: Hashable {
     case privacySettings
     case helpAndFeedback
     case about
-    case debugEnvironment
     case tripList
     case createTrip(routeID: String)
     case tripDetail(String)
@@ -59,7 +58,7 @@ enum AppDestination: Hashable {
         case .routeSearch: "PAGE-SEARCH"
         case .routeDetail: "PAGE-ROUTE-DETAIL"
         case .profileDetails, .notificationSettings, .privacySettings,
-             .helpAndFeedback, .about, .debugEnvironment: "PAGE-ME"
+             .helpAndFeedback, .about: "PAGE-ME"
         case .tripList: "PAGE-TRIPS"
         case .createTrip: "PAGE-TRIP-CREATE"
         case .tripDetail: "PAGE-TRIP-DETAIL"

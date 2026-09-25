@@ -305,13 +305,6 @@ struct RootView: View {
                 HelpAndFeedbackView()
             case .about:
                 AboutView()
-            #if DEBUG
-            case .debugEnvironment:
-                DebugEnvironmentView(effective: appEnvironment.configuration)
-            #else
-            case .debugEnvironment:
-                EmptyView()
-            #endif
             case let .createTrip(routeID):
                 CreateTripView(
                     routeID: routeID,

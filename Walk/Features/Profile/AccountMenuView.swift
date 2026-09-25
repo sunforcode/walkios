@@ -65,9 +65,6 @@ struct AccountMenuView: View {
                 identityHeader(profile)
                 settingsGroup(title: "账户与设置", items: accountSettings)
                 settingsGroup(title: "支持", items: supportSettings)
-                #if DEBUG
-                settingsGroup(title: "开发者", items: developerSettings)
-                #endif
 
                 if let avatarError = viewModel.avatarErrorMessage {
                     ErrorView(
@@ -131,14 +128,6 @@ struct AccountMenuView: View {
         ]
     }
 
-    #if DEBUG
-    private var developerSettings: [SettingItem] {
-        [
-            SettingItem(id: .debugEnvironment, label: "环境", destination: .debugEnvironment),
-        ]
-    }
-    #endif
-
     private func settingsGroup(title: String, items: [SettingItem]) -> some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Text(title)
@@ -186,7 +175,6 @@ extension AccountMenuView {
         case privacy
         case helpAndFeedback
         case about
-        case debugEnvironment
     }
 }
 

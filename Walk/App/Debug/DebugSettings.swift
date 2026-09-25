@@ -17,15 +17,19 @@ struct DebugSettings: Equatable, Codable {
     let version: Int
     let dataMode: WalkDataMode?
     let server: Server?
+    /// 断网策略。缺失时回落到下一级来源；未含该字段的记录仍可读取。
+    let offlinePolicy: OfflinePolicy?
 
-    init(dataMode: WalkDataMode?, server: Server?) {
+    init(dataMode: WalkDataMode?, server: Server?, offlinePolicy: OfflinePolicy? = nil) {
         self.version = Self.currentVersion
         self.dataMode = dataMode
         self.server = server
+        self.offlinePolicy = offlinePolicy
     }
 }
 
 extension WalkDataMode: Codable {}
+extension OfflinePolicy: Codable {}
 
 /// Debug 设置的单一持久化记录。
 ///

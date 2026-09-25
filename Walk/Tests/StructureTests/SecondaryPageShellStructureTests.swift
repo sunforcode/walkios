@@ -14,7 +14,6 @@ final class SecondaryPageShellStructureTests: XCTestCase {
         "Equipment/AddEquipmentView.swift",
         "Equipment/EquipmentListView.swift",
         "Profile/AboutPage.swift",
-        "Profile/DebugEnvironmentView.swift",
         "Profile/EntryFormPage.swift",
         "Profile/HelpFeedbackPage.swift",
         "Profile/NotificationSettingsPage.swift",

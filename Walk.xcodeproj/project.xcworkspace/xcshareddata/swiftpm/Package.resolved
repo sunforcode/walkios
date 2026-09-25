@@ -1,24 +1,33 @@
 {
-  "originHash" : "ddcc8d5a333c1fc019ac34dc0f3b9d0bf54fe38a98832b0f4d362f62a7ce8f0e",
-  "pins" : [
+  "originHash": "ddcc8d5a333c1fc019ac34dc0f3b9d0bf54fe38a98832b0f4d362f62a7ce8f0e",
+  "pins": [
     {
-      "identity" : "alamofire",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/Alamofire/Alamofire.git",
-      "state" : {
-        "revision" : "f455c2975872ccd2d9c81594c658af65716e9b9a",
-        "version" : "5.9.1"
+      "identity": "alamofire",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/Alamofire/Alamofire.git",
+      "state": {
+        "revision": "f455c2975872ccd2d9c81594c658af65716e9b9a",
+        "version": "5.9.1"
       }
     },
     {
-      "identity" : "lottie-ios",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/airbnb/lottie-ios.git",
-      "state" : {
-        "revision" : "769b88d83a42ca8d5572b020c96f47e3690b3796",
-        "version" : "4.4.3"
+      "identity": "debugswift",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/DebugSwift/DebugSwift.git",
+      "state": {
+        "revision": "b85fd86581bc1b67710be82249d8aac2ef61b2f5",
+        "version": "1.19.0"
+      }
+    },
+    {
+      "identity": "lottie-ios",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/airbnb/lottie-ios.git",
+      "state": {
+        "revision": "769b88d83a42ca8d5572b020c96f47e3690b3796",
+        "version": "4.4.3"
       }
     }
   ],
-  "version" : 3
+  "version": 3
 }

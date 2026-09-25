@@ -63,3 +63,6 @@ iOSInjectionProject/
 # Python
 __pycache__/
 *.pyc
+
+# 生产依赖图由 scripts/build.py 生成，不提交
+WalkRelease.xcodeproj/

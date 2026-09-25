@@ -4,7 +4,7 @@ import Foundation
 ///
 /// 依据 specs/README.md R-CACHE-POLICY：读取顺序为网络优先，失败处理独立建模。
 /// 策略由数据层执行，App 注入默认策略，端点声明允许范围。
-public enum OfflinePolicy: Equatable, Sendable {
+public enum OfflinePolicy: String, CaseIterable, Equatable, Sendable {
     /// 返回本次连接错误，不以缓存替代结果。未配置时的默认值。
     case fail
     /// 对允许离线读取的只读端点，尝试返回合格缓存；没有合格缓存时仍返回原始连接错误。

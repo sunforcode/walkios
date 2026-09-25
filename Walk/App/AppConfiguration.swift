@@ -4,6 +4,7 @@ import WalkDesignSystem
 
 enum AppConfigurationError: Error, Equatable {
     case invalidDataMode(String)
+    case invalidOfflinePolicy(String)
     /// 可识别但已无等价能力的模式，例如已下线的 `local`。
     case unsupportedDataMode(String)
     /// 已退役的配置键；不再作为兼容别名，传入即报错以免被静默忽略。
@@ -42,7 +43,8 @@ struct AppConfiguration: Equatable {
     let baseURL: URL
     let environmentName: String
     let executionContext: ExecutionContext
-    /// 首版固定为默认值 `fail`；W3 起由 DebugTools 选择。
+    /// 断网策略。Debug 可经启动参数、环境变量或 Debug 设置选择；Release 固定 `fail`。
+    /// 端点离线资格仍决定是否真正允许离线返回。
     let offlinePolicy: OfflinePolicy
     let baselineScenario: CurrentBaselineScenario?
 
@@ -81,6 +83,9 @@ struct AppConfiguration: Equatable {
         static let environmentArgument = "-WalkEnvironment"
         static let environmentEnvironment = "WALK_ENVIRONMENT"
         static let environmentBundle = "WalkEnvironment"
+
+        static let offlinePolicyArgument = "-WalkOfflinePolicy"
+        static let offlinePolicyEnvironment = "WALK_OFFLINE_POLICY"
 
         static let baselineArgument = "-WalkBaselineScenario"
         static let baselineEnvironment = "WALK_BASELINE_SCENARIO"
@@ -147,6 +152,12 @@ struct AppConfiguration: Equatable {
             ?? bundle.value(Key.environmentBundle)
             ?? "production"
 
+        // 构建配置不承载策略：Release 固定 fail，Debug 未选择时同样取默认值。
+        let rawPolicy = try launch.value(
+            argument: Key.offlinePolicyArgument,
+            environment: Key.offlinePolicyEnvironment
+        ) ?? settings?.offlinePolicy?.rawValue
+
         let baselineScenario: CurrentBaselineScenario?
         if let baselineRaw {
             guard let parsed = CurrentBaselineScenario(rawValue: baselineRaw) else {
@@ -162,6 +173,7 @@ struct AppConfiguration: Equatable {
             baseURL: try Self.parseURL(rawURL),
             environmentName: environmentName,
             executionContext: context,
+            offlinePolicy: try rawPolicy.map(Self.parseOfflinePolicy) ?? .default,
             baselineScenario: baselineScenario
         )
         try validate()
@@ -190,6 +202,15 @@ struct AppConfiguration: Equatable {
             throw AppConfigurationError.invalidDataMode(raw)
         }
         return mode
+    }
+
+    private static func parseOfflinePolicy(_ raw: String) throws -> OfflinePolicy {
+        guard let policy = OfflinePolicy.allCases.first(where: {
+            $0.rawValue.caseInsensitiveCompare(raw) == .orderedSame
+        }) else {
+            throw AppConfigurationError.invalidOfflinePolicy(raw)
+        }
+        return policy
     }
 
     private static func parseURL(_ raw: String?) throws -> URL {

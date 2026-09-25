@@ -59,6 +59,22 @@ struct WalkApp: App {
         return appEnvironment.configuration.baselineScenario != nil
     }
 
+#if DEBUG
+    private var debugPanelModel: DebugPanelModel {
+        let environment = appEnvironment
+        return DebugPanelModel(
+            effective: environment.configuration,
+            store: DebugSettingsStore(),
+            clearResponseCache: {
+                Task {
+                    await environment.apiStorageGeneration.invalidate()
+                    try? await environment.apiStorage.removeAll()
+                }
+            }
+        )
+    }
+#endif
+
     @ViewBuilder
     private var appRoot: some View {
 #if DEBUG
@@ -67,7 +83,9 @@ struct WalkApp: App {
         } else if let scenario = appEnvironment.configuration.baselineScenario {
             BaselineRootView(scenario: scenario)
         } else {
+            // 调试入口只挂在正常运行的根视图；Baseline 与组件预览不加载调试 SDK。
             RootView(appEnvironment: appEnvironment)
+                .modifier(DebugShakeEntry(model: debugPanelModel))
         }
 #else
         if let scenario = appEnvironment.configuration.baselineScenario {

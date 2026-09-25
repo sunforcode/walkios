@@ -1,0 +1,34 @@
+# 生产依赖图：只由 scripts/build.py --mode release 生成到 build/，不提交生成结果。
+# 不声明 WalkDebugTools / DebugSwift；只有 Release 配置。
+include: [project-base.yml]
+name: WalkRelease
+configs:
+  Release: release
+
+targets:
+  Walk:
+    settings:
+      configs:
+        Release:
+          WALK_API_BASE_URL: https://vialu.cn/walkbg/api/v1
+          WALK_DATA_MODE: real
+          WALK_ENVIRONMENT: production
+          # 让主可执行文件直接承载全部代码，链接记录与符号检查覆盖实际产物。
+          ENABLE_DEBUG_DYLIB: "NO"
+          LD_GENERATE_MAP_FILE: YES
+
+schemes:
+  WalkRelease:
+    build:
+      targets:
+        Walk: all
+    run:
+      config: Release
+    test:
+      config: Release
+    profile:
+      config: Release
+    analyze:
+      config: Release
+    archive:
+      config: Release
