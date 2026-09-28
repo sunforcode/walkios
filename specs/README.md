@@ -35,6 +35,26 @@
 - 登记完整性由 [scripts/tests/test_platform_spec_registry.py](../scripts/tests/test_platform_spec_registry.py) 强制，不依赖手工维护的诚实；
 - 缺口只能通过总规范批准的 Change 补齐，不得在本文件中把差距改写成总规范。
 
+## 装备 Data 层承接
+
+本批承接总仓已批准 Change `define-equipment-catalog`、`define-equipment-classification-standard`、`extend-equipment-preparation-api`，消费者为 `WalkData`。上游行为引用 [equipment-catalog](../../openspec/specs/equipment-catalog/spec.md)、[personal-equipment](../../openspec/specs/personal-equipment/spec.md)、[trip-equipment](../../openspec/specs/trip-equipment/spec.md)，值与关系引用 [equipment-schema](../../docs/data/equipment-schema.md) 和 [equipment-relations](../../docs/data/equipment-relations.md)。
+
+| 上游 API 权威 | Swift 承载 |
+|---|---|
+| [equipment-catalog-api](../../docs/api/equipment-catalog-api.md) | `EquipmentCatalogModels.swift`、`EquipmentCatalogAPI`、`EquipmentCatalogService` |
+| [personal-equipment-api](../../docs/api/personal-equipment-api.md) | `EquipmentModels.swift`、`PersonalEquipmentAPI`、`EquipmentListAPI`、`EquipmentService` |
+| [trip-equipment-api](../../docs/api/trip-equipment-api.md) | `TripEquipmentModels.swift`、`TripEquipmentPreparationModels.swift`、`TripEquipmentAPI`、`TripEquipmentService` |
+
+- 重量承载使用 `Double`，旧整数 convenience initializer / Service 入口保留；完整配置写入通过类型化 request DTO。已有组件 Projection 仅作数值类型兼容。
+- nullable PATCH 使用 `.unchanged / .value / .clear` 表达省略、写入与清空；目录详情按装备类型解码具体规格。
+- 请求复用 `APIRequest → APIClient`。动态身份由 `APIPathSegment` 编码；`pathIsPercentEncoded` 防止 HTTP 层重复转义。装备查询的字面加号使用 `%2B`。
+- 本次调用的版本头由请求对象携带，远端成功响应由端点 `validateResponse` 校验；不保留全局“最后 ETag”，不在重试时重建幂等键。
+- 新接口无离线返回资格，准备结果保留服务器投影。页面新功能与表单完整配置接线不属于本批 Data 层交付。
+
+独立接口测试入口：`swift test --package-path Packages/WalkData`。Package 的 macOS 最低版本声明用于本机运行数据层测试，不新增 App 平台。`Packages/WalkData/Tests/WalkDataTests` 覆盖 DTO、请求合同及注入 `URLProtocol` 的真实 HTTP 客户端；不依赖真实账号或后端在线状态。既有 App 回归继续使用本文件规定的 iOS 模拟器入口。
+
+2026-09-28 验证：先确认小数重量解码、准备字段丢失、身份重复编码及响应版本校验的失败测试，再完成修复。隔离本任务提交树后，WalkData 独立测试 58 项全部通过；`Walk` scheme 在 `iPhone 17 Pro / iOS 26.5` 上的装备 Service、ViewModel、Profile、APIClient 与 TripDataAccess 相关回归执行 88 项，87 项通过、1 项因未启用 `-walkLiveBackendTest` 跳过。该证据覆盖客户端单测与编译，不作为真实后端联调或新增页面验收证据。
+
 ## App 架构基准
 
 确认日期：2026-09-24。本节保存本轮讨论确定的 iOS **目标逻辑架构**。W0–W6 完成后的实际落地见下文「当前架构」。

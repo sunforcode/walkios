@@ -32,7 +32,7 @@ struct TripEquipmentItemRowProjection: Equatable, Identifiable {
     let identity: String
     let name: String
     let quantity: Int
-    let unitWeightGrams: Int?
+    let unitWeightGrams: Double?
     let note: String?
     let source: TripEquipmentItemSourceProjection
     let ownershipStatus: TripEquipmentOwnershipStatusProjection
@@ -46,7 +46,7 @@ struct TripEquipmentItemRowProjection: Equatable, Identifiable {
 
     var totalWeightText: String? {
         guard let grams = unitWeightGrams else { return nil }
-        return AccountEquipmentFormatting.weightText(grams: grams * quantity)
+        return AccountEquipmentFormatting.weightText(grams: grams * Double(quantity))
     }
 }
 

@@ -391,7 +391,7 @@ struct TripEquipmentView: View {
         editorMode = .editing(item)
         editorName = item.name
         editorQuantity = item.quantity
-        editorUnitWeight = item.unitWeight.map { String($0.grams) } ?? ""
+        editorUnitWeight = item.unitWeight.map { AccountEquipmentFormatting.decimalText($0.grams) } ?? ""
         editorNote = item.note ?? ""
         viewModel.errorMessage = nil
     }

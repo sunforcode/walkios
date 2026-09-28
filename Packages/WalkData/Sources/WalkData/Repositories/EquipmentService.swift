@@ -17,7 +17,17 @@ public protocol EquipmentServicing: AnyObject {
     func removeListMember(equipmentListID: String, personalEquipmentID: String) async throws -> EquipmentListMutation
 }
 
-public final class EquipmentService: EquipmentServicing {
+public protocol PersonalEquipmentManaging: EquipmentServicing {
+    func getPersonalEquipment(filter: PersonalEquipmentFilter) async throws -> PersonalEquipmentCollection
+    func createPersonalEquipment(input: PersonalEquipmentCreateRequest) async throws -> PersonalEquipmentMutation
+    func createPersonalEquipmentFromCatalog(
+        input: PersonalEquipmentFromCatalogRequest,
+        idempotencyKey: String
+    ) async throws -> PersonalEquipmentMutation
+    func copyEquipmentList(id: String, name: String, idempotencyKey: String) async throws -> EquipmentListCreateResult
+}
+
+public final class EquipmentService: PersonalEquipmentManaging {
     private let apiClient: any APIClient
 
      public init(apiClient: any APIClient) {
@@ -26,6 +36,21 @@ public final class EquipmentService: EquipmentServicing {
 
      public func getPersonalEquipment() async throws -> PersonalEquipmentCollection {
         try await apiClient.execute(PersonalEquipmentAPI.Collection())
+    }
+
+    public func getPersonalEquipment(filter: PersonalEquipmentFilter) async throws -> PersonalEquipmentCollection {
+        try await apiClient.execute(PersonalEquipmentAPI.Collection(filter: filter))
+    }
+
+    public func createPersonalEquipment(input: PersonalEquipmentCreateRequest) async throws -> PersonalEquipmentMutation {
+        try await apiClient.execute(PersonalEquipmentAPI.Create(input: input))
+    }
+
+    public func createPersonalEquipmentFromCatalog(
+        input: PersonalEquipmentFromCatalogRequest,
+        idempotencyKey: String
+    ) async throws -> PersonalEquipmentMutation {
+        try await apiClient.execute(PersonalEquipmentAPI.FromCatalog(input: input, idempotencyKey: idempotencyKey))
     }
 
      public func createPersonalEquipment(
@@ -68,6 +93,18 @@ public final class EquipmentService: EquipmentServicing {
 
      public func createEquipmentList(name: String) async throws -> EquipmentListCreateResult {
         try await apiClient.execute(EquipmentListAPI.Create(name: name))
+    }
+
+    public func copyEquipmentList(
+        id: String,
+        name: String,
+        idempotencyKey: String
+    ) async throws -> EquipmentListCreateResult {
+        try await apiClient.execute(EquipmentListAPI.Copy(
+            equipmentListID: id,
+            name: name,
+            idempotencyKey: idempotencyKey
+        ))
     }
 
      public func getEquipmentList(id: String) async throws -> EquipmentListDetail {

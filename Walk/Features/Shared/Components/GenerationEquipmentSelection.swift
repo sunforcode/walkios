@@ -6,7 +6,7 @@ struct GenerationEquipmentListOptionProjection: Equatable, Identifiable {
     let equipmentListID: String
     let name: String
     let itemCount: Int
-    let knownTotalWeightGrams: Int
+    let knownTotalWeightGrams: Double
     let missingWeightItemCount: Int
 
     var id: String { equipmentListID }
@@ -15,7 +15,7 @@ struct GenerationEquipmentListOptionProjection: Equatable, Identifiable {
 struct GenerationEquipmentSelectionProjection: Equatable {
     let equipmentItemCount: Int
     let equipmentListCount: Int
-    let knownTotalWeightGrams: Int
+    let knownTotalWeightGrams: Double
     let missingWeightItemCount: Int
     let equipmentLists: [GenerationEquipmentListOptionProjection]
     let selectedEquipmentListID: String?
@@ -121,10 +121,10 @@ extension SharedBusinessComponents {
             return parts.joined(separator: " · ")
         }
 
-        private func weightText(_ grams: Int) -> String {
+        private func weightText(_ grams: Double) -> String {
             grams >= 1_000
                 ? "\((Double(grams) / 1_000).formatted(.number.precision(.fractionLength(0...2)))) kg"
-                : "\(grams) g"
+                : "\(AccountEquipmentFormatting.decimalText(grams)) g"
         }
     }
 }

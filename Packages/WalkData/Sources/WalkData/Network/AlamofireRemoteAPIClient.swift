@@ -121,6 +121,13 @@ public final class AlamofireRemoteAPIClient: APIClient {
         // 修改响应形状与 GET 缓存不同，不得写入 GET 缓存，因此这里直接返回。
         if Self.isMutation(request) {
             await invalidateResponseCache()
+        }
+        let headers = (response.response?.allHeaderFields ?? [:]).reduce(into: [String: String]()) {
+            result, entry in
+            result[String(describing: entry.key)] = String(describing: entry.value)
+        }
+        try request.validateResponse(value, statusCode: response.response?.statusCode ?? 0, headers: headers)
+        if Self.isMutation(request) {
             return APIResult(value: value, provenance: .remote)
         }
         // `no-store` 是 RFC 9111 硬约束，端点保存资格不能覆盖它。
@@ -187,10 +194,22 @@ public final class AlamofireRemoteAPIClient: APIClient {
     }
 
     private func makeURLRequest<Request: APIRequest>(_ request: Request) throws -> URLRequest {
-        guard var components = URLComponents(url: baseURL.appendingPathComponent(request.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))), resolvingAgainstBaseURL: false) else {
+        let relativePath = request.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let initialURL = request.pathIsPercentEncoded ? baseURL : baseURL.appendingPathComponent(relativePath)
+        guard var components = URLComponents(url: initialURL, resolvingAgainstBaseURL: false) else {
             throw APIClientError.invalidURL
         }
-        components.queryItems = request.query.isEmpty ? nil : request.query
+        if request.pathIsPercentEncoded {
+            let prefix = components.percentEncodedPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            components.percentEncodedPath = "/" + [prefix, relativePath].filter { !$0.isEmpty }.joined(separator: "/")
+            // Servlet 查询解码把 '+' 视为空格；字面加号必须发为 %2B。
+            components.percentEncodedQuery = request.query.isEmpty ? nil : request.query.map {
+                let name = APIPathSegment.encode($0.name)
+                return $0.value.map { name + "=" + APIPathSegment.encode($0) } ?? name
+            }.joined(separator: "&")
+        } else {
+            components.queryItems = request.query.isEmpty ? nil : request.query
+        }
         guard let url = components.url else { throw APIClientError.invalidURL }
 
         var urlRequest = URLRequest(url: url)

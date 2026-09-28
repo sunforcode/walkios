@@ -37,6 +37,8 @@ public protocol APIRequest {
 
     var method: APIHTTPMethod { get }
     var path: String { get }
+    /// 路径中的动态身份已按单个 segment 编码，HTTP 层不得再次转义百分号。
+    var pathIsPercentEncoded: Bool { get }
     var query: [URLQueryItem] { get }
     var body: Data? { get }
     var headers: [String: String] { get }
@@ -48,9 +50,12 @@ public protocol APIRequest {
     ///
     /// 依据 R-CACHE-VALIDITY：`storagePolicy == .store` 只证明保存资格，不授予离线返回资格。
     var offlineEligibility: OfflineEligibility? { get }
+    /// 对本次远端响应校验端点元数据，不使用全局共享的响应头状态。
+    func validateResponse(_ response: Response, statusCode: Int, headers: [String: String]) throws
 }
 
 public extension APIRequest {
+     var pathIsPercentEncoded: Bool { false }
      var query: [URLQueryItem] { [] }
      var body: Data? { nil }
      var headers: [String: String] { [:] }
@@ -60,6 +65,7 @@ public extension APIRequest {
      var authenticationPolicy: APIAuthenticationPolicy { .required }
      /// 默认不具备离线资格；授予必须逐端点显式登记。
      var offlineEligibility: OfflineEligibility? { nil }
+     func validateResponse(_ response: Response, statusCode: Int, headers: [String: String]) throws {}
 
      var identifier: String {
         let queryString = query
@@ -70,6 +76,17 @@ public extension APIRequest {
             .map { "\($0.name)=\($0.value ?? "")" }
             .joined(separator: "&")
         return "\(method.rawValue) \(path)\(queryString.isEmpty ? "" : "?\(queryString)")"
+    }
+}
+
+public enum APIPathSegment {
+    /// 身份是不透明字符串，保留其内容，并阻止斜杠、问号等改变路由。
+    public static func encode(_ value: String) -> String {
+        if value == "." || value == ".." {
+            return value.map { _ in "%2E" }.joined()
+        }
+        let unreserved = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        return value.addingPercentEncoding(withAllowedCharacters: unreserved)!
     }
 }
 

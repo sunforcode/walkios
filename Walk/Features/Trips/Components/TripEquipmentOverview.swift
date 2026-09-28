@@ -4,7 +4,7 @@ import WalkDesignSystem
 
 struct TripEquipmentOverviewProjection: Equatable {
     let itemCount: Int
-    let knownTotalWeightGrams: Int
+    let knownTotalWeightGrams: Double
     let missingWeightItemCount: Int
     let ownedItemCount: Int
     let unconfirmedOwnedItemCount: Int

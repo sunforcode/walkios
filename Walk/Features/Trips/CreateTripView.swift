@@ -55,7 +55,7 @@ struct CreateTripEquipmentListPresentation: Equatable {
 
     init(option: PersonalTripGenerationEquipmentListOption) {
         let summary = option.summary
-        text = "\(option.name) · \(summary.itemCount) 类 · 已知总重量 \(summary.knownTotalWeight.grams) 克 · \(summary.missingWeightItemCount) 类未计入重量"
+        text = "\(option.name) · \(summary.itemCount) 类 · 已知总重量 \(AccountEquipmentFormatting.decimalText(summary.knownTotalWeight.grams)) 克 · \(summary.missingWeightItemCount) 类未计入重量"
     }
 }
 

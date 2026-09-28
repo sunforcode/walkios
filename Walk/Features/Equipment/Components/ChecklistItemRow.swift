@@ -9,7 +9,7 @@ struct ChecklistItemRowProjection: Identifiable, Equatable {
     let equipmentName: String
     let ownedQuantity: Int
     let quantity: Int
-    let unitWeightGrams: Int?
+    let unitWeightGrams: Double?
 
     var id: String { identity }
 }
@@ -103,7 +103,7 @@ struct ChecklistItemRow: View {
             return "单件重量未填写 · 该项未计入总重量"
         }
         let unit = AccountEquipmentFormatting.weightText(grams: grams)
-        let total = AccountEquipmentFormatting.weightText(grams: grams * projection.quantity)
+        let total = AccountEquipmentFormatting.weightText(grams: grams * Double(projection.quantity))
         return "单件 \(unit) · 行重量 \(total)"
     }
 }

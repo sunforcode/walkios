@@ -313,11 +313,11 @@ struct EquipmentEditView: View {
         guard let equipment = viewModel.editingEquipment else { return }
         name = equipment.name
         quantityText = String(equipment.ownedQuantity)
-        unitWeightGrams = equipment.unitWeight.map { String($0.grams) } ?? ""
+        unitWeightGrams = equipment.unitWeight.map { AccountEquipmentFormatting.decimalText($0.grams) } ?? ""
         initialFormValues = EquipmentEditFormValues(
             name: equipment.name,
             ownedQuantity: equipment.ownedQuantity,
-            unitWeightGrams: equipment.unitWeight.map { String($0.grams) } ?? ""
+            unitWeightGrams: equipment.unitWeight.map { AccountEquipmentFormatting.decimalText($0.grams) } ?? ""
         )
         isNameFieldTouched = false
         isQuantityFieldTouched = false

@@ -7,7 +7,7 @@ struct PersonalEquipmentRowProjection: Equatable {
     let identity: String
     let name: String
     let ownedQuantity: Int
-    let unitWeightGrams: Int?
+    let unitWeightGrams: Double?
 }
 
 enum EquipmentListRowProjection: Equatable {

@@ -341,10 +341,10 @@ struct TripDetailPresentation: Equatable {
         return value
     }
 
-    private static func weightText(_ grams: Int) -> String {
+    private static func weightText(_ grams: Double) -> String {
         grams >= 1_000
             ? "\((Double(grams) / 1_000).formatted(.number.precision(.fractionLength(0...2)))) kg"
-            : "\(grams) g"
+            : "\(AccountEquipmentFormatting.decimalText(grams)) g"
     }
 }
 

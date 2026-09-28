@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "WalkData",
-    platforms: [.iOS(.v18)],
+    platforms: [.iOS(.v18), .macOS(.v13)],
     products: [
         .library(name: "WalkData", targets: ["WalkData"])
     ],
@@ -14,6 +14,10 @@ let package = Package(
         .target(
             name: "WalkData",
             dependencies: [.product(name: "Alamofire", package: "Alamofire")]
+        ),
+        .testTarget(
+            name: "WalkDataTests",
+            dependencies: ["WalkData", .product(name: "Alamofire", package: "Alamofire")]
         )
     ],
     swiftLanguageModes: [.v5]

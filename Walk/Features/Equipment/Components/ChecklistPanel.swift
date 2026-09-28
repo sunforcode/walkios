@@ -6,7 +6,7 @@ struct EquipmentListSummaryProjection: Identifiable, Equatable {
     let identity: String
     let name: String
     let itemCount: Int
-    let knownTotalWeightGrams: Int
+    let knownTotalWeightGrams: Double
     let missingWeightItemCount: Int
 
     var id: String { identity }
