@@ -110,10 +110,57 @@ extension TripBusinessComponents {
 }
 
 #if DEBUG
+extension TripListRowProjection {
+    static let `default` = TripListRowProjection(
+        tripID: "trip-001",
+        name: "贡嘎西南坡四日行程",
+        status: .planned,
+        routeName: "贡嘎西南坡环线",
+        startDate: "2026-09-07",
+        endDate: "2026-09-10"
+    )
+
+    static let inProgress = TripListRowProjection(
+        tripID: "trip-002",
+        name: "海坨山谷穿越",
+        status: .inProgress,
+        routeName: "海坨山谷穿越线",
+        startDate: "2026-09-08",
+        endDate: "2026-09-09"
+    )
+
+    static let completed = TripListRowProjection(
+        tripID: "trip-003",
+        name: "白河峡谷周末行程",
+        status: .completed,
+        routeName: "白河峡谷",
+        startDate: "2026-08-22",
+        endDate: "2026-08-23"
+    )
+
+    static let cancelled = TripListRowProjection(
+        tripID: "trip-004",
+        name: "河谷森林线行程",
+        status: .cancelled,
+        routeName: "河谷森林线",
+        startDate: "2026-07-18",
+        endDate: "2026-07-19"
+    )
+
+    static let longContent = TripListRowProjection(
+        tripID: "trip-006",
+        name: "穿越高山草甸、原始森林与连续垭口的长距离个人徒步行程",
+        status: .planned,
+        routeName: "四川省甘孜藏族自治州高海拔连续垭口环形路线",
+        startDate: "2026-09-07",
+        endDate: "2026-09-12"
+    )
+}
+
 #Preview("TripListRow.default") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripListRow(
-            projection: BusinessComponentPreviewFixtures.tripRowDefault,
+            projection: TripListRowProjection.default,
             onActivate: { _ in }
         )
     }
@@ -122,7 +169,7 @@ extension TripBusinessComponents {
 #Preview("TripListRow.inProgress") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripListRow(
-            projection: BusinessComponentPreviewFixtures.tripRowInProgress,
+            projection: TripListRowProjection.inProgress,
             onActivate: { _ in }
         )
     }
@@ -131,7 +178,7 @@ extension TripBusinessComponents {
 #Preview("TripListRow.completed") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripListRow(
-            projection: BusinessComponentPreviewFixtures.tripRowCompleted,
+            projection: TripListRowProjection.completed,
             onActivate: { _ in }
         )
     }
@@ -140,7 +187,7 @@ extension TripBusinessComponents {
 #Preview("TripListRow.cancelled") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripListRow(
-            projection: BusinessComponentPreviewFixtures.tripRowCancelled,
+            projection: TripListRowProjection.cancelled,
             onActivate: { _ in }
         )
     }
@@ -149,7 +196,7 @@ extension TripBusinessComponents {
 #Preview("TripListRow.longContent") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripListRow(
-            projection: BusinessComponentPreviewFixtures.tripRowLongContent,
+            projection: TripListRowProjection.longContent,
             onActivate: { _ in }
         )
     }

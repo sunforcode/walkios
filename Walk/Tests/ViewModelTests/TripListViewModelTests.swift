@@ -5,6 +5,34 @@ import WalkDesignSystem
 
 @MainActor
 final class TripListViewModelTests: XCTestCase {
+    func testDuplicateLoadIsIgnoredAndCancelledLateResultCannotReplaceRetry() async {
+        let gate = TripRequestGate<PersonalTripCollection>()
+        var calls = 0
+        let sut = TripListViewModel(loadTrips: {
+            calls += 1
+            if calls == 1 { return await gate.wait() }
+            return PersonalTripCollection(currentTrips: [PersonalTripTestFixtures.summary(id: "new")], historicalTrips: [])
+        })
+        let task = Task { await sut.loadTrips() }
+        await gate.waitUntilStarted()
+        await sut.loadTrips()
+        XCTAssertEqual(calls, 1)
+        task.cancel()
+        await sut.retry()
+        gate.resume(PersonalTripCollection(currentTrips: [PersonalTripTestFixtures.summary(id: "old")], historicalTrips: []))
+        await task.value
+        XCTAssertEqual(sut.currentTrips.map(\.tripID), ["new"])
+        XCTAssertFalse(sut.isLoading)
+        XCTAssertNil(sut.errorMessage)
+    }
+
+    func testTransportCancellationIsNotAListFailure() async {
+        let sut = TripListViewModel(loadTrips: { throw APIClientError.transport(.cancelled) })
+        await sut.loadTrips()
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isLoading)
+    }
+
     func testLoadUsesServerGroupsAndPreservesServerOrder() async {
         let current = [
             PersonalTripTestFixtures.summary(id: "active", status: .inProgress),
@@ -25,6 +53,8 @@ final class TripListViewModelTests: XCTestCase {
         XCTAssertEqual(loadCount, 1)
         XCTAssertEqual(sut.currentTrips.map(\.tripID), ["active", "planned"])
         XCTAssertEqual(sut.historicalTrips.map(\.tripID), ["newer", "older"])
+        XCTAssertEqual(sut.currentTrips.map(\.status), [.inProgress, .planned])
+        XCTAssertEqual(sut.historicalTrips.map(\.status), [.cancelled, .completed])
     }
 
     func testLoadFailureDoesNotInventTrips() async {
@@ -58,6 +88,132 @@ final class TripListViewModelTests: XCTestCase {
 
 @MainActor
 final class PersonalTripDetailViewModelTests: XCTestCase {
+    func testLateWeatherLoadCannotOverwriteSuccessfulMutation() async {
+        let initial = PersonalTripTestFixtures.detail(track: [])
+        let replacement = PersonalTripTestFixtures.detail(revision: "revision-2", status: .cancelled, track: [])
+        let gate = TripRequestGate<PersonalTripWeather>()
+        var weatherCalls = 0
+        let sut = TripDetailViewModel(
+            loadDetail: { _ in initial },
+            loadDays: { _ in PersonalTripTestFixtures.days },
+            loadWeather: { _ in
+                weatherCalls += 1
+                if weatherCalls == 2 { return await gate.wait() }
+                return PersonalTripTestFixtures.populatedWeatherProjection
+            },
+            cancelTrip: { _, _, _, _ in replacement }
+        )
+        await sut.loadTrip(id: "trip-1")
+        let task = Task { await sut.loadTrip(id: "trip-1") }
+        await gate.waitUntilStarted()
+        await sut.cancelTrip(id: "trip-1")
+        gate.resume(PersonalTripTestFixtures.populatedWeatherProjection)
+        await task.value
+        XCTAssertEqual(sut.trip, replacement)
+        XCTAssertEqual(sut.days?.revision, "revision-2")
+        XCTAssertTrue(sut.isWeatherUnavailable)
+        XCTAssertNil(sut.errorMessage)
+    }
+
+    func testCancelledMutationKeepsLockUntilResponseAndReusesIntentOnRetry() async {
+        let initial = PersonalTripTestFixtures.detail(track: [])
+        let replacement = PersonalTripTestFixtures.detail(revision: "revision-2", status: .cancelled, track: [])
+        let gate = TripRequestGate<PersonalTripDetail>()
+        var keys: [String] = []
+        var generatedKeys = 0
+        var loads = 0
+        let sut = TripDetailViewModel(
+            loadDetail: { _ in loads += 1; return initial },
+            loadDays: { _ in PersonalTripTestFixtures.days },
+            loadWeather: { _ in PersonalTripTestFixtures.populatedWeatherProjection },
+            cancelTrip: { _, _, _, key in
+                keys.append(key)
+                if keys.count == 1 { return await gate.wait() }
+                return replacement
+            },
+            idempotencyKey: { generatedKeys += 1; return "cancel-\(generatedKeys)" }
+        )
+        await sut.loadTrip(id: "trip-1")
+        let task = Task { await sut.cancelTrip(id: "trip-1") }
+        await gate.waitUntilStarted()
+        task.cancel()
+        await sut.cancelTrip(id: "trip-1")
+        await sut.migrateTrip(id: "trip-1")
+        await sut.loadTrip(id: "trip-1")
+        XCTAssertTrue(sut.isMutating)
+        XCTAssertEqual(keys.count, 1)
+        XCTAssertEqual(loads, 1)
+        gate.resume(replacement)
+        await task.value
+        XCTAssertEqual(sut.trip, initial)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isMutating)
+        await sut.cancelTrip(id: "trip-1")
+        XCTAssertEqual(keys, ["cancel-1", "cancel-1"])
+        XCTAssertEqual(sut.trip, replacement)
+    }
+
+    func testCancelledDetailReadCanRetryBeforeLateReadFinishes() async {
+        let gate = TripRequestGate<PersonalTripDetail>()
+        var calls = 0
+        let current = PersonalTripTestFixtures.detail(track: [])
+        let sut = TripDetailViewModel(
+            loadDetail: { _ in
+                calls += 1
+                if calls == 1 { return await gate.wait() }
+                return current
+            },
+            loadDays: { _ in PersonalTripTestFixtures.days },
+            loadWeather: { _ in PersonalTripTestFixtures.populatedWeatherProjection }
+        )
+        let first = Task { await sut.loadTrip(id: "trip-1") }
+        await gate.waitUntilStarted()
+        await sut.loadTrip(id: "trip-1")
+        XCTAssertEqual(calls, 1)
+        first.cancel()
+        await sut.loadTrip(id: "trip-1")
+        gate.resume(PersonalTripTestFixtures.detail(revision: "old", track: []))
+        await first.value
+        XCTAssertEqual(calls, 2)
+        XCTAssertEqual(sut.trip, current)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isLoading)
+    }
+
+    func testLateVersionStatusCannotOverwriteMutationProjection() async {
+        let initial = PersonalTripTestFixtures.detail(track: [])
+        let replacement = PersonalTripTestFixtures.detail(revision: "revision-2", status: .cancelled, track: [])
+        let gate = TripRequestGate<PersonalTripRouteVersionStatus>()
+        let sut = TripDetailViewModel(
+            loadDetail: { _ in initial },
+            loadDays: { _ in PersonalTripTestFixtures.days },
+            loadWeather: { _ in PersonalTripTestFixtures.populatedWeatherProjection },
+            loadRouteVersionStatus: { _ in await gate.wait() },
+            cancelTrip: { _, _, _, _ in replacement }
+        )
+        await sut.loadTrip(id: "trip-1")
+        let status = Task { await sut.refreshRouteVersionStatus(id: "trip-1") }
+        await gate.waitUntilStarted()
+        await sut.cancelTrip(id: "trip-1")
+        gate.resume(initial.routeVersionStatus)
+        await status.value
+        XCTAssertEqual(sut.routeVersionStatus, replacement.routeVersionStatus)
+        XCTAssertNil(sut.errorMessage)
+    }
+
+    func testCancelledWeatherDoesNotPublishDetailOrUnavailable() async {
+        let sut = TripDetailViewModel(
+            loadDetail: { _ in PersonalTripTestFixtures.detail(track: []) },
+            loadDays: { _ in PersonalTripTestFixtures.days },
+            loadWeather: { _ in throw APIClientError.transport(.cancelled) }
+        )
+        await sut.loadTrip(id: "trip-1")
+        XCTAssertNil(sut.trip)
+        XCTAssertFalse(sut.isWeatherUnavailable)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isLoading)
+    }
+
     func testLoadUsesPersonalDetailDaysAndWeatherWithoutPublicRouteLookup() async {
         var calls: [String] = []
         let detail = PersonalTripTestFixtures.detail(track: [
@@ -383,9 +539,9 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
 
         XCTAssertEqual(
             presentation.blocks,
-            [.identity, .days, .route, .weather, .equipment, .notices]
+            [.identity, .weather, .equipment, .days, .route, .notices]
         )
-        XCTAssertEqual(TripDetailBlock.allCases, [.identity, .days, .route, .weather, .equipment, .notices])
+        XCTAssertEqual(TripDetailBlock.allCases, [.identity, .weather, .equipment, .days, .route, .notices])
         // personal-trip：每日行动按 sequence 表达的实际发生顺序组织；TripDayPresentation 按 sequence 升序提供。
         XCTAssertEqual(presentation.dayProjections[0].actions.map(\.id), ["1", "2"])
         XCTAssertEqual(presentation.dayProjections[0].points.map(\.id), ["3", "8"])
@@ -407,7 +563,7 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
 
         XCTAssertEqual(
             presentation.blocks,
-            [.identity, .days, .route, .weather, .equipment]
+            [.identity, .weather, .equipment, .days, .route]
         )
         XCTAssertFalse(presentation.showsPageLevelCancel)
     }
@@ -455,10 +611,9 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         let cover = try productionSource(at: "Features/Trips/Components/TripCoverHeader.swift")
 
         XCTAssertTrue(source.contains("TripBusinessComponents.TripCoverHeader("))
-        XCTAssertTrue(source.contains("TripBusinessComponents.TripDayOverviewEntry("))
+        XCTAssertTrue(source.contains("Timeline("), "全程/每日摘要由同一时间线承载")
         XCTAssertTrue(source.contains("TripBusinessComponents.DailyWeatherSummaryRow("), "行程天气以每日摘要行呈现，明细归天气页")
-        XCTAssertTrue(source.contains("viewModel.isWeatherUnavailable"))
-        XCTAssertTrue(source.contains("title: \"行程天气暂不可用\""))
+        XCTAssertTrue(source.contains("weatherSummaryProjection == nil ? \"暂不可用\""))
         XCTAssertTrue(source.contains("TripBusinessComponents.TripEquipmentSummaryCard("))
         XCTAssertFalse(source.contains("private struct TripCoverHeader: View"))
         XCTAssertFalse(source.contains("private struct TripDaySummaryCard: View"))
@@ -467,9 +622,10 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
         XCTAssertFalse(source.contains("RouteMapView("), "冻结轨迹不得冒充行程封面")
         XCTAssertFalse(source.contains("adoptedRouteVersionID"), "封面不得回退显示不透明版本 ID")
 
-        // 版本卡已从 DETAIL 正文退役；指标摘要并入走向卡（置于海拔图上方），路线入口卡归 PAGE-TRIP-DETAIL 正文。
+        // DETAIL 的指标归场景，正文不再重复路线卡；公共路线导航仍由页面转发。
         let routeCard = try productionSource(at: "Features/Trips/Components/TripRouteSummaryCard.swift")
-        XCTAssertTrue(source.contains("TripBusinessComponents.TripRouteSummaryCard("))
+        XCTAssertTrue(source.contains("TripBusinessComponents.TripExpeditionScene("))
+        XCTAssertFalse(source.contains("TripBusinessComponents.TripRouteMetricsSummary("))
         XCTAssertFalse(source.contains("TripBusinessComponents.TripRouteVersionCard("))
         XCTAssertTrue(routeCard.contains("TripBusinessComponents.TripRouteMetricsSummary("))
         XCTAssertFalse(routeCard.contains("生成依据"), "走向卡不再展示生成依据标签")
@@ -491,6 +647,164 @@ final class PersonalTripDetailViewModelTests: XCTestCase {
 
 @MainActor
 final class CreateTripViewModelTests: XCTestCase {
+    func testSubmitEnforcesMissingContextCityEligibilityAndTransportChoice() async {
+        var calls = 0
+        let sut = CreateTripViewModel(
+            routeID: "route-1",
+            loadContext: { _ in PersonalTripTestFixtures.generationContext },
+            createTrip: { _, _ in
+                calls += 1
+                return .transportSelectionRequired(PersonalTripTestFixtures.transportSelection)
+            }
+        )
+        await sut.submit()
+        await sut.load()
+        sut.updateDepartureCity("   ")
+        await sut.submit()
+        XCTAssertEqual(calls, 0)
+        XCTAssertEqual(sut.departureCityError, "请先填写城市，再生成个人行程。")
+        sut.updateDepartureCity("成都")
+        await sut.submit()
+        await sut.submit()
+        XCTAssertEqual(calls, 1)
+        XCTAssertFalse(sut.canSubmit)
+
+        let blockedRoute = PersonalTripGenerationRoute(
+            routeID: "route-1",
+            currentPublicRouteVersionID: "route-version-1",
+            routeType: "multi_day",
+            generationEligibility: RouteGenerationEligibility(eligible: false, missingReasons: [.validMainTrack]),
+            versionLabel: nil, name: nil, region: nil, start: nil, end: nil,
+            difficulty: nil, distance: nil, estimatedDuration: nil
+        )
+        let blocked = CreateTripViewModel(
+            routeID: "route-1",
+            loadContext: { _ in PersonalTripGenerationContext(
+                route: blockedRoute,
+                personalEquipmentSummary: PersonalTripTestFixtures.generationContext.personalEquipmentSummary,
+                equipmentLists: []
+            ) },
+            createTrip: { _, _ in calls += 1; return .tripCreated(PersonalTripTestFixtures.detail(track: [])) }
+        )
+        await blocked.load()
+        blocked.updateDepartureCity("成都")
+        await blocked.submit()
+        XCTAssertFalse(blocked.canSubmit)
+        XCTAssertEqual(calls, 1)
+    }
+
+    func testSubmitRejectsDuplicateAndLoadWhileSubmitting() async {
+        let gate = TripRequestGate<PersonalTripGenerationResult>()
+        var calls = 0
+        var loads = 0
+        let sut = CreateTripViewModel(
+            routeID: "route-1",
+            loadContext: { _ in loads += 1; return PersonalTripTestFixtures.generationContext },
+            createTrip: { _, _ in calls += 1; return await gate.wait() }
+        )
+        await sut.load()
+        sut.updateDepartureCity("成都")
+        let task = Task { await sut.submit() }
+        await gate.waitUntilStarted()
+        XCTAssertFalse(sut.canSubmit)
+        await sut.submit()
+        await sut.load()
+        XCTAssertEqual(calls, 1)
+        XCTAssertEqual(loads, 1)
+        task.cancel()
+        gate.resume(.tripCreated(PersonalTripTestFixtures.detail(track: [])))
+        await task.value
+        XCTAssertNil(sut.createdTripID)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isSubmitting)
+    }
+
+    func testCancelledButtonWriteKeepsLockOnReappearanceAndRetryReusesKey() async {
+        let gate = TripRequestGate<PersonalTripGenerationResult>()
+        var keys: [String] = []
+        var loads = 0
+        let sut = CreateTripViewModel(
+            routeID: "route-1",
+            loadContext: { _ in loads += 1; return PersonalTripTestFixtures.generationContext },
+            createTrip: { _, key in
+                keys.append(key)
+                if keys.count == 1 { return await gate.wait() }
+                return .tripCreated(PersonalTripTestFixtures.detail(track: []))
+            }
+        )
+        await sut.handleAppearance()
+        sut.updateDepartureCity("成都")
+        let write = Task { await sut.submit() }
+        await gate.waitUntilStarted()
+        write.cancel() // The View explicitly cancels its button task on disappearance.
+        await sut.handleAppearance()
+        await sut.load()
+        await sut.submit()
+        sut.updateDepartureCity("上海")
+        XCTAssertTrue(sut.isSubmitting)
+        XCTAssertEqual(sut.departureCity, "成都")
+        XCTAssertEqual(loads, 1)
+        XCTAssertEqual(keys.count, 1)
+        gate.resume(.tripCreated(PersonalTripTestFixtures.detail(track: [])))
+        await write.value
+        XCTAssertNil(sut.createdTripID)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isSubmitting)
+        await sut.handleAppearance()
+        XCTAssertNil(sut.createdTripID, "再次出现不自动重放离页前的成功结果")
+        await sut.submit()
+        XCTAssertEqual(keys.count, 2)
+        XCTAssertEqual(keys.first, keys.last)
+        XCTAssertEqual(sut.createdTripID, "trip-1")
+    }
+
+    func testConflictCannotResubmitOldVersionAndRetryReusesUnknownResultKey() async {
+        var keys: [String] = []
+        var attempts = 0
+        let sut = CreateTripViewModel(
+            routeID: "route-1",
+            loadContext: { _ in PersonalTripTestFixtures.generationContext },
+            createTrip: { _, key in
+                keys.append(key)
+                attempts += 1
+                if attempts == 1 { throw APIClientError.transport(.connectionLost) }
+                throw APIClientError.api(code: "route_version_conflict", message: "冲突", retryable: true)
+            }
+        )
+        await sut.load()
+        sut.updateDepartureCity("成都")
+        await sut.submit()
+        await sut.submit()
+        await sut.submit()
+        XCTAssertEqual(attempts, 2)
+        XCTAssertEqual(keys.first, keys.last)
+        XCTAssertTrue(sut.isVersionConflict)
+    }
+
+    func testCancelledAppearanceDoesNotPublishAndCanRetry() async {
+        let gate = TripRequestGate<PersonalTripGenerationContext>()
+        var loads = 0
+        let sut = CreateTripViewModel(
+            routeID: "route-1",
+            loadContext: { _ in
+                loads += 1
+                if loads == 1 { return await gate.wait() }
+                return PersonalTripTestFixtures.generationContext
+            },
+            createTrip: { _, _ in .tripCreated(PersonalTripTestFixtures.detail(track: [])) }
+        )
+        let first = Task { await sut.handleAppearance() }
+        await gate.waitUntilStarted()
+        first.cancel()
+        await sut.handleAppearance()
+        gate.resume(PersonalTripTestFixtures.generationContext)
+        await first.value
+        await sut.handleAppearance()
+        XCTAssertEqual(loads, 2)
+        XCTAssertNotNil(sut.context)
+        XCTAssertNil(sut.errorMessage)
+    }
+
     func testTransportSelectionRequiredWithOneOptionIsRejectedAsInvalidResponse() async {
         let selection = PersonalTripTransportSelection(
             selectionID: "selection-1",
@@ -502,7 +816,7 @@ final class CreateTripViewModelTests: XCTestCase {
             createTrip: { _, _ in .transportSelectionRequired(selection) }
         )
         await sut.load()
-        sut.departureCity = "成都"
+        sut.updateDepartureCity("成都")
 
         await sut.submit()
 
@@ -528,11 +842,11 @@ final class CreateTripViewModelTests: XCTestCase {
             idempotencyKey: { "request-\(requests.count + 1)" }
         )
         await sut.load()
-        sut.departureCity = "成都"
-        sut.startDate = Calendar(identifier: .gregorian).date(
+        sut.updateDepartureCity("成都")
+        sut.updateStartDate(Calendar(identifier: .gregorian).date(
             from: DateComponents(year: 2026, month: 8, day: 25)
-        )!
-        sut.selectedEquipmentListID = "equipment-list-1"
+        )!)
+        sut.selectEquipmentList("equipment-list-1")
 
         await sut.submit()
 
@@ -541,7 +855,7 @@ final class CreateTripViewModelTests: XCTestCase {
         XCTAssertEqual(sut.transportSelection?.selectionID, "selection-1")
         XCTAssertEqual(sut.transportSelection?.options.count, 2)
 
-        sut.selectedTransportOptionID = "option-2"
+        sut.selectTransportOption("option-2")
         await sut.submit()
 
         XCTAssertEqual(requests.count, 2)
@@ -617,10 +931,10 @@ final class CreateTripViewModelTests: XCTestCase {
             idempotencyKey: { "request-1" }
         )
         await sut.load()
-        sut.departureCity = "成都"
-        sut.startDate = Calendar(identifier: .gregorian).date(
+        sut.updateDepartureCity("成都")
+        sut.updateStartDate(Calendar(identifier: .gregorian).date(
             from: DateComponents(year: 2026, month: 8, day: 25)
-        )!
+        )!)
 
         await sut.submit()
 
@@ -647,9 +961,9 @@ final class CreateTripViewModelTests: XCTestCase {
         )!
 
         await sut.handleAppearance()
-        sut.departureCity = "上海"
-        sut.startDate = selectedDate
-        sut.selectedEquipmentListID = "equipment-list-1"
+        sut.updateDepartureCity("上海")
+        sut.updateStartDate(selectedDate)
+        sut.selectEquipmentList("equipment-list-1")
         sut.prepareForPersonalEquipment()
         await sut.handleAppearance()
 
@@ -673,8 +987,8 @@ final class CreateTripViewModelTests: XCTestCase {
         )
 
         await sut.handleAppearance()
-        sut.departureCity = "上海"
-        sut.selectedEquipmentListID = "equipment-list-1"
+        sut.updateDepartureCity("上海")
+        sut.selectEquipmentList("equipment-list-1")
         sut.prepareForPersonalEquipment()
         await sut.handleAppearance()
 
@@ -689,11 +1003,11 @@ final class CreateTripViewModelTests: XCTestCase {
             createTrip: { _, _ in .transportSelectionRequired(PersonalTripTestFixtures.transportSelection) }
         )
         await sut.load()
-        sut.departureCity = "成都"
+        sut.updateDepartureCity("成都")
         await sut.submit()
-        sut.selectedTransportOptionID = "option-1"
+        sut.selectTransportOption("option-1")
 
-        sut.departureCity = "上海"
+        sut.updateDepartureCity("上海")
 
         XCTAssertNil(sut.transportSelection)
         XCTAssertNil(sut.selectedTransportOptionID)
@@ -737,9 +1051,9 @@ final class CreateTripViewModelTests: XCTestCase {
             }
         )
         await sut.load()
-        sut.departureCity = "成都"
+        sut.updateDepartureCity("成都")
         await sut.submit()
-        sut.selectedTransportOptionID = "option-1"
+        sut.selectTransportOption("option-1")
         await sut.submit()
 
         XCTAssertTrue(sut.isVersionConflict)
@@ -773,7 +1087,7 @@ final class CreateTripViewModelTests: XCTestCase {
             }
         )
         await sut.load()
-        sut.departureCity = "成都"
+        sut.updateDepartureCity("成都")
         await sut.submit()
 
         await sut.load()
@@ -791,8 +1105,29 @@ final class CreateTripViewModelTests: XCTestCase {
             .appendingPathComponent("Features/Trips/CreateTripView.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-        XCTAssertTrue(source.contains(".onAppear { Task { await viewModel.handleAppearance() } }"))
+        XCTAssertTrue(source.contains(".task { await viewModel.handleAppearance() }"))
+        XCTAssertFalse(source.contains(".onAppear { Task"))
         XCTAssertFalse(source.contains(".task { await viewModel.load() }"))
+    }
+
+    func testCreateTripButtonTaskHasExplicitDepartureAndNavigationGuards() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Features/Trips/CreateTripView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        XCTAssertTrue(source.contains("@State private var submissionTask: Task<Void, Never>?"))
+        XCTAssertTrue(source.contains(".onAppear { isVisible = true }"))
+        XCTAssertTrue(source.contains(".onDisappear {"))
+        XCTAssertTrue(source.contains("isVisible = false\n            submissionTask?.cancel()"))
+        XCTAssertTrue(source.contains("guard isVisible, submissionTask == nil, viewModel.canSubmit else { return }"))
+        XCTAssertTrue(source.contains("defer { submissionTask = nil }"))
+        XCTAssertTrue(source.contains("guard !Task.isCancelled, isVisible, let tripID = viewModel.createdTripID else { return }"))
+        XCTAssertTrue(source.contains("action: submitTrip"))
+        XCTAssertTrue(source.contains("retry: submitTrip"))
+        XCTAssertFalse(source.contains(".onChange(of: viewModel.createdTripID)"))
+        XCTAssertFalse(source.contains("Task { await viewModel.submit() }"))
     }
 
     func testCreateTripPageUsesProductionRouteSummaryAndWaitingComponents() throws {
@@ -813,6 +1148,66 @@ final class CreateTripViewModelTests: XCTestCase {
 
 @MainActor
 final class TripDayWeatherViewModelTests: XCTestCase {
+    func testCancelledFallbackCannotReplaceNewWeatherProjection() async {
+        let gate = TripRequestGate<PersonalTripDetail>()
+        var calls = 0
+        var details = 0
+        let sut = TripWeatherViewModel(
+            tripID: "trip-1",
+            loadWeather: { _ in
+                calls += 1
+                if calls == 1 {
+                    throw APIClientError.api(code: "trip_weather_projection_unavailable", message: "不可用", retryable: true)
+                }
+                return PersonalTripTestFixtures.populatedWeatherProjection
+            },
+            loadDetail: { _ in
+                details += 1
+                if details == 1 { return await gate.wait() }
+                return PersonalTripTestFixtures.detail(track: [])
+            }
+        )
+        let first = Task { await sut.load() }
+        await gate.waitUntilStarted()
+        first.cancel()
+        await sut.load()
+        gate.resume(PersonalTripTestFixtures.detail(revision: "old", track: []))
+        await first.value
+        XCTAssertEqual(sut.detail?.revision, "revision-1")
+        XCTAssertNotNil(sut.weather)
+        XCTAssertFalse(sut.isUnavailable)
+        XCTAssertNil(sut.errorMessage)
+    }
+
+    func testFallbackCancellationDoesNotPublishUnavailableOrContext() async {
+        let sut = TripWeatherViewModel(
+            tripID: "trip-1",
+            loadWeather: { _ in
+                throw APIClientError.api(code: "trip_weather_projection_unavailable", message: "不可用", retryable: true)
+            },
+            loadDetail: { _ in throw CancellationError() }
+        )
+        await sut.load()
+        XCTAssertNil(sut.detail)
+        XCTAssertNil(sut.weather)
+        XCTAssertFalse(sut.isUnavailable)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isLoading)
+    }
+
+    func testCancellationDoesNotStartFallbackOrDisplayError() async {
+        var detailCalls = 0
+        let sut = TripWeatherViewModel(
+            tripID: "trip-1",
+            loadWeather: { _ in throw APIClientError.transport(.cancelled) },
+            loadDetail: { _ in detailCalls += 1; return PersonalTripTestFixtures.detail(track: []) }
+        )
+        await sut.load()
+        XCTAssertEqual(detailCalls, 0)
+        XCTAssertFalse(sut.isUnavailable)
+        XCTAssertNil(sut.errorMessage)
+    }
+
     func testTripDayPresentationUsesSequenceAsTheOnlyActionAndPointOrder() {
         let day = PersonalTripTestFixtures.populatedDays.days[0]
 
@@ -1159,6 +1554,100 @@ final class TripDayWeatherViewModelTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         return try String(contentsOf: walkRoot.appendingPathComponent(relativePath), encoding: .utf8)
+    }
+}
+
+@MainActor
+final class TripBrowseViewModelTests: XCTestCase {
+    func testRetryResolvesRequestedInitialDayAfterFailure() async {
+        var calls = 0
+        let sut = TripBrowseViewModel(
+            loadDetail: { _ in
+                calls += 1
+                if calls == 1 { throw APIClientError.invalidResponse }
+                return PersonalTripTestFixtures.detail(track: [])
+            },
+            loadDays: { _ in PersonalTripTestFixtures.twoDays }
+        )
+        let failed = await sut.loadInitialDay(id: "trip-1", dayNumber: 2)
+        XCTAssertNil(failed)
+        let index = await sut.loadInitialDay(id: "trip-1", dayNumber: 2)
+        XCTAssertEqual(index, 1)
+        XCTAssertEqual(sut.pages.map(\.dayNumber), [1, 2])
+    }
+
+    func testCancelledBrowseDoesNotPublishLateProjection() async {
+        let gate = TripRequestGate<PersonalTripDetail>()
+        let sut = TripBrowseViewModel(
+            loadDetail: { _ in await gate.wait() },
+            loadDays: { _ in PersonalTripTestFixtures.days }
+        )
+        let task = Task { await sut.loadTrip(id: "trip-1") }
+        await gate.waitUntilStarted()
+        task.cancel()
+        gate.resume(PersonalTripTestFixtures.detail(track: []))
+        let loaded = await task.value
+        XCTAssertFalse(loaded)
+        XCTAssertNil(sut.trip)
+        XCTAssertTrue(sut.pages.isEmpty)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isLoading)
+    }
+
+    func testBrowseDuplicateIsIgnoredAndCancelledLateReadCannotReplaceRetry() async {
+        let gate = TripRequestGate<PersonalTripDetail>()
+        var calls = 0
+        let current = PersonalTripTestFixtures.detail(track: [])
+        let sut = TripBrowseViewModel(
+            loadDetail: { _ in
+                calls += 1
+                if calls == 1 { return await gate.wait() }
+                return current
+            },
+            loadDays: { _ in PersonalTripTestFixtures.twoDays }
+        )
+        let first = Task { await sut.loadInitialDay(id: "trip-1", dayNumber: 2) }
+        await gate.waitUntilStarted()
+        let duplicate = await sut.loadInitialDay(id: "trip-1", dayNumber: 2)
+        XCTAssertNil(duplicate)
+        XCTAssertEqual(calls, 1)
+        first.cancel()
+        let retryIndex = await sut.loadInitialDay(id: "trip-1", dayNumber: 2)
+        gate.resume(PersonalTripTestFixtures.detail(revision: "old", track: []))
+        let cancelledIndex = await first.value
+        XCTAssertNil(cancelledIndex)
+        XCTAssertEqual(retryIndex, 1)
+        XCTAssertEqual(sut.trip, current)
+        XCTAssertEqual(sut.pages.map(\.dayNumber), [1, 2])
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isLoading)
+    }
+}
+
+/// Deterministic suspension; deliberately ignores cancellation to exercise publication guards.
+@MainActor
+private final class TripRequestGate<Value> {
+    private var continuation: CheckedContinuation<Value, Never>?
+    private var started = false
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async -> Value {
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+            started = true
+            startWaiters.forEach { $0.resume() }
+            startWaiters.removeAll()
+        }
+    }
+
+    func waitUntilStarted() async {
+        if started { return }
+        await withCheckedContinuation { startWaiters.append($0) }
+    }
+
+    func resume(_ value: Value) {
+        continuation?.resume(returning: value)
+        continuation = nil
     }
 }
 

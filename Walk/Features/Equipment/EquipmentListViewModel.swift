@@ -1,319 +1,269 @@
-import SwiftUI
+import Foundation
+import Observation
 import WalkData
-import WalkDesignSystem
-
-enum EquipmentEditLoadState: Equatable {
-    case idle
-    case loading
-    case loaded
-    case failed
-}
 
 @MainActor
-final class EquipmentListViewModel: ObservableObject {
-    @Published var items: [PersonalEquipment] = []
-    @Published var equipmentLists: [EquipmentListOverview] = []
-    @Published var summary: PersonalEquipmentSummary?
-    @Published private(set) var selectedEquipmentListID: String?
-    @Published private(set) var selectedEquipmentList: EquipmentListDetail?
-    @Published var editingEquipment: PersonalEquipment?
-    @Published var deletionImpact: PersonalEquipmentDeletionImpact?
-    @Published var lastMutationSucceeded = false
-    @Published var isLoading = false
-    @Published var isMutating = false
-    @Published private(set) var isLoadingEquipmentList = false
-    @Published private(set) var editLoadState: EquipmentEditLoadState = .idle
-    @Published private(set) var errorCode: String?
-    @Published private(set) var loadErrorMessage: String?
-    @Published var errorMessage: String?
+@Observable
+final class EquipmentListViewModel {
+    private(set) var state = EquipmentListState()
 
-    var nameErrorMessage: String? {
-        errorCode == "equipment_name_conflict" ? errorMessage : nil
-    }
+    var items: [PersonalEquipment] { state.items }
+    var equipmentLists: [EquipmentListOverview] { state.equipmentLists }
+    var summary: PersonalEquipmentSummary? { state.summary }
+    var selectedEquipmentListID: String? { state.selectedEquipmentListID }
+    var selectedEquipmentList: EquipmentListDetail? { state.selectedEquipmentList }
+    var isLoading: Bool { state.isLoading }
+    var isLoadingEquipmentList: Bool { state.isLoadingEquipmentList }
+    var isMutating: Bool { state.isMutating }
+    var loadErrorMessage: String? { state.loadErrorMessage }
+    var errorMessage: String? { state.errorMessage ?? state.listLoadErrorMessage ?? state.loadErrorMessage }
 
     private let service: any EquipmentServicing
+    @ObservationIgnored private var loadGeneration = 0
+    @ObservationIgnored private var detailGeneration = 0
+    @ObservationIgnored private var mutationGeneration = 0
 
     init(service: any EquipmentServicing) {
         self.service = service
     }
 
     func load() async {
-        isLoading = true
-        loadErrorMessage = nil
-        clearMutationError()
-        defer { isLoading = false }
-
+        guard !isMutating, !Task.isCancelled else { return }
+        loadGeneration += 1
+        let request = loadGeneration
+        state.isLoading = true
+        state.loadErrorMessage = nil
+        defer {
+            if loadGeneration == request { state.isLoading = false }
+        }
         do {
             async let equipmentRequest = service.getPersonalEquipment()
             async let listsRequest = service.getEquipmentLists()
             let (equipment, lists) = try await (equipmentRequest, listsRequest)
-            items = equipment.items
-            summary = equipment.summary
-            equipmentLists = lists.items
+            guard loadGeneration == request, !Task.isCancelled else { return }
+            state.items = equipment.items
+            state.summary = equipment.summary
+            state.equipmentLists = lists.items
+            state.isLoading = false
+            // 使用集合返回时仍选中的身份，不能保留装备编辑前的成员投影。
+            await refreshSelectedEquipmentList()
         } catch {
-            let message = message(for: error, operation: "加载")
-            loadErrorMessage = message
-            errorMessage = message
-        }
-    }
-
-    func loadEquipment(id: String) async {
-        editLoadState = .loading
-        editingEquipment = nil
-        clearMutationError()
-        lastMutationSucceeded = false
-        do {
-            editingEquipment = try await service.getPersonalEquipment(id: id)
-            editLoadState = .loaded
-        } catch {
-            apply(error, operation: "加载")
-            editLoadState = .failed
-        }
-    }
-
-    func saveEquipment(
-        equipmentID: String?,
-        name: String,
-        ownedQuantity: Int,
-        unitWeightGrams: Int?
-    ) async {
-        if let equipmentID {
-            guard editLoadState == .loaded, let editingEquipment else {
-                lastMutationSucceeded = false
-                return
-            }
-            let unitWeight: PersonalEquipmentUpdateField<EquipmentWeight>
-            if let unitWeightGrams {
-                unitWeight = .value(EquipmentWeight(grams: unitWeightGrams))
-            } else if editingEquipment.unitWeight != nil {
-                unitWeight = .clear
-            } else {
-                unitWeight = .unchanged
-            }
-            await updateEquipment(
-                id: equipmentID,
-                update: PersonalEquipmentUpdate(
-                    name: name,
-                    ownedQuantity: ownedQuantity,
-                    unitWeight: unitWeight
-                )
-            )
-        } else {
-            await createEquipment(
-                name: name,
-                ownedQuantity: ownedQuantity,
-                unitWeightGrams: unitWeightGrams
-            )
-        }
-    }
-
-    func clearMutationError() {
-        errorCode = nil
-        errorMessage = nil
-    }
-
-    func clearNameError() {
-        guard errorCode == "equipment_name_conflict" else { return }
-        clearMutationError()
-    }
-
-    func createEquipment(name: String, ownedQuantity: Int, unitWeightGrams: Int?) async {
-        await mutate(operation: "添加") {
-            let result = try await service.createPersonalEquipment(
-                name: name,
-                ownedQuantity: ownedQuantity,
-                unitWeightGrams: unitWeightGrams
-            )
-            upsert(result.item)
-            summary = result.summary
-        }
-    }
-
-    func updateEquipment(id: String, update: PersonalEquipmentUpdate) async {
-        await mutate(operation: "更新") {
-            let result = try await service.updatePersonalEquipment(id: id, update: update)
-            upsert(result.item)
-            editingEquipment = result.item
-            summary = result.summary
-            replaceMemberProjection(for: result.item)
-        }
-    }
-
-    func loadDeletionImpact(id: String) async {
-        await mutate(operation: "读取删除影响") {
-            deletionImpact = try await service.getDeletionImpact(id: id)
-        }
-    }
-
-    func deleteEquipment(id: String) async {
-        await mutate(operation: "删除") {
-            let result = try await service.deletePersonalEquipment(id: id)
-            items.removeAll { $0.identity == result.deletedPersonalEquipmentId }
-            editingEquipment = nil
-            summary = result.summary
-            deletionImpact = nil
-            clearSelectedEquipmentList()
+            guard loadGeneration == request, !Task.isCancelled, !isCancellation(error) else { return }
+            state.loadErrorMessage = message(for: error, operation: "加载")
         }
     }
 
     func loadEquipmentList(id: String) async {
-        selectedEquipmentListID = id
-        selectedEquipmentList = nil
-        isLoadingEquipmentList = true
+        guard !isMutating, !Task.isCancelled else { return }
+        state.selectedEquipmentListID = id
         clearMutationError()
-        defer {
-            if selectedEquipmentListID == id {
-                isLoadingEquipmentList = false
-            }
-        }
+        await refreshSelectedEquipmentList()
+    }
 
+    private func refreshSelectedEquipmentList() async {
+        guard let id = selectedEquipmentListID, !isMutating, !Task.isCancelled else { return }
+        detailGeneration += 1
+        let request = detailGeneration
+        state.selectedEquipmentList = nil
+        state.isLoadingEquipmentList = true
+        state.listLoadErrorMessage = nil
+        defer {
+            if detailGeneration == request { state.isLoadingEquipmentList = false }
+        }
         do {
             let detail = try await service.getEquipmentList(id: id)
-            guard selectedEquipmentListID == id else { return }
-            selectedEquipmentList = detail
-            clearMutationError()
+            guard detailGeneration == request, selectedEquipmentListID == id, !Task.isCancelled else { return }
+            state.selectedEquipmentList = detail
         } catch {
-            guard selectedEquipmentListID == id else { return }
-            apply(error, operation: "加载清单")
+            guard detailGeneration == request, selectedEquipmentListID == id,
+                  !Task.isCancelled, !isCancellation(error) else { return }
+            state.listLoadErrorMessage = message(for: error, operation: "加载清单")
         }
     }
 
     func clearSelectedEquipmentList() {
-        selectedEquipmentListID = nil
-        selectedEquipmentList = nil
-        isLoadingEquipmentList = false
+        guard !isMutating else { return }
+        clearSelection()
         clearMutationError()
     }
 
-    func createEquipmentList(name: String) async {
-        await mutate(operation: "创建清单") {
-            let result = try await service.createEquipmentList(name: name)
-            summary = result.personalEquipmentSummary
-            upsertList(result.equipmentList)
-        }
+    func startCreatingList() {
+        guard !isMutating else { return }
+        state.editing = .create(name: "")
+        clearMutationError()
     }
 
-    func renameEquipmentList(id: String, name: String) async {
-        await mutate(operation: "重命名清单") {
-            let result = try await service.renameEquipmentList(id: id, name: name)
-            if selectedEquipmentListID == id {
-                selectedEquipmentList = result.equipmentList
+    func startRenamingList(_ list: EquipmentListOverview) {
+        guard !isMutating else { return }
+        state.editing = .rename(id: list.identity, name: list.name)
+        clearMutationError()
+    }
+
+    func updateListName(_ value: String) {
+        guard !isMutating else { return }
+        switch state.editing {
+        case .create: state.editing = .create(name: value)
+        case let .rename(id, _): state.editing = .rename(id: id, name: value)
+        case .none, .deletion: return
+        }
+        clearMutationError()
+    }
+
+    func cancelEditing() {
+        guard !isMutating else { return }
+        state.editing = .none
+        clearMutationError()
+    }
+
+    func saveListName() async -> Bool {
+        guard state.canSaveListName else { return false }
+        let name = state.activeListName.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch state.editing {
+        case .create:
+            return await mutate(intent: .saveName, operation: "创建清单") {
+                try await self.service.createEquipmentList(name: name)
+            } applyResult: { result in
+                self.state.summary = result.personalEquipmentSummary
+                self.upsertList(result.equipmentList)
+                self.state.editing = .none
             }
-            upsertList(result.equipmentList)
+        case let .rename(id, _):
+            return await mutate(intent: .saveName, operation: "重命名清单") {
+                try await self.service.renameEquipmentList(id: id, name: name)
+            } applyResult: { result in
+                self.acceptList(result.equipmentList, requestedID: id)
+                self.state.editing = .none
+            }
+        case .none, .deletion:
+            return false
         }
     }
 
-    func deleteEquipmentList(id: String) async {
-        await mutate(operation: "删除清单") {
-            let result = try await service.deleteEquipmentList(id: id)
-            equipmentLists.removeAll { $0.identity == result.deletedEquipmentListId }
-            if selectedEquipmentListID == id { clearSelectedEquipmentList() }
-            summary = result.personalEquipmentSummary
+    func requestDeletion(_ list: EquipmentListOverview) {
+        guard !isMutating, !state.isEditingListName else { return }
+        state.editing = .deletion(list)
+        clearMutationError()
+    }
+
+    func deleteEquipmentList(id: String) async -> Bool {
+        guard state.deletingList?.identity == id else { return false }
+        return await mutate(intent: .deleteList(id: id), operation: "删除清单") {
+            try await self.service.deleteEquipmentList(id: id)
+        } applyResult: { result in
+            self.state.equipmentLists.removeAll { $0.identity == result.deletedEquipmentListId }
+            if self.selectedEquipmentListID == result.deletedEquipmentListId { self.clearSelection() }
+            self.state.summary = result.personalEquipmentSummary
+            self.state.editing = .none
         }
     }
 
-    func putMember(equipmentListID: String, personalEquipmentID: String, quantity: Int) async {
-        await mutate(operation: "更新清单成员") {
-            let result = try await service.putListMember(
+    func putMember(equipmentListID: String, personalEquipmentID: String, quantity: Int) async -> Bool {
+        guard state.editing == .none else { return false }
+        return await mutate(intent: .updateMember(listID: equipmentListID), operation: "更新清单成员") {
+            try await self.service.putListMember(
                 equipmentListID: equipmentListID,
                 personalEquipmentID: personalEquipmentID,
                 quantity: quantity
             )
-            if selectedEquipmentListID == equipmentListID {
-                selectedEquipmentList = result.equipmentList
-            }
-            upsertList(result.equipmentList)
+        } applyResult: { result in
+            self.acceptList(result.equipmentList, requestedID: equipmentListID)
         }
     }
 
-    func removeMember(equipmentListID: String, personalEquipmentID: String) async {
-        await mutate(operation: "移除清单成员") {
-            let result = try await service.removeListMember(
+    func removeMember(equipmentListID: String, personalEquipmentID: String) async -> Bool {
+        guard state.editing == .none else { return false }
+        return await mutate(intent: .updateMember(listID: equipmentListID), operation: "移除清单成员") {
+            try await self.service.removeListMember(
                 equipmentListID: equipmentListID,
                 personalEquipmentID: personalEquipmentID
             )
-            if selectedEquipmentListID == equipmentListID {
-                selectedEquipmentList = result.equipmentList
-            }
-            upsertList(result.equipmentList)
+        } applyResult: { result in
+            self.acceptList(result.equipmentList, requestedID: equipmentListID)
         }
     }
 
-    private func mutate(operation: String, action: () async throws -> Void) async {
-        guard !isMutating else {
-            lastMutationSucceeded = false
-            return
-        }
-        isMutating = true
+    func invalidatePendingOperations() {
+        loadGeneration += 1
+        detailGeneration += 1
+        mutationGeneration += 1
+        state.isLoading = false
+        state.isLoadingEquipmentList = false
+        // 响应失效不代表请求结束；running 由实际在途写入的收尾释放。
+    }
+
+    private func mutate<Result>(
+        intent: EquipmentListState.Intent,
+        operation: String,
+        request: () async throws -> Result,
+        applyResult: (Result) -> Void
+    ) async -> Bool {
+        guard !isMutating, !Task.isCancelled else { return false }
+        // 集合读取会覆盖写入结果；详情读取只在同一清单成功写入时淘汰。
+        loadGeneration += 1
+        state.isLoading = false
+        mutationGeneration += 1
+        let requestGeneration = mutationGeneration
         clearMutationError()
-        lastMutationSucceeded = false
-        defer { isMutating = false }
-
+        state.operation = .running(intent)
+        defer {
+            if state.operation == .running(intent) {
+                state.operation = .idle
+            }
+        }
         do {
-            try await action()
-            lastMutationSucceeded = true
+            let result = try await request()
+            guard mutationGeneration == requestGeneration, !Task.isCancelled else { return false }
+            applyResult(result)
+            return true
         } catch {
-            apply(error, operation: operation)
+            guard mutationGeneration == requestGeneration, !Task.isCancelled, !isCancellation(error) else { return false }
+            if case let APIClientError.api(code, _, _, _) = error {
+                state.errorCode = code
+            }
+            state.errorMessage = message(for: error, operation: operation)
+            state.operation = .failed(intent)
+            return false
         }
     }
 
-    private func apply(_ error: Error, operation: String) {
-        if case let APIClientError.api(code, _, _, _) = error {
-            errorCode = code
-        } else {
-            errorCode = nil
-        }
-        errorMessage = message(for: error, operation: operation)
+    private func clearSelection() {
+        detailGeneration += 1
+        state.selectedEquipmentListID = nil
+        state.selectedEquipmentList = nil
+        state.isLoadingEquipmentList = false
+        state.listLoadErrorMessage = nil
     }
 
-    private func upsert(_ item: PersonalEquipment) {
-        if let index = items.firstIndex(where: { $0.identity == item.identity }) {
-            items[index] = item
-        } else {
-            items.append(item)
+    private func clearMutationError() {
+        state.operation = .idle
+        state.errorCode = nil
+        state.errorMessage = nil
+    }
+
+    private func acceptList(_ detail: EquipmentListDetail, requestedID: String) {
+        if selectedEquipmentListID == requestedID {
+            detailGeneration += 1
+            state.isLoadingEquipmentList = false
+            state.listLoadErrorMessage = nil
+            state.selectedEquipmentList = detail
         }
+        upsertList(detail)
     }
 
     private func upsertList(_ detail: EquipmentListDetail) {
-        let overview = EquipmentListOverview(
-            identity: detail.identity,
-            name: detail.name,
-            summary: detail.summary
-        )
-        if let index = equipmentLists.firstIndex(where: { $0.identity == detail.identity }) {
-            equipmentLists[index] = overview
+        let overview = EquipmentListOverview(identity: detail.identity, name: detail.name, summary: detail.summary)
+        if let index = state.equipmentLists.firstIndex(where: { $0.identity == detail.identity }) {
+            state.equipmentLists[index] = overview
         } else {
-            equipmentLists.append(overview)
+            state.equipmentLists.append(overview)
         }
     }
 
-    private func replaceMemberProjection(for item: PersonalEquipment) {
-        guard let selectedEquipmentList,
-              let memberIndex = selectedEquipmentList.members.firstIndex(where: { $0.identity == item.identity }) else {
-            return
-        }
-        var members = selectedEquipmentList.members
-        let current = members[memberIndex]
-        members[memberIndex] = EquipmentListMember(
-            identity: item.identity,
-            name: item.name,
-            ownedQuantity: item.ownedQuantity,
-            unitWeight: item.unitWeight,
-            quantity: current.quantity
-        )
-        self.selectedEquipmentList = EquipmentListDetail(
-            identity: selectedEquipmentList.identity,
-            name: selectedEquipmentList.name,
-            members: members,
-            summary: selectedEquipmentList.summary
-        )
+    private func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError || (error as? APIClientError) == .transport(.cancelled)
     }
 
     private func message(for error: Error, operation: String) -> String {
-        if let localized = error as? LocalizedError,
-           let description = localized.errorDescription {
-            return description
-        }
-        return "\(operation)失败：\(error.localizedDescription)"
+        (error as? LocalizedError)?.errorDescription ?? "\(operation)失败：\(error.localizedDescription)"
     }
 }

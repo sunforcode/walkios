@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreLocation
+import Observation
 import WalkData
 import WalkDesignSystem
 
@@ -185,6 +186,12 @@ struct RouteDetailImagePresentation: Identifiable, Equatable {
     let failurePlaceholderSystemImage = "photo"
 }
 
+struct RouteDetailScenePresentation: Identifiable, Equatable {
+    let id: String
+    let source: String
+    let contextLabel: String
+}
+
 struct RouteDetailActionPolicy: Equatable {
     let shareText: String
     let usesSystemShareSheet = true
@@ -198,6 +205,7 @@ struct RouteGenerationActionPresentation: Equatable {
 
 struct RouteDetailPresentation: Equatable {
     let route: PublicRouteDetail
+    var scenes: PublicRouteScenes? = nil
 
     var version: PublicRouteVersionDetail { route.currentVersion }
     var summary: PublicRouteSummary { version.summary }
@@ -531,8 +539,22 @@ struct RouteDetailPresentation: Equatable {
 
     var images: [RouteDetailImagePresentation] {
         (version.images ?? []).map {
-            .init(id: $0.identity, source: $0.mediaReference, caption: $0.caption)
+            RouteDetailImagePresentation(id: $0.identity, source: $0.mediaReference, caption: $0.caption)
         }
+    }
+
+    var sceneImages: [RouteDetailScenePresentation] {
+        guard let scenes, scenes.isValid(routeID: route.routeId, routeVersionID: version.versionId,
+                                        referenceDayIDs: Set((version.referenceDays ?? []).map(\.identity))) else { return [] }
+        var artwork: [RouteDetailScenePresentation] = []
+        if let overview = scenes.overview {
+            artwork.append(.init(id: "scene-overview-\(overview.mediaID)", source: overview.imageURL, contextLabel: "全程 · AIGC 场景示意"))
+        }
+        for day in (version.referenceDays ?? []).sorted(by: { $0.dayNumber < $1.dayNumber }) {
+            guard let image = scenes.days.first(where: { $0.referenceDayID == day.identity })?.image else { continue }
+            artwork.append(.init(id: "scene-day-\(day.identity)", source: image.imageURL, contextLabel: "第\(day.dayNumber)天 · AIGC 场景示意"))
+        }
+        return artwork
     }
 
     var generationMessage: String? {
@@ -549,10 +571,12 @@ struct RouteDetailPresentation: Equatable {
     }
 
     private var elevationSection: RouteDetailSectionPresentation {
-        guard let profile = elevationProfile else {
+        guard version.mainTrackAvailability == .valid,
+              let profile = version.elevationProfile,
+              !profile.samples.isEmpty else {
             return .init(id: .elevation, title: "海拔曲线", items: [])
         }
-        let range = "\(Self.meters(profile.minElevation)) - \(Self.meters(profile.maxElevation))"
+        let range = "\(Self.meters(profile.minElevation.meters)) - \(Self.meters(profile.maxElevation.meters))"
         return .init(
             id: .elevation,
             title: "海拔曲线",
@@ -854,18 +878,15 @@ struct RouteDetailPresentation: Equatable {
 }
 
 @MainActor
-final class RouteDetailViewModel: ObservableObject {
-    @Published private(set) var route: PublicRouteDetail?
-    @Published private(set) var isLoading = false
-    @Published private(set) var errorMessage: String?
-    @Published private(set) var mapCoordinates: [CLLocationCoordinate2D] = []
-    @Published private(set) var poiAnnotations: [RoutePOIAnnotation] = []
-    @Published private(set) var selectableTrackPoints: [RouteTrackPointMetadata] = []
-    @Published private(set) var waypointAnnotations: [RouteWaypointAnnotation] = []
-    @Published private(set) var mapSegments: [RouteMapSegment] = []
-    @Published private(set) var elevationSamples: [RouteElevationSample] = []
-    @Published private(set) var selectedSegmentID: String?
-    @Published private(set) var highlightedPointIdentity: String?
+@Observable
+final class RouteDetailViewModel {
+    private(set) var state = RouteDetailState()
+
+    var route: PublicRouteDetail? { state.route }
+    var isLoading: Bool { state.isLoading }
+    var errorMessage: String? { state.errorMessage }
+    var selectedSegmentID: String? { state.selectedSegmentID }
+    var highlightedPointIdentity: String? { state.highlightedPointIdentity }
 
     var highlightedAnnotationIDs: Set<String> {
         guard let identity = highlightedPointIdentity else { return [] }
@@ -876,7 +897,8 @@ final class RouteDetailViewModel: ObservableObject {
         )
     }
 
-    var presentation: RouteDetailPresentation? { route.map(RouteDetailPresentation.init) }
+    var presentation: RouteDetailPresentation? { route.map { .init(route: $0, scenes: state.scenes) } }
+    var sceneRequestID: UUID? { isLoading || route == nil ? nil : state.sceneRequestID }
     var hasUnavailableTrack: Bool {
         guard let route else { return false }
         return route.currentVersion.mainTrackAvailability != .valid
@@ -897,30 +919,75 @@ final class RouteDetailViewModel: ObservableObject {
     }
 
     private let service: any RouteDetailServicing
-    private var routeID: String?
+    @ObservationIgnored private var loadGeneration = 0
+    @ObservationIgnored private var sceneGeneration = 0
 
     init(service: any RouteDetailServicing) {
         self.service = service
     }
 
     func loadRoute(id: String) async {
-        routeID = id
-        isLoading = true
-        errorMessage = nil
-        defer { isLoading = false }
+        guard !Task.isCancelled else { return }
+        loadGeneration += 1
+        let generation = loadGeneration
+        if state.routeID != id {
+            state = RouteDetailState(routeID: id)
+        }
+        state.phase = .loading
 
-        do {
-            let detail = try await service.getRouteDetail(id: id)
-            route = detail
-            projectMapData(from: detail)
-        } catch {
-            errorMessage = Self.message(for: error)
+        await withTaskCancellationHandler {
+            do {
+                let detail = try await service.getRouteDetail(id: id)
+                guard generation == loadGeneration, state.routeID == id else { return }
+                try Task.checkCancellation()
+                let snapshot = try await Self.makeSnapshot(from: detail)
+                guard generation == loadGeneration, state.routeID == id else { return }
+                try Task.checkCancellation()
+                state = RouteDetailState(routeID: id, snapshot: snapshot, phase: .ready)
+            } catch {
+                guard generation == loadGeneration, state.routeID == id else { return }
+                if Task.isCancelled || error is CancellationError
+                    || (error as? APIClientError) == .transport(.cancelled) {
+                    cancelLoad(generation: generation, id: id)
+                } else {
+                    state.phase = .failed(Self.message(for: error))
+                }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.cancelLoad(generation: generation, id: id)
+            }
         }
     }
 
     func retry() async {
-        guard let routeID else { return }
+        guard let routeID = state.routeID else { return }
         await loadRoute(id: routeID)
+    }
+
+    func refreshScenes() async {
+        guard !Task.isCancelled, let batch = sceneRequestID, let route else { return }
+        sceneGeneration += 1
+        let generation = sceneGeneration
+        do {
+            let value = try await service.getRouteScenes(id: route.routeId, routeVersionID: route.currentVersion.versionId)
+            guard !Task.isCancelled, generation == sceneGeneration, sceneRequestID == batch else { return }
+            guard value.isValid(routeID: route.routeId, routeVersionID: route.currentVersion.versionId,
+                                referenceDayIDs: Set((route.currentVersion.referenceDays ?? []).map(\.identity))) else {
+                state.scenes = nil
+                return
+            }
+            state.scenes = value
+        } catch {
+            guard !Task.isCancelled, generation == sceneGeneration, sceneRequestID == batch else { return }
+            state.scenes = nil
+        }
+    }
+
+    private func cancelLoad(generation: Int, id: String) {
+        guard generation == loadGeneration, state.routeID == id, isLoading else { return }
+        loadGeneration += 1
+        state.phase = route == nil ? .idle : .ready
     }
 
     func canSelectSegment(_ id: String) -> Bool {
@@ -929,15 +996,15 @@ final class RouteDetailViewModel: ObservableObject {
 
     func selectSegment(_ id: String) {
         guard canSelectSegment(id) else { return }
-        selectedSegmentID = selectedSegmentID == id ? nil : id
+        state.selectedSegmentID = selectedSegmentID == id ? nil : id
     }
 
     func togglePointHighlight(for identity: String) {
-        highlightedPointIdentity = highlightedPointIdentity == identity ? nil : identity
+        state.highlightedPointIdentity = highlightedPointIdentity == identity ? nil : identity
     }
 
     func highlightPoint(_ selection: RouteMapSelection) {
-        highlightedPointIdentity = selection.identity
+        state.highlightedPointIdentity = selection.identity
     }
 
     private func validCoordinate(_ coordinate: CLLocationCoordinate2D?) -> CLLocationCoordinate2D? {
@@ -945,54 +1012,71 @@ final class RouteDetailViewModel: ObservableObject {
         return coordinate
     }
 
-    private func projectMapData(from detail: PublicRouteDetail) {
+    // body 只读快照；选中/高亮变化不重新构造轨迹、标注或海拔数组。
+    var mapCoordinates: [CLLocationCoordinate2D] { state.snapshot?.mapCoordinates ?? [] }
+    var elevationSamples: [RouteElevationSample] { state.snapshot?.elevationSamples ?? [] }
+    var elevationProfileProjection: ElevationProfileProjection? { state.snapshot?.elevationProfile }
+    var mapSegments: [RouteMapSegment] { state.snapshot?.mapSegments ?? [] }
+    var poiAnnotations: [RoutePOIAnnotation] { state.snapshot?.poiAnnotations ?? [] }
+    var waypointAnnotations: [RouteWaypointAnnotation] { state.snapshot?.waypointAnnotations ?? [] }
+    var selectableTrackPoints: [RouteTrackPointMetadata] { [] }
+
+    /// Swift 5.9 nonisolated async 在 generic executor 执行，不继承调用方 MainActor。
+    /// 每个被接受的响应构造一次，回到 MainActor 后再次校验代际才整体发布。
+    nonisolated static func makeSnapshot(from detail: PublicRouteDetail) async throws -> RouteDetailSnapshot {
+        try Task.checkCancellation()
         let version = detail.currentVersion
-        highlightedPointIdentity = nil
-        selectedSegmentID = nil
-        projectPoints(from: version)
-
-        guard version.mainTrackAvailability == .valid, let mainTrack = version.mainTrack else {
-            mapCoordinates = []
-            mapSegments = []
-            elevationSamples = []
-            return
+        let mainTrack = version.mainTrackAvailability == .valid ? version.mainTrack : nil
+        let mapCoordinates = try (mainTrack?.path ?? []).compactMap { position -> CLLocationCoordinate2D? in
+            try Task.checkCancellation()
+            return CLLocationCoordinate2DIsValid(position.coordinate) ? position.coordinate : nil
         }
-
-        elevationSamples = (version.elevationProfile?.samples ?? []).enumerated().map { index, sample in
-            RouteElevationSample(
-                sequenceNumber: index + 1,
-                distance: sample.distance.meters,
-                elevation: sample.elevation.meters
-            )
-        }
-        mapCoordinates = mainTrack.path
-            .map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
-            .filter(CLLocationCoordinate2DIsValid)
-        mapSegments = (version.segments ?? []).compactMap { segment in
-            guard let range = segment.mainTrackRange,
-                  let coordinates = Self.coordinates(in: range, path: mainTrack.path) else {
-                return nil
+        var mapSegments: [RouteMapSegment] = []
+        var coloredMapSegments: [RouteMapSegment] = []
+        var dayMapSegments: [RouteMapSegment] = []
+        if let mainTrack {
+            for segment in version.segments ?? [] {
+                try Task.checkCancellation()
+                guard let range = segment.mainTrackRange,
+                      let coordinates = Self.coordinates(in: range, path: mainTrack.path) else { continue }
+                mapSegments.append(RouteMapSegment(
+                    id: segment.identity, name: segment.name, colorHex: nil, coordinates: coordinates
+                ))
+                coloredMapSegments.append(RouteMapSegment(
+                    id: segment.identity, name: segment.name,
+                    colorHex: RouteDivisionPalette.hex(for: max(segment.order - 1, 0)), coordinates: coordinates
+                ))
             }
-            return RouteMapSegment(
-                id: segment.identity,
-                name: segment.name,
-                colorHex: nil,
-                coordinates: coordinates
-            )
+            for day in version.referenceDays ?? [] {
+                try Task.checkCancellation()
+                guard let range = day.mainTrackRange,
+                      let coordinates = Self.coordinates(in: range, path: mainTrack.path) else { continue }
+                dayMapSegments.append(RouteMapSegment(
+                    id: day.identity, name: day.title ?? "第 \(day.dayNumber) 天",
+                    colorHex: RouteDivisionPalette.hex(for: max(day.dayNumber - 1, 0)), coordinates: coordinates
+                ))
+            }
         }
-    }
-
-    private func projectPoints(from version: PublicRouteVersionDetail) {
-        poiAnnotations = annotatedPoints(version.interestPoints ?? [], fallbackCategory: "兴趣点")
+        try Task.checkCancellation()
+        let poiAnnotations = annotatedPoints(version.interestPoints ?? [], fallbackCategory: "兴趣点")
             + annotatedCampsites(version.campsites ?? [])
             + annotatedOvernightPlaces(version.overnightPlaces ?? [])
             + annotatedWaterSources(version.waterSources ?? [])
             + annotatedSupplyPoints(version.supplyPoints ?? [])
-        waypointAnnotations = annotatedWaypoints(version.keyPoints ?? [])
-        selectableTrackPoints = []
+        let waypointAnnotations = annotatedWaypoints(version.keyPoints ?? [])
+        let presentation = RouteDetailPresentation(route: detail)
+        let elevationSamples = mainTrack == nil ? [] : (presentation.elevationProfile?.samples ?? [])
+        let elevationProfile = presentation.elevationProfileProjection
+        try Task.checkCancellation()
+        return RouteDetailSnapshot(
+            route: detail, mapCoordinates: mapCoordinates, mapSegments: mapSegments,
+            dayMapSegments: dayMapSegments, coloredMapSegments: coloredMapSegments,
+            poiAnnotations: poiAnnotations, waypointAnnotations: waypointAnnotations,
+            elevationSamples: elevationSamples, elevationProfile: elevationProfile
+        )
     }
 
-    private func annotatedPoints(_ points: [PublicRouteNamedPoint], fallbackCategory: String) -> [RoutePOIAnnotation] {
+    nonisolated private static func annotatedPoints(_ points: [PublicRouteNamedPoint], fallbackCategory: String) -> [RoutePOIAnnotation] {
         points.flatMap { point in
             point.positions.compactMap { position in
                 guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
@@ -1012,7 +1096,7 @@ final class RouteDetailViewModel: ObservableObject {
         }
     }
 
-    private func annotatedWaypoints(_ points: [PublicRouteNamedPoint]) -> [RouteWaypointAnnotation] {
+    nonisolated private static func annotatedWaypoints(_ points: [PublicRouteNamedPoint]) -> [RouteWaypointAnnotation] {
         points.flatMap { point in
             point.positions.compactMap { position in
                 guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
@@ -1031,7 +1115,7 @@ final class RouteDetailViewModel: ObservableObject {
         }
     }
 
-    private func annotatedCampsites(_ campsites: [PublicRouteCampsite]) -> [RoutePOIAnnotation] {
+    nonisolated private static func annotatedCampsites(_ campsites: [PublicRouteCampsite]) -> [RoutePOIAnnotation] {
         campsites.flatMap { campsite in
             campsite.positions.compactMap { position in
                 guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
@@ -1051,7 +1135,7 @@ final class RouteDetailViewModel: ObservableObject {
         }
     }
 
-    private func annotatedOvernightPlaces(_ places: [PublicRouteOvernightPlace]) -> [RoutePOIAnnotation] {
+    nonisolated private static func annotatedOvernightPlaces(_ places: [PublicRouteOvernightPlace]) -> [RoutePOIAnnotation] {
         places.flatMap { place in
             place.positions.compactMap { position in
                 guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
@@ -1077,7 +1161,7 @@ final class RouteDetailViewModel: ObservableObject {
         }
     }
 
-    private func annotatedWaterSources(_ sources: [PublicRouteWaterSource]) -> [RoutePOIAnnotation] {
+    nonisolated private static func annotatedWaterSources(_ sources: [PublicRouteWaterSource]) -> [RoutePOIAnnotation] {
         sources.flatMap { source in
             source.positions.compactMap { position in
                 guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
@@ -1097,7 +1181,7 @@ final class RouteDetailViewModel: ObservableObject {
         }
     }
 
-    private func annotatedSupplyPoints(_ points: [PublicRouteSupplyPoint]) -> [RoutePOIAnnotation] {
+    nonisolated private static func annotatedSupplyPoints(_ points: [PublicRouteSupplyPoint]) -> [RoutePOIAnnotation] {
         points.flatMap { point in
             point.positions.compactMap { position in
                 guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
@@ -1117,7 +1201,7 @@ final class RouteDetailViewModel: ObservableObject {
         }
     }
 
-    private static func coordinates(
+    nonisolated private static func coordinates(
         in range: PublicRouteMainTrackRange,
         path: [PublicRouteGeoPosition]
     ) -> [CLLocationCoordinate2D]? {
@@ -1147,7 +1231,7 @@ final class RouteDetailViewModel: ObservableObject {
         return result.count >= 2 ? result : nil
     }
 
-    private static func coordinate(
+    nonisolated private static func coordinate(
         at position: PublicRoutePathPosition,
         path: [PublicRouteGeoPosition]
     ) -> CLLocationCoordinate2D? {
@@ -1168,12 +1252,12 @@ final class RouteDetailViewModel: ObservableObject {
         return CLLocationCoordinate2DIsValid(coordinate) ? coordinate : nil
     }
 
-    private static func sameCoordinate(_ left: CLLocationCoordinate2D?, _ right: CLLocationCoordinate2D) -> Bool {
+    nonisolated private static func sameCoordinate(_ left: CLLocationCoordinate2D?, _ right: CLLocationCoordinate2D) -> Bool {
         guard let left else { return false }
         return left.latitude == right.latitude && left.longitude == right.longitude
     }
 
-    private static func formatElevation(_ meters: Double) -> String {
+    nonisolated private static func formatElevation(_ meters: Double) -> String {
         "\(meters.formatted(.number.precision(.fractionLength(0...1)))) m"
     }
 
@@ -1200,7 +1284,7 @@ extension RouteDetailViewModel {
     /// 否则返回 nil（该划分不提供曲线区间与位置行，不做任何推断）。
     private func cumulativeDistances(for range: PublicRouteMainTrackRange) -> (start: Double, end: Double)? {
         guard let mainTrack = validMainTrack,
-              let profile = presentation?.elevationProfileProjection,
+              let profile = state.snapshot?.elevationProfile,
               profile.samples.count == mainTrack.path.count else { return nil }
         let samples = profile.samples
 
@@ -1253,7 +1337,7 @@ extension RouteDetailViewModel {
 
     var pureMapDockProjection: RouteMapDockProjection {
         RouteMapDockProjection(
-            elevation: presentation?.elevationProfileProjection,
+            elevation: state.snapshot?.elevationProfile,
             daySpans: pureMapSpans(for: .day),
             segmentSpans: pureMapSpans(for: .segment)
         )
@@ -1261,30 +1345,9 @@ extension RouteDetailViewModel {
 
     /// 纯地图轨迹划分着色：只着色具有可靠范围事实的区间，缺失区间不着色划界。
     func divisionMapSegments(for division: RouteDivisionKind) -> [RouteMapSegment] {
-        guard let mainTrack = validMainTrack else { return [] }
         switch division {
-        case .day:
-            return (route?.currentVersion.referenceDays ?? []).compactMap { day in
-                guard let range = day.mainTrackRange,
-                      let coordinates = Self.coordinates(in: range, path: mainTrack.path) else { return nil }
-                return RouteMapSegment(
-                    id: day.identity,
-                    name: day.title ?? "第 \(day.dayNumber) 天",
-                    colorHex: RouteDivisionPalette.hex(for: max(day.dayNumber - 1, 0)),
-                    coordinates: coordinates
-                )
-            }
-        case .segment:
-            return (route?.currentVersion.segments ?? []).compactMap { segment in
-                guard let range = segment.mainTrackRange,
-                      let coordinates = Self.coordinates(in: range, path: mainTrack.path) else { return nil }
-                return RouteMapSegment(
-                    id: segment.identity,
-                    name: segment.name,
-                    colorHex: RouteDivisionPalette.hex(for: max(segment.order - 1, 0)),
-                    coordinates: coordinates
-                )
-            }
+        case .day: state.snapshot?.dayMapSegments ?? []
+        case .segment: state.snapshot?.coloredMapSegments ?? []
         }
     }
 

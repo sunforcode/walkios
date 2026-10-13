@@ -2,6 +2,13 @@ import Foundation
 
 public protocol RouteDetailServicing: AnyObject {
     func getRouteDetail(id: String) async throws -> PublicRouteDetail
+    func getRouteScenes(id: String, routeVersionID: String) async throws -> PublicRouteScenes
+}
+
+public extension RouteDetailServicing {
+    func getRouteScenes(id: String, routeVersionID: String) async throws -> PublicRouteScenes {
+        throw APIClientError.http(statusCode: 404)
+    }
 }
 
 public protocol RouteDiscoveryServicing: AnyObject {
@@ -32,6 +39,10 @@ public final class RouteService: RouteDetailServicing, RouteDiscoveryServicing {
 
      public func getRouteDetail(id: String) async throws -> PublicRouteDetail {
         try await apiClient.execute(PublicRouteAPI.Detail(id: id))
+    }
+
+    public func getRouteScenes(id: String, routeVersionID: String) async throws -> PublicRouteScenes {
+        try await apiClient.execute(PublicRouteAPI.Scenes(routeID: id, routeVersionID: routeVersionID))
     }
 
     /// Lightweight compatibility adapter for existing trip and home summaries.

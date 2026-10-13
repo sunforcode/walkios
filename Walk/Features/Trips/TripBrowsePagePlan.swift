@@ -115,6 +115,11 @@ enum TripBrowsePagePlan {
             }
         }
 
+        // 已冻结的日级参考资料独立承载，不填进实际徒步指标或行动序列。
+        if let guide = presentation.routeGuideProjection {
+            blocks.append(.routeGuide(guide))
+        }
+
         // 当日天气：字段缺失按局部状态表达，不省略块。
         let weather = TripWeatherDayComponentPresentation(
             day: PersonalTripWeatherDay(

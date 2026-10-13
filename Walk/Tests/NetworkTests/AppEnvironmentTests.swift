@@ -123,6 +123,8 @@ final class AppEnvironmentTests: XCTestCase {
             resourceBundle: Bundle(for: AppEnvironmentTests.self)
         )
 
+        environment.authManager.saveSession(accessToken: "mock-equipment-test-token")
+        defer { environment.authManager.logout() }
         let featured = try await environment.routeService.getFeaturedRoutes()
         let all = try await environment.routeService.getRoutes()
         let search = try await environment.routeService.searchRoutes(query: "长海子")
@@ -168,8 +170,8 @@ final class AppEnvironmentTests: XCTestCase {
             return XCTFail("Expected mock trip_created result")
         }
         XCTAssertEqual(createdTrip.trip.identity, "trip-1")
-        XCTAssertTrue(equipment.items.isEmpty)
-        XCTAssertEqual(equipment.summary.knownTotalWeight.grams, 0)
-        XCTAssertTrue(equipmentLists.items.isEmpty)
+        XCTAssertEqual(equipment.items.map(\.identity), ["equipment-1", "equipment-2"])
+        XCTAssertEqual(equipment.summary.knownTotalWeight.grams, 1812.5)
+        XCTAssertEqual(equipmentLists.items.map(\.identity), ["list-1"])
     }
 }

@@ -3,7 +3,7 @@ import WalkData
 import WalkDesignSystem
 
 struct TripListView: View {
-    @StateObject private var viewModel: TripListViewModel
+    @State private var viewModel: TripListViewModel
     private let onNavigate: (AppDestination) -> Void
     private let onFindRoute: () -> Void
 
@@ -14,7 +14,7 @@ struct TripListView: View {
     ) {
         self.onNavigate = onNavigate
         self.onFindRoute = onFindRoute
-        _viewModel = StateObject(wrappedValue: TripListViewModel(service: service))
+        _viewModel = State(initialValue: TripListViewModel(service: service))
     }
 
     init(
@@ -24,7 +24,7 @@ struct TripListView: View {
     ) {
         self.onNavigate = onNavigate
         self.onFindRoute = onFindRoute
-        _viewModel = StateObject(wrappedValue: viewModel)
+        _viewModel = State(initialValue: viewModel)
     }
 
     var body: some View {

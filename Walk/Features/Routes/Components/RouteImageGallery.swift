@@ -14,18 +14,21 @@ extension RouteBusinessComponents {
     struct RouteImageGallery<ImageContent: View>: View {
         @Environment(\.dynamicTypeSize) private var dynamicTypeSize
         let images: [RouteImageProjection]
+        let title: String
         private let imageContent: (RouteImageProjection) -> ImageContent
 
         init(
             images: [RouteImageProjection],
+            title: String = "路线图片",
             @ViewBuilder imageContent: @escaping (RouteImageProjection) -> ImageContent
         ) {
             self.images = images
+            self.title = title
             self.imageContent = imageContent
         }
 
         var body: some View {
-            RouteBusinessSection(title: "路线图片") {
+            RouteBusinessSection(title: title) {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: Spacing.sm) {
                     ForEach(images) { image in
                         VStack(alignment: .leading, spacing: Spacing.xs) {
@@ -67,12 +70,28 @@ extension RouteBusinessComponents {
 }
 
 #if DEBUG
+extension RouteImageProjection {
+    static let samples = [
+        RouteImageProjection(id: "route-image-1", title: "高山垭口", description: "从垭口回望连续山谷。"),
+        RouteImageProjection(id: "route-image-2", title: "林线营地", description: "靠近稳定水源的开阔营地。"),
+        RouteImageProjection(id: "route-image-3", title: "河谷路段", description: "沿河谷下降的主要路径。"),
+    ]
+
+    static func sampleStyle(for identity: String) -> RouteVisualStyle {
+        switch identity {
+        case "route-image-2": .forest
+        case "route-image-3": .water
+        default: .ridge
+        }
+    }
+}
+
 #Preview("RouteImageGallery.default") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RouteImageGallery(
-            images: BusinessComponentPreviewFixtures.routeImages
+            images: RouteImageProjection.samples
         ) { image in
-            RouteDeterministicImageSurface(style: BusinessComponentPreviewFixtures.imageStyle(for: image.id))
+            RouteDeterministicImageSurface(style: RouteImageProjection.sampleStyle(for: image.id))
         }
     }
 }
@@ -80,7 +99,7 @@ extension RouteBusinessComponents {
 #Preview("RouteImageGallery.single") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RouteImageGallery(
-            images: [BusinessComponentPreviewFixtures.routeImages[0]]
+            images: [RouteImageProjection.samples[0]]
         ) { _ in
             RouteDeterministicImageSurface(style: .ridge)
         }

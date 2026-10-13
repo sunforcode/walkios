@@ -4,223 +4,26 @@ import WalkData
 import WalkDesignSystem
 
 @MainActor
-final class LoginViewModel: ObservableObject {
-    enum Phase: Equatable {
-        case phone
-        case verificationCode
-        case confirmingFocus
-        case focusError
-    }
-
-    @Published var phone = ""
-    @Published var code = ""
-    @Published var phase: Phase = .phone
-    @Published var verificationID: String?
-    @Published private(set) var expiresAt: Date?
-    @Published private(set) var resendAvailableAt: Date?
-    @Published private(set) var retryAvailableAt: Date?
-    @Published private(set) var account: AccountResponse?
-    @Published private(set) var didAuthenticate = false
-    @Published private(set) var confirmedFocusTripExists: Bool?
-    @Published private(set) var isSubmitting = false
-    @Published var errorMessage: String?
-    @Published private(set) var focusErrorMessage: String?
-
-    private let sendCode: (String) async throws -> VerificationCodeResponse
-    private let createSession: (String, String) async throws -> Void
-    private let loadAccount: () async throws -> AccountResponse
-    private let confirmFocusTrip: (() async throws -> Bool)?
-    private var focusConfirmationGeneration = 0
-    private var isAuthenticationCancelled = false
-
-    init(
-        accountService: any AccountServicing,
-        confirmFocusTrip: (() async throws -> Bool)? = nil
-    ) {
-        self.sendCode = { try await accountService.sendVerificationCode(phone: $0) }
-        self.createSession = { verificationID, code in
-            _ = try await accountService.createSession(verificationID: verificationID, code: code)
-        }
-        self.loadAccount = { try await accountService.currentAccount() }
-        self.confirmFocusTrip = confirmFocusTrip
-    }
-
-    init(
-        sendCode: @escaping (String) async throws -> VerificationCodeResponse,
-        createSession: @escaping (String, String) async throws -> Void,
-        loadAccount: @escaping () async throws -> AccountResponse,
-        confirmFocusTrip: (() async throws -> Bool)? = nil
-    ) {
-        self.sendCode = sendCode
-        self.createSession = createSession
-        self.loadAccount = loadAccount
-        self.confirmFocusTrip = confirmFocusTrip
-    }
-
-    static func normalizedPhone(_ raw: String) -> String? {
-        let trimmed = raw.trimmingCharacters(in: .whitespaces)
-        if trimmed.range(of: #"^\+[1-9][0-9]{1,14}$"#, options: .regularExpression) != nil {
-            return trimmed
-        }
-        return nil
-    }
-
-    var canSendCode: Bool {
-        Self.normalizedPhone(phone) != nil
-            && (retryAvailableAt.map { $0 <= Date() } ?? true)
-    }
-
-    var canLogin: Bool {
-        verificationID != nil
-            && code.range(of: #"^[0-9]+$"#, options: .regularExpression) != nil
-    }
-
-    func sendVerificationCode() async {
-        guard !isSubmitting else { return }
-        guard let normalizedPhone = Self.normalizedPhone(phone) else {
-            errorMessage = "请输入有效手机号"
-            return
-        }
-        guard retryAvailableAt.map({ $0 <= Date() }) ?? true else { return }
-        retryAvailableAt = nil
-        isSubmitting = true
-        errorMessage = nil
-        defer { isSubmitting = false }
-        do {
-            let response = try await sendCode(normalizedPhone)
-            verificationID = response.verificationId
-            expiresAt = response.expiresAt
-            resendAvailableAt = response.resendAvailableAt
-            retryAvailableAt = nil
-            phase = .verificationCode
-        } catch {
-            if let retryAt = Self.retryAvailableAt(for: error) {
-                retryAvailableAt = retryAt
-                errorMessage = nil
-            } else {
-                errorMessage = Self.message(for: error)
-            }
-        }
-    }
-
-    func login() async {
-        guard !isSubmitting, let verificationID, canLogin else { return }
-        isSubmitting = true
-        errorMessage = nil
-        defer { isSubmitting = false }
-        do {
-            try await createSession(verificationID, code)
-        } catch {
-            guard !isAuthenticationCancelled, !Task.isCancelled else { return }
-            errorMessage = Self.message(for: error)
-            return
-        }
-        guard !isAuthenticationCancelled, !Task.isCancelled else { return }
-
-        // account-access「认证成功承接原任务」：开启新行程意图在登录后先确认焦点行程，
-        // 失败进入 focusError 提供重试，不误判为没有焦点行程。
-        if let confirmFocusTrip {
-            guard await runFocusTripConfirmation(confirmFocusTrip) else { return }
-        }
-        guard !isAuthenticationCancelled, !Task.isCancelled else { return }
-
-        didAuthenticate = true
-        account = try? await loadAccount()
-    }
-
-    func retryFocusTripConfirmation() async {
-        guard !isAuthenticationCancelled,
-              !isSubmitting,
-              !didAuthenticate,
-              let confirmFocusTrip else { return }
-        isSubmitting = true
-        defer { isSubmitting = false }
-        guard await runFocusTripConfirmation(confirmFocusTrip),
-              !isAuthenticationCancelled,
-              !Task.isCancelled else { return }
-        didAuthenticate = true
-        account = try? await loadAccount()
-    }
-
-    func cancelPendingOperations() {
-        isAuthenticationCancelled = true
-        focusConfirmationGeneration += 1
-        confirmedFocusTripExists = nil
-    }
-
-    @discardableResult
-    private func runFocusTripConfirmation(_ confirm: () async throws -> Bool) async -> Bool {
-        let generation = focusConfirmationGeneration
-        guard !isAuthenticationCancelled else { return false }
-        phase = .confirmingFocus
-        focusErrorMessage = nil
-        do {
-            let focusExists = try await confirm()
-            guard !isAuthenticationCancelled,
-                  !Task.isCancelled,
-                  generation == focusConfirmationGeneration else { return false }
-            confirmedFocusTripExists = focusExists
-            return true
-        } catch {
-            guard !isAuthenticationCancelled,
-                  !Task.isCancelled,
-                  generation == focusConfirmationGeneration else { return false }
-            focusErrorMessage = Self.message(for: error)
-            phase = .focusError
-            return false
-        }
-    }
-
-    private static func retryAvailableAt(for error: Error) -> Date? {
-        guard let apiError = error as? APIClientError,
-              case .api(let code, _, _, let details) = apiError,
-              code == "verification_send_throttled" else {
-            return nil
-        }
-        return details?.retryAvailableAt
-    }
-
-    private static func message(for error: Error) -> String {
-        guard let apiError = error as? APIClientError else { return error.localizedDescription }
-        if case .api(let code, _, _, let details) = apiError,
-           code == "verification_send_throttled",
-           let retryAt = details?.retryAvailableAt {
-            return "发送过于频繁，请在 \(retryAt.formatted(date: .omitted, time: .shortened)) 后重试"
-        }
-        return apiError.errorDescription ?? error.localizedDescription
-    }
-}
-
-private enum LoginFocusedField: Hashable {
-    case phone
-    case code
-}
-
 struct LoginView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @StateObject private var viewModel: LoginViewModel
+    @State private var viewModel: LoginViewModel
     @State private var didResolveAuthenticationFlow = false
     @State private var now = Date()
     let intent: PendingAuthIntent?
-    let onConfirmedFocusTrip: (Bool) -> Void
     let onAuthenticated: () -> Void
     let onCancel: () -> Void
 
     init(
         accountService: any AccountServicing,
         intent: PendingAuthIntent? = nil,
-        onConfirmFocusTrip: (() async throws -> Bool)? = nil,
-        onConfirmedFocusTrip: @escaping (Bool) -> Void = { _ in },
         onAuthenticated: @escaping () -> Void,
         onCancel: @escaping () -> Void = {}
     ) {
-        _viewModel = StateObject(wrappedValue: LoginViewModel(
-            accountService: accountService,
-            confirmFocusTrip: onConfirmFocusTrip
+        _viewModel = State(initialValue: LoginViewModel(
+            accountService: accountService
         ))
         self.intent = intent
-        self.onConfirmedFocusTrip = onConfirmedFocusTrip
         self.onAuthenticated = onAuthenticated
         self.onCancel = onCancel
     }
@@ -228,13 +31,11 @@ struct LoginView: View {
     init(
         viewModel: LoginViewModel,
         intent: PendingAuthIntent? = nil,
-        onConfirmedFocusTrip: @escaping (Bool) -> Void = { _ in },
         onAuthenticated: @escaping () -> Void,
         onCancel: @escaping () -> Void = {}
     ) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+        _viewModel = State(initialValue: viewModel)
         self.intent = intent
-        self.onConfirmedFocusTrip = onConfirmedFocusTrip
         self.onAuthenticated = onAuthenticated
         self.onCancel = onCancel
     }
@@ -258,12 +59,11 @@ struct LoginView: View {
                 AuthPanel(
                     projection: authProjection,
                     onClose: cancelAuthentication,
-                    onChangePhone: { viewModel.phone = $0 },
+                    onChangePhone: viewModel.updatePhone,
                     onSendCode: { Task { await viewModel.sendVerificationCode() } },
-                    onChangeCode: { viewModel.code = $0 },
+                    onChangeCode: viewModel.updateCode,
                     onVerifyCode: { Task { await viewModel.login() } },
-                    onResendCode: { Task { await viewModel.sendVerificationCode() } },
-                    onRetryFocusTrip: { Task { await viewModel.retryFocusTripConfirmation() } }
+                    onResendCode: { Task { await viewModel.sendVerificationCode() } }
                 )
                 .frame(maxWidth: 430)
                 .frame(maxHeight: max(0, geometry.size.height - 58), alignment: .bottom)
@@ -278,9 +78,6 @@ struct LoginView: View {
         .toolbar(.hidden, for: .tabBar)
         .onChange(of: viewModel.didAuthenticate) { authenticated in
             guard authenticated else { return }
-            if let focusExists = viewModel.confirmedFocusTripExists {
-                onConfirmedFocusTrip(focusExists)
-            }
             didResolveAuthenticationFlow = true
             onAuthenticated()
         }
@@ -305,11 +102,12 @@ struct LoginView: View {
     private func cancelAuthentication() {
         guard !didResolveAuthenticationFlow else { return }
         didResolveAuthenticationFlow = true
+        viewModel.cancelPendingOperations()
         onCancel()
         dismiss()
     }
 
-    /// AuthPanel 投影映射：四互斥阶段由 LoginViewModel.Phase 驱动；phone 阶段发送失败作为 operationError
+    /// AuthPanel 投影映射：手机号与验证码两个互斥阶段由 LoginViewModel.Phase 驱动；phone 阶段发送失败作为 operationError
     /// 由组件以 ErrorView 呈现，code 阶段验证失败作为字段错误原位显示。
     private var authProjection: AuthPanelProjection {
         AuthPanelProjection(
@@ -320,12 +118,12 @@ struct LoginView: View {
             verificationID: viewModel.verificationID,
             expiresAt: viewModel.expiresAt,
             resendAvailableAt: viewModel.resendAvailableAt,
-            retryAvailableAt: activeRetryAvailableAt,
+            retryAvailableAt: viewModel.state.activeRetryAvailableAt(at: now),
             fieldError: fieldError,
             operationError: operationError,
             isLoading: viewModel.isSubmitting,
-            isPrimaryEnabled: viewModel.phase == .phone ? viewModel.canSendCode : viewModel.canLogin,
-            isSecondaryEnabled: canResend
+            isPrimaryEnabled: viewModel.phase == .phone ? viewModel.state.canSendCode(at: now) : viewModel.canLogin,
+            isSecondaryEnabled: viewModel.state.canResend(at: now)
         )
     }
 
@@ -333,19 +131,15 @@ struct LoginView: View {
         switch viewModel.phase {
         case .phone: .phone
         case .verificationCode: .code
-        case .confirmingFocus: .confirmingFocus
-        case .focusError: .focusError
         }
     }
 
     private var fieldError: String? {
         switch viewModel.phase {
         case .phone:
-            return phoneValidationError
+            return viewModel.state.phoneValidationError
         case .verificationCode:
             return viewModel.errorMessage
-        case .confirmingFocus, .focusError:
-            return nil
         }
     }
 
@@ -353,41 +147,14 @@ struct LoginView: View {
         switch viewModel.phase {
         case .phone:
             return viewModel.errorMessage
-        case .focusError:
-            return viewModel.focusErrorMessage
-        case .verificationCode, .confirmingFocus:
+        case .verificationCode:
             return nil
         }
     }
 
-    private var phoneValidationError: String? {
-        guard !viewModel.phone.isEmpty,
-              LoginViewModel.normalizedPhone(viewModel.phone) == nil else {
-            return nil
-        }
-        return "请输入有效手机号"
-    }
-
-    /// 最近一个尚未到期的冷却时刻；没有冷却时为 nil，页面不做任何定时刷新。
+    /// 最近一个尚未到期的冷却时刻；View 只负责到期唤醒，不决定业务能力。
     private var nextCooldownDeadline: Date? {
-        [viewModel.resendAvailableAt, viewModel.retryAvailableAt]
-            .compactMap { $0 }
-            .filter { $0 > now }
-            .min()
-    }
-
-    private var activeRetryAvailableAt: Date? {
-        guard let retryAt = viewModel.retryAvailableAt, retryAt > now else { return nil }
-        return retryAt
-    }
-
-    private var remainingSeconds: Int {
-        guard let availableAt = viewModel.resendAvailableAt else { return 0 }
-        return max(0, Int(ceil(availableAt.timeIntervalSince(now))))
-    }
-
-    private var canResend: Bool {
-        remainingSeconds == 0 && activeRetryAvailableAt == nil
+        viewModel.state.nextCooldownDeadline(after: now)
     }
 
     private var contextualNote: String {
@@ -395,12 +162,14 @@ struct LoginView: View {
             return "完成验证后将继续刚才的任务。"
         }
         switch intent {
-        case .homeStart:
-            return "登录后继续开启一次新的徒步行程。"
+        case .trips:
+            return "登录后查看你的当前与历史行程。"
+        case .equipment:
+            return "登录后管理个人装备与常用清单。"
         case .createTrip:
             return "登录后继续生成这条路线的个人行程。"
         case .profile:
-            return "登录后返回“我的”，管理个人资料与装备。"
+            return "登录后返回“我的”，查看行程日历与个人资料。"
         case .reauthenticate, nil:
             return "使用手机验证码继续你的个人任务。"
         }

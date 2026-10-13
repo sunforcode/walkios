@@ -11,7 +11,7 @@ import WalkDesignSystem
 struct TripBrowseView: View {
     let tripID: String
     let initialDayNumber: Int
-    @StateObject private var viewModel: TripBrowseViewModel
+    @State private var viewModel: TripBrowseViewModel
     @State private var dayIndex = 0
     @Environment(\.dismiss) private var dismiss
 
@@ -22,7 +22,7 @@ struct TripBrowseView: View {
     ) {
         self.tripID = tripID
         self.initialDayNumber = initialDayNumber
-        _viewModel = StateObject(wrappedValue: TripBrowseViewModel(service: service))
+        _viewModel = State(initialValue: TripBrowseViewModel(service: service))
     }
 
     init(
@@ -32,7 +32,7 @@ struct TripBrowseView: View {
     ) {
         self.tripID = tripID
         self.initialDayNumber = initialDayNumber
-        _viewModel = StateObject(wrappedValue: viewModel)
+        _viewModel = State(initialValue: viewModel)
     }
 
     var body: some View {
@@ -48,8 +48,13 @@ struct TripBrowseView: View {
         .toolbar(.hidden, for: .tabBar)
         .task {
             guard viewModel.pages.isEmpty, viewModel.trip == nil else { return }
-            await viewModel.loadTrip(id: tripID)
-            dayIndex = viewModel.initialDayIndex(dayNumber: initialDayNumber)
+            await loadInitialDay()
+        }
+    }
+
+    private func loadInitialDay() async {
+        if let index = await viewModel.loadInitialDay(id: tripID, dayNumber: initialDayNumber) {
+            dayIndex = index
         }
     }
 
@@ -62,7 +67,7 @@ struct TripBrowseView: View {
                 message: "不会用其他行程或当前公开路线补齐。",
                 title: "暂时无法加载行程",
                 variant: .page,
-                retry: { Task { await viewModel.loadTrip(id: tripID) } }
+                retry: { Task { await loadInitialDay() } }
             )
         } else if viewModel.isLoading, viewModel.trip == nil {
             LoadingView(message: "正在加载逐日安排", variant: .page)
@@ -80,7 +85,6 @@ struct TripBrowseView: View {
                     initialIndex: viewModel.initialDayIndex(dayNumber: initialDayNumber),
                     dayIndex: $dayIndex
                 )
-                .accessibilityIdentifier("baseline.trip-browse.pager")
             }
         } else {
             LoadingView(message: "正在加载逐日安排", variant: .page)

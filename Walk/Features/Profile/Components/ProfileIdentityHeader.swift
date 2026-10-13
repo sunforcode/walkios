@@ -71,10 +71,26 @@ enum AccountEquipmentBusinessComponents {
 }
 
 #if DEBUG
+extension ProfileProjection {
+    static let `default` = ProfileProjection(
+        identity: "profile-001",
+        maskedPhone: "138****8000",
+        nickname: "林野",
+        avatar: nil
+    )
+
+    static let minimal = ProfileProjection(
+        identity: "profile-003",
+        maskedPhone: "+44*******0186",
+        nickname: nil,
+        avatar: nil
+    )
+}
+
 #Preview("ProfileIdentityHeader.default") {
     BusinessComponentPreviewHost {
         AccountEquipmentBusinessComponents.ProfileIdentityHeader(
-            profile: BusinessComponentPreviewFixtures.profileDefault,
+            profile: ProfileProjection.default,
             onSelectAvatar: {}
         )
     }
@@ -83,7 +99,7 @@ enum AccountEquipmentBusinessComponents {
 #Preview("ProfileIdentityHeader.minimal") {
     BusinessComponentPreviewHost {
         AccountEquipmentBusinessComponents.ProfileIdentityHeader(
-            profile: BusinessComponentPreviewFixtures.profileMinimal,
+            profile: ProfileProjection.minimal,
             onSelectAvatar: {}
         )
     }

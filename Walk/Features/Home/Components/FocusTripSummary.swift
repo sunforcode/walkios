@@ -111,26 +111,76 @@ private enum FocusTripLayout {
 }
 
 #if DEBUG
+extension FocusTripSummaryModel {
+    static let complete = FocusTripSummaryModel(
+        routeName: "云岭环线",
+        start: "云栈口",
+        end: "云栈口",
+        distance: "12.1",
+        distanceUnit: "km",
+        ascent: "600",
+        ascentUnit: "m",
+        estimatedDuration: "约 5 h 20 min",
+        weather: .available
+    )
+
+    static let missingMetrics = FocusTripSummaryModel(
+        routeName: "云岭环线",
+        start: "云栈口",
+        end: "云栈口",
+        distance: nil,
+        distanceUnit: "km",
+        ascent: nil,
+        ascentUnit: "m",
+        estimatedDuration: "约 5 h 20 min",
+        weather: .available
+    )
+
+    static let weatherOmitted = FocusTripSummaryModel(
+        routeName: "云岭环线",
+        start: "云栈口",
+        end: "云栈口",
+        distance: "12.1",
+        distanceUnit: "km",
+        ascent: "600",
+        ascentUnit: "m",
+        estimatedDuration: "约 5 h 20 min",
+        weather: nil
+    )
+
+    static let longContent = FocusTripSummaryModel(
+        routeName: "云岭北坡高山草甸与连续山脊全景环线",
+        start: "云栈口游客中心北侧长距离接驳点",
+        end: "云栈口游客中心南侧返程集合点",
+        distance: "12.1",
+        distanceUnit: "km",
+        ascent: "600",
+        ascentUnit: "m",
+        estimatedDuration: "约 5 h 20 min",
+        weather: .longContent
+    )
+}
+
 #Preview("complete") {
-    FocusTripSummary(model: HomePreviewFixtures.focusComplete, onOpen: {})
+    FocusTripSummary(model: FocusTripSummaryModel.complete, onOpen: {})
         .frame(width: 390, height: 760)
         .background(AppColors.pageBase)
 }
 
 #Preview("missingMetrics") {
-    FocusTripSummary(model: HomePreviewFixtures.focusMissingMetrics, onOpen: {})
+    FocusTripSummary(model: FocusTripSummaryModel.missingMetrics, onOpen: {})
         .frame(width: 390, height: 760)
         .background(AppColors.pageBase)
 }
 
 #Preview("weatherOmitted") {
-    FocusTripSummary(model: HomePreviewFixtures.focusWeatherOmitted, onOpen: {})
+    FocusTripSummary(model: FocusTripSummaryModel.weatherOmitted, onOpen: {})
         .frame(width: 390, height: 760)
         .background(AppColors.pageBase)
 }
 
 #Preview("longContent") {
-    FocusTripSummary(model: HomePreviewFixtures.focusLongContent, onOpen: {})
+    FocusTripSummary(model: FocusTripSummaryModel.longContent, onOpen: {})
         .frame(width: 320, height: 760)
         .background(AppColors.pageBase)
         .environment(\.dynamicTypeSize, .accessibility2)

@@ -106,10 +106,32 @@ extension RouteBusinessComponents {
 }
 
 #if DEBUG
+extension RouteSegmentListProjection {
+    static let `default` = RouteSegmentListProjection(
+        segments: [
+            RouteSegmentProjection(id: "segment-1", order: 1, name: "河谷入口至林线营地", start: "上木居", end: "林线营地", metrics: ["14.8 km", "爬升 920 m"], description: "沿河谷与森林缓慢爬升。"),
+            RouteSegmentProjection(id: "segment-2", order: 2, name: "林线营地至北侧垭口", start: "林线营地", end: "北侧垭口", metrics: ["9.6 km", "约 6 小时"], description: "后半段进入碎石坡与暴露山脊。"),
+        ],
+        activeSegmentID: "segment-2"
+    )
+
+    static let single = RouteSegmentListProjection(
+        segments: [
+            RouteSegmentProjection(id: "segment-only", order: 4, name: "河谷下降段", start: "北侧垭口", end: "草科", metrics: [], description: nil),
+        ]
+    )
+
+    static let disabled = RouteSegmentListProjection(
+        segments: RouteSegmentListProjection.default.segments,
+        activeSegmentID: nil,
+        isDisabled: true
+    )
+}
+
 #Preview("RouteSegmentList.default") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RouteSegmentList(
-            projection: BusinessComponentPreviewFixtures.routeSegments,
+            projection: RouteSegmentListProjection.default,
             onSelectSegment: { _ in }
         )
     }
@@ -118,7 +140,7 @@ extension RouteBusinessComponents {
 #Preview("RouteSegmentList.single") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RouteSegmentList(
-            projection: BusinessComponentPreviewFixtures.routeSegmentSingle,
+            projection: RouteSegmentListProjection.single,
             onSelectSegment: { _ in }
         )
     }
@@ -127,7 +149,7 @@ extension RouteBusinessComponents {
 #Preview("RouteSegmentList.disabled") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RouteSegmentList(
-            projection: BusinessComponentPreviewFixtures.routeSegmentsDisabled,
+            projection: RouteSegmentListProjection.disabled,
             onSelectSegment: { _ in }
         )
     }

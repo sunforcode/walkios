@@ -36,10 +36,33 @@ extension TripBusinessComponents {
 }
 
 #if DEBUG
+extension TripRouteMetricsSummaryProjection {
+    static let `default` = TripRouteMetricsSummaryProjection(
+        distance: "42.5 km",
+        ascent: "2,300 m",
+        descent: "2,180 m",
+        maxElevation: "4,980 m"
+    )
+
+    static let partial = TripRouteMetricsSummaryProjection(
+        distance: "42.5 km",
+        ascent: nil,
+        descent: nil,
+        maxElevation: nil
+    )
+
+    static let long = TripRouteMetricsSummaryProjection(
+        distance: "126.8 km",
+        ascent: "8,940 m",
+        descent: "8,410 m",
+        maxElevation: "5,220 m"
+    )
+}
+
 #Preview("TripRouteMetricsSummary.default") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripRouteMetricsSummary(
-            projection: BusinessComponentPreviewFixtures.tripRouteMetricsDefault
+            projection: TripRouteMetricsSummaryProjection.default
         )
     }
 }
@@ -47,7 +70,7 @@ extension TripBusinessComponents {
 #Preview("TripRouteMetricsSummary.partial") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripRouteMetricsSummary(
-            projection: BusinessComponentPreviewFixtures.tripRouteMetricsPartial
+            projection: TripRouteMetricsSummaryProjection.partial
         )
     }
 }
@@ -55,7 +78,7 @@ extension TripBusinessComponents {
 #Preview("TripRouteMetricsSummary.longValues") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripRouteMetricsSummary(
-            projection: BusinessComponentPreviewFixtures.tripRouteMetricsLong
+            projection: TripRouteMetricsSummaryProjection.long
         )
     }
 }

@@ -5,14 +5,59 @@ import WalkDesignSystem
 
 @MainActor
 final class ProfileViewModelTests: XCTestCase {
+    func testAuthenticationSynchronizationClearsOldAccountBeforeReload() async {
+        let session = AuthSessionStub(isLoggedIn: true)
+        var calls = 0
+        let sut = ProfileViewModel(
+            authSession: session,
+            loadAccount: { calls += 1; return Self.account },
+            loadCalendar: { Self.emptyCalendar }
+        )
+        await sut.loadProfile()
+        XCTAssertNotNil(sut.account)
+        session.logout()
+
+        sut.synchronizeAuthentication()
+
+        XCTAssertFalse(sut.isLoggedIn)
+        XCTAssertNil(sut.account)
+        XCTAssertNil(sut.tripCalendar)
+        XCTAssertEqual(calls, 1, "Synchronous invalidation must not start personal requests")
+    }
+
+    func testIdentityReplacementClearsPreviousAccountSynchronouslyWithoutFetching() async {
+        let session = AuthSessionStub(isLoggedIn: true)
+        var calls = 0
+        let sut = ProfileViewModel(
+            authSession: session,
+            loadAccount: { calls += 1; return Self.account },
+            loadCalendar: { Self.emptyCalendar }
+        )
+        await sut.loadProfile()
+        session.cacheIdentity = "replacement-user"
+
+        sut.synchronizeAuthentication()
+
+        XCTAssertTrue(sut.isLoggedIn)
+        XCTAssertNil(sut.account)
+        XCTAssertNil(sut.tripCalendar)
+        XCTAssertEqual(calls, 1)
+    }
+
+    func testProfileHasNoEquipmentLoadingDependency() throws {
+        let source = try productionSource(at: "Features/Profile/ProfileViewModel.swift")
+        XCTAssertFalse(source.contains("getPersonalEquipment"))
+        XCTAssertFalse(source.contains("EquipmentServicing"))
+        XCTAssertFalse(source.contains("loadEquipment"))
+    }
+
     func testGuestProfileDoesNotRequestPersonalResources() async {
         let session = AuthSessionStub(isLoggedIn: false)
         var calls: [String] = []
         let sut = ProfileViewModel(
             authSession: session,
             loadAccount: { calls.append("account"); throw APIClientError.invalidResponse },
-            loadCalendar: { calls.append("calendar"); throw APIClientError.invalidResponse },
-            loadEquipment: { calls.append("equipment"); throw APIClientError.invalidResponse }
+            loadCalendar: { calls.append("calendar"); throw APIClientError.invalidResponse }
         )
 
         await sut.loadProfile()
@@ -21,10 +66,9 @@ final class ProfileViewModelTests: XCTestCase {
         XCTAssertTrue(calls.isEmpty)
         XCTAssertNil(sut.account)
         XCTAssertNil(sut.tripCalendar)
-        XCTAssertNil(sut.equipmentSummary)
     }
 
-    func testLoggedInProfileLoadsOnlyAccountCalendarAndEquipmentSummaries() async {
+    func testLoggedInProfileLoadsOnlyAccountAndCalendar() async {
         let session = AuthSessionStub(isLoggedIn: true)
         var calls: [String] = []
         let account = AccountResponse(
@@ -41,25 +85,15 @@ final class ProfileViewModelTests: XCTestCase {
             windowEndDate: LocalDate(year: 2026, month: 9, day: 2),
             days: [PersonalTripCalendarDay(date: LocalDate(year: 2026, month: 8, day: 25), tripCount: 1)]
         )
-        let equipment = PersonalEquipmentCollection(
-            items: [],
-            summary: PersonalEquipmentSummary(
-                equipmentItemCount: 12,
-                equipmentListCount: 3,
-                knownTotalWeight: EquipmentWeight(grams: 8_420),
-                missingWeightItemCount: 2
-            )
-        )
         let sut = ProfileViewModel(
             authSession: session,
             loadAccount: { calls.append("account"); return account },
-            loadCalendar: { calls.append("calendar"); return calendar },
-            loadEquipment: { calls.append("equipment"); return equipment }
+            loadCalendar: { calls.append("calendar"); return calendar }
         )
 
         await sut.loadProfile()
 
-        XCTAssertEqual(Set(calls), ["account", "calendar", "equipment"])
+        XCTAssertEqual(Set(calls), ["account", "calendar"])
         XCTAssertEqual(sut.account, account)
         XCTAssertEqual(sut.account?.account.identity, "account-1")
         XCTAssertEqual(sut.account?.profile.identity, "profile-1")
@@ -67,10 +101,6 @@ final class ProfileViewModelTests: XCTestCase {
         XCTAssertEqual(sut.account?.profile.nickname, "行者")
         XCTAssertEqual(sut.account?.profile.avatar, "media-avatar-1")
         XCTAssertEqual(sut.tripCalendar, calendar)
-        XCTAssertEqual(sut.equipmentSummary?.equipmentItemCount, 12)
-        XCTAssertEqual(sut.equipmentSummary?.equipmentListCount, 3)
-        XCTAssertEqual(sut.equipmentSummary?.knownTotalWeight.grams, 8_420)
-        XCTAssertEqual(sut.equipmentSummary?.missingWeightItemCount, 2)
         let weight = AccountEquipmentFormatting.weightParts(grams: 8_420)
         XCTAssertEqual(weight.value, "8.4")
         XCTAssertEqual(weight.unit, "kg")
@@ -87,13 +117,13 @@ final class ProfileViewModelTests: XCTestCase {
             authSession: session,
             loadAccount: { account },
             loadCalendar: { Self.emptyCalendar },
-            loadEquipment: { Self.emptyEquipment },
             revokeSession: { throw APIClientError.api(code: "logout_failed", message: "退出失败", retryable: true) }
         )
         await sut.loadProfile()
 
-        await sut.logout()
+        let result = await sut.logout()
 
+        XCTAssertFalse(result, "本次退出失败不得触发成功回调")
         XCTAssertTrue(session.isLoggedIn)
         XCTAssertFalse(session.didLogout)
         XCTAssertEqual(sut.account, account)
@@ -159,7 +189,7 @@ final class ProfileViewModelTests: XCTestCase {
         let source = try productionSource(at: "Features/Profile/ProfileView.swift")
 
         XCTAssertTrue(source.contains("viewModel.retryCalendar()"))
-        XCTAssertTrue(source.contains("viewModel.retryEquipment()"))
+        XCTAssertFalse(source.contains("viewModel.retryEquipment()"))
     }
 
     func testProfilePageUsesProductionComponentsWithoutPrivateDuplicatesOrMediaParsing() throws {
@@ -171,11 +201,11 @@ final class ProfileViewModelTests: XCTestCase {
             at: "Features/Profile/AccountMenuView.swift"
         )
         let equipmentComponentSource = try productionSource(
-            at: "Features/Profile/Components/PersonalEquipmentSummaryCard.swift"
+            at: "Features/Shared/Components/PersonalEquipmentSummaryCard.swift"
         )
 
         XCTAssertTrue(source.contains("SharedBusinessComponents.TripCalendarCard("))
-        XCTAssertTrue(source.contains("PersonalEquipmentSummaryCard("))
+        XCTAssertFalse(source.contains("PersonalEquipmentSummaryCard("))
         XCTAssertTrue(source.contains("onOpenAccountMenu("), "头像入口弹出账户菜单")
         XCTAssertTrue(source.contains("avatarLabel: profile.nickname"))
         XCTAssertFalse(source.contains("fullScreenCover"), "头像入口不再弹覆盖层")
@@ -209,13 +239,46 @@ final class ProfileViewModelTests: XCTestCase {
         let rootSource = try productionSource(at: "App/RootView.swift")
         let menuSource = try productionSource(at: "Features/Profile/AccountMenuView.swift")
         let calendarStart = try XCTUnwrap(source.range(of: "private var tripCalendarSection"))
-        let equipmentStart = try XCTUnwrap(source.range(of: "private var equipmentSection"))
-        let calendarSource = String(source[calendarStart.lowerBound..<equipmentStart.lowerBound])
+        let calendarSource = String(source[calendarStart.lowerBound...])
 
         XCTAssertTrue(calendarSource.contains("onNavigate(.tripList)"))
         XCTAssertFalse(source.contains("我的全部行程"))
         XCTAssertFalse(menuSource.contains("id: .accountSecurity"), "账号与安全不再可达")
-        XCTAssertTrue(rootSource.contains("shell.showRouteDiscovery()"))
+        XCTAssertTrue(rootSource.contains("shell.resetAfterLogout()"), "退出成功通过统一重置清空个人任务并返回行程根页")
+    }
+
+    func testAccountMenuBindsPhotoReadAndUploadToSelectionTaskLifetime() throws {
+        let source = try productionSource(at: "Features/Profile/AccountMenuView.swift")
+        let taskStart = try XCTUnwrap(source.range(of: ".task(id: selectedPhoto)"))
+        let pickerStart = try XCTUnwrap(source.range(of: ".photosPicker("))
+        let photoTask = String(source[taskStart.lowerBound..<pickerStart.lowerBound])
+        let normalized = photoTask.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+
+        XCTAssertFalse(source.contains(".onChange(of: selectedPhoto)"))
+        XCTAssertFalse(photoTask.contains("Task {"), "选图读取和上传不得脱离菜单及选择项的任务生命周期")
+        XCTAssertFalse(photoTask.contains("Task.detached"))
+        XCTAssertTrue(normalized.contains("guard let item = selectedPhoto else { return }"))
+        XCTAssertTrue(normalized.contains(
+            "let data = try await item.loadTransferable(type: Data.self) guard !Task.isCancelled else { return } guard let data else { viewModel.reportAvatarReadFailure() return } await viewModel.updateAvatar(data: data, contentType: \"image/jpeg\")"
+        ), "迟到的成功或空数据必须先检查取消，再上传或展示失败")
+        XCTAssertTrue(normalized.contains("catch is CancellationError { return }"))
+        XCTAssertTrue(normalized.contains(
+            "catch { guard !Task.isCancelled else { return }"
+        ), "读取抛错后也要排除菜单消失或重新选图造成的取消")
+    }
+
+    func testAccountMenuLogoutCallbackConsumesOnlyItsOwnSuccessfulResult() throws {
+        let source = try productionSource(at: "Features/Profile/AccountMenuView.swift")
+        let actionStart = try XCTUnwrap(source.range(of: "DangerAction("))
+        let actionEnd = try XCTUnwrap(source.range(of: ".padding(.top, Spacing.md)", range: actionStart.upperBound..<source.endIndex))
+        let action = source[actionStart.lowerBound..<actionEnd.lowerBound]
+            .split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+
+        XCTAssertFalse(source.contains(".onChange(of: viewModel.isLoggedIn)"))
+        XCTAssertTrue(action.contains(
+            "action: { Task { if await viewModel.logout() { onLoggedOut() } } }"
+        ), "退出保留独立 Task，菜单关闭后仍能按本次成功结果完成导航")
+        XCTAssertEqual(source.components(separatedBy: "onLoggedOut()").count - 1, 1)
     }
 
     func testAccountMenuUpdatesAvatarThroughSharedProfileState() async throws {
@@ -230,7 +293,6 @@ final class ProfileViewModelTests: XCTestCase {
             authSession: session,
             loadAccount: { original },
             loadCalendar: { Self.emptyCalendar },
-            loadEquipment: { Self.emptyEquipment },
             uploadAvatar: { _, _ in AvatarMediaResponse(mediaReference: "media-avatar-2") },
             updateProfile: { update in
                 receivedUpdate = update
@@ -258,7 +320,6 @@ final class ProfileViewModelTests: XCTestCase {
             authSession: session,
             loadAccount: { original },
             loadCalendar: { Self.emptyCalendar },
-            loadEquipment: { Self.emptyEquipment },
             uploadAvatar: { _, _ in throw APIClientError.invalidResponse }
         )
         await sut.loadProfile()
@@ -270,7 +331,7 @@ final class ProfileViewModelTests: XCTestCase {
         XCTAssertFalse(sut.isAvatarUpdating)
     }
 
-    func testCalendarFailureDoesNotDiscardAccountOrEquipmentSummary() async {
+    func testCalendarFailureDoesNotDiscardAccount() async {
         let session = AuthSessionStub(isLoggedIn: true)
         let account = AccountResponse(
             account: AccountProjection(identity: "account-1"),
@@ -279,26 +340,24 @@ final class ProfileViewModelTests: XCTestCase {
         let sut = ProfileViewModel(
             authSession: session,
             loadAccount: { account },
-            loadCalendar: { throw APIClientError.invalidResponse },
-            loadEquipment: { Self.emptyEquipment }
+            loadCalendar: { throw APIClientError.invalidResponse }
         )
 
         await sut.loadProfile()
 
         XCTAssertEqual(sut.account, account)
-        XCTAssertEqual(sut.equipmentSummary, Self.emptyEquipment.summary)
         XCTAssertNotNil(sut.calendarErrorMessage)
-        XCTAssertNil(sut.equipmentErrorMessage)
     }
 
     func testRetryCalendarOnlyReloadsFailedCalendarSection() async {
         let session = AuthSessionStub(isLoggedIn: true)
         var calendarAttempts = 0
-        var equipmentLoads = 0
+        var accountAttempts = 0
         let sut = ProfileViewModel(
             authSession: session,
             loadAccount: {
-                AccountResponse(
+                accountAttempts += 1
+                return AccountResponse(
                     account: AccountProjection(identity: "account-1"),
                     profile: ProfileProjection(identity: "profile-1", maskedPhone: "+86 138****8000", nickname: nil, avatar: nil)
                 )
@@ -307,10 +366,6 @@ final class ProfileViewModelTests: XCTestCase {
                 calendarAttempts += 1
                 if calendarAttempts == 1 { throw APIClientError.invalidResponse }
                 return Self.emptyCalendar
-            },
-            loadEquipment: {
-                equipmentLoads += 1
-                return Self.emptyEquipment
             }
         )
         await sut.loadProfile()
@@ -318,41 +373,9 @@ final class ProfileViewModelTests: XCTestCase {
         await sut.retryCalendar()
 
         XCTAssertEqual(calendarAttempts, 2)
-        XCTAssertEqual(equipmentLoads, 1)
+        XCTAssertEqual(accountAttempts, 1)
         XCTAssertEqual(sut.tripCalendar, Self.emptyCalendar)
         XCTAssertNil(sut.calendarErrorMessage)
-    }
-
-    func testRetryEquipmentOnlyReloadsFailedEquipmentSection() async {
-        let session = AuthSessionStub(isLoggedIn: true)
-        var calendarLoads = 0
-        var equipmentAttempts = 0
-        let sut = ProfileViewModel(
-            authSession: session,
-            loadAccount: {
-                AccountResponse(
-                    account: AccountProjection(identity: "account-1"),
-                    profile: ProfileProjection(identity: "profile-1", maskedPhone: "+86 138****8000", nickname: nil, avatar: nil)
-                )
-            },
-            loadCalendar: {
-                calendarLoads += 1
-                return Self.emptyCalendar
-            },
-            loadEquipment: {
-                equipmentAttempts += 1
-                if equipmentAttempts == 1 { throw APIClientError.invalidResponse }
-                return Self.emptyEquipment
-            }
-        )
-        await sut.loadProfile()
-
-        await sut.retryEquipment()
-
-        XCTAssertEqual(calendarLoads, 1)
-        XCTAssertEqual(equipmentAttempts, 2)
-        XCTAssertEqual(sut.equipmentSummary, Self.emptyEquipment.summary)
-        XCTAssertNil(sut.equipmentErrorMessage)
     }
 
     func testLogoutClearsLocalSessionAndCacheOnlyAfterServerSuccess() async {
@@ -367,7 +390,6 @@ final class ProfileViewModelTests: XCTestCase {
                 )
             },
             loadCalendar: { Self.emptyCalendar },
-            loadEquipment: { Self.emptyEquipment },
             revokeSession: { events.append("server") },
             clearCachedResponses: {
                 events.append(session.isLoggedIn ? "cache-before-logout" : "cache-after-logout")
@@ -383,6 +405,67 @@ final class ProfileViewModelTests: XCTestCase {
         XCTAssertNil(sut.account)
     }
 
+    func testLogoutSynchronousAuthenticationChangeStillCompletesCacheCleanup() async {
+        let session = AuthSessionStub(isLoggedIn: true)
+        var events: [String] = []
+        var sut: ProfileViewModel!
+        sut = ProfileViewModel(
+            authSession: session,
+            loadAccount: { Self.account },
+            loadCalendar: { Self.emptyCalendar },
+            revokeSession: {
+                events.append("server")
+                session.logout()
+                // AccountService posts didChange before its logout call returns.
+                sut.synchronizeAuthentication()
+            },
+            clearCachedResponses: { events.append("cache") }
+        )
+        await sut.loadProfile()
+
+        let result = await sut.logout()
+
+        XCTAssertTrue(result, "The successful operation must still trigger the route-root callback")
+        XCTAssertEqual(events, ["server", "cache"])
+        XCTAssertFalse(sut.isLoggedIn)
+        XCTAssertFalse(sut.isLoggingOut)
+        XCTAssertNil(sut.account)
+        XCTAssertNil(sut.tripCalendar)
+    }
+
+    func testLogoutSuccessCallbackWaitsForCacheCleanupAndIsNotReplayed() async {
+        let session = AuthSessionStub(isLoggedIn: true)
+        let cacheStarted = expectation(description: "cache cleanup started")
+        let gate = ProfileAsyncGate()
+        var events: [String] = []
+        let sut = ProfileViewModel(
+            authSession: session,
+            loadAccount: { Self.account },
+            loadCalendar: { Self.emptyCalendar },
+            revokeSession: { events.append("server") },
+            clearCachedResponses: {
+                events.append("cache-start")
+                cacheStarted.fulfill()
+                await gate.wait()
+                events.append("cache-end")
+            }
+        )
+        await sut.loadProfile()
+        let logout = Task {
+            if await sut.logout() { events.append("callback") }
+        }
+        await fulfillment(of: [cacheStarted], timeout: 1)
+
+        XCTAssertFalse(sut.isLoggedIn, "共享登录状态已清理，但本次退出仍在等待缓存")
+        XCTAssertEqual(events, ["server", "cache-start"], "不能把登录状态变化当作退出操作完成")
+        await gate.open()
+        await logout.value
+        XCTAssertEqual(events, ["server", "cache-start", "cache-end", "callback"])
+
+        if await sut.logout() { events.append("callback") }
+        XCTAssertEqual(events, ["server", "cache-start", "cache-end", "callback"], "已退出后的拒绝结果不能重放前一次成功回调")
+    }
+
     func testAccountServiceDoesNotMapMaskedPhoneIntoLegacyEmail() throws {
         let testFileURL = URL(fileURLWithPath: #filePath)
         let sourceURL = testFileURL
@@ -395,6 +478,260 @@ final class ProfileViewModelTests: XCTestCase {
         XCTAssertFalse(source.contains("email:"))
         XCTAssertFalse(source.contains("final class UserService"))
     }
+
+    func testLogoutPreventsLateSectionsFromRestoringPersonalData() async {
+        let session = AuthSessionStub(isLoggedIn: true)
+        let started = expectation(description: "sections started")
+        started.expectedFulfillmentCount = 2
+        let gate = ProfileAsyncGate()
+        let sut = ProfileViewModel(
+            authSession: session,
+            loadAccount: { started.fulfill(); await gate.wait(); return Self.account },
+            loadCalendar: { started.fulfill(); await gate.wait(); return Self.emptyCalendar }
+        )
+        let load = Task { await sut.loadProfile() }
+        await fulfillment(of: [started], timeout: 1)
+        let loggedOut = await sut.logout()
+        XCTAssertTrue(loggedOut)
+        await gate.open()
+        await load.value
+        XCTAssertFalse(sut.isLoggedIn)
+        XCTAssertNil(sut.account)
+        XCTAssertNil(sut.tripCalendar)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isLoading)
+    }
+
+    func testNewAccountRetryWinsOverOlderAccountResponse() async {
+        let session = AuthSessionStub(isLoggedIn: true)
+        let started = expectation(description: "old account started")
+        let gate = ProfileAsyncGate()
+        var attempts = 0
+        let sut = ProfileViewModel(
+            authSession: session,
+            loadAccount: {
+                attempts += 1
+                if attempts == 1 {
+                    started.fulfill()
+                    await gate.wait()
+                    throw APIClientError.invalidResponse
+                }
+                return Self.account
+            },
+            loadCalendar: { Self.emptyCalendar }
+        )
+        let first = Task { await sut.loadProfile() }
+        await fulfillment(of: [started], timeout: 1)
+        await sut.retryAccount()
+        await gate.open()
+        await first.value
+        XCTAssertEqual(sut.account, Self.account)
+        XCTAssertNil(sut.accountErrorMessage)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isAccountLoading)
+    }
+
+    func testCancelledProfileLoadDoesNotPublishLateSections() async {
+        let session = AuthSessionStub(isLoggedIn: true)
+        let started = expectation(description: "sections started")
+        started.expectedFulfillmentCount = 2
+        let gate = ProfileAsyncGate()
+        let sut = ProfileViewModel(
+            authSession: session,
+            loadAccount: { started.fulfill(); await gate.wait(); return Self.account },
+            loadCalendar: { started.fulfill(); await gate.wait(); return Self.emptyCalendar }
+        )
+        let load = Task { await sut.loadProfile() }
+        await fulfillment(of: [started], timeout: 1)
+        load.cancel()
+        await gate.open()
+        await load.value
+        XCTAssertNil(sut.account)
+        XCTAssertNil(sut.tripCalendar)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isLoading)
+    }
+
+    func testCancelledLogoutDoesNotClearSessionOrCache() async {
+        let session = AuthSessionStub(isLoggedIn: true)
+        var clearCount = 0
+        let started = expectation(description: "logout started")
+        let gate = ProfileAsyncGate()
+        let sut = ProfileViewModel(
+            authSession: session,
+            loadAccount: { Self.account },
+            loadCalendar: { Self.emptyCalendar },
+            revokeSession: { started.fulfill(); await gate.wait() },
+            clearCachedResponses: { clearCount += 1 }
+        )
+        await sut.loadProfile()
+        let logout = Task { await sut.logout() }
+        await fulfillment(of: [started], timeout: 1)
+        logout.cancel()
+        await gate.open()
+        let result = await logout.value
+        XCTAssertFalse(result)
+        XCTAssertTrue(session.isLoggedIn)
+        XCTAssertEqual(sut.account, Self.account)
+        XCTAssertEqual(clearCount, 0)
+        XCTAssertNil(sut.logoutErrorMessage)
+        XCTAssertFalse(sut.isLoggingOut)
+    }
+
+    func testLogoutResponseCannotClearReplacementIdentity() async {
+        let session = AuthSessionStub(isLoggedIn: true)
+        let started = expectation(description: "logout started")
+        let gate = ProfileAsyncGate()
+        let sut = ProfileViewModel(
+            authSession: session,
+            loadAccount: { Self.account },
+            loadCalendar: { Self.emptyCalendar },
+            revokeSession: { started.fulfill(); await gate.wait() }
+        )
+        await sut.loadProfile()
+        let logout = Task { await sut.logout() }
+        await fulfillment(of: [started], timeout: 1)
+        session.cacheIdentity = "replacement"
+        await sut.loadProfile()
+        await gate.open()
+        let result = await logout.value
+        XCTAssertFalse(result)
+        XCTAssertTrue(session.isLoggedIn)
+        XCTAssertFalse(session.didLogout)
+        XCTAssertEqual(sut.account, Self.account)
+    }
+
+    func testTransportCancellationDoesNotShowSectionOrLogoutFailure() async {
+        let session = AuthSessionStub(isLoggedIn: true)
+        let sut = ProfileViewModel(
+            authSession: session,
+            loadAccount: { throw APIClientError.transport(.cancelled) },
+            loadCalendar: { throw CancellationError() },
+            revokeSession: { throw APIClientError.transport(.cancelled) }
+        )
+        await sut.loadProfile()
+        let result = await sut.logout()
+        XCTAssertFalse(result)
+        XCTAssertTrue(session.isLoggedIn)
+        XCTAssertNil(sut.accountErrorMessage)
+        XCTAssertNil(sut.calendarErrorMessage)
+        XCTAssertNil(sut.logoutErrorMessage)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isLoading)
+    }
+
+    func testNicknameTrimsAndClearsWithPerCallResult() async {
+        let session = AuthSessionStub(isLoggedIn: true)
+        var updates: [ProfileUpdate] = []
+        let sut = ProfileViewModel(
+            authSession: session,
+            loadAccount: { Self.account },
+            loadCalendar: { Self.emptyCalendar },
+            updateProfile: { update in
+                updates.append(update)
+                return ProfileResponse(profile: Self.account.profile)
+            }
+        )
+        await sut.loadProfile()
+        let saved = await sut.updateNickname("  行者  \n")
+        let cleared = await sut.updateNickname(" \n ")
+        XCTAssertTrue(saved)
+        XCTAssertTrue(cleared)
+        XCTAssertEqual(updates.map(\.nickname), [.value("行者"), .clear])
+        XCTAssertFalse(sut.isSavingProfile)
+    }
+
+    func testAvatarUploadCannotContinueUpdatingProfileAfterLogout() async {
+        let session = AuthSessionStub(isLoggedIn: true)
+        let started = expectation(description: "upload started")
+        let gate = ProfileAsyncGate()
+        var updateCount = 0
+        let sut = ProfileViewModel(
+            authSession: session,
+            loadAccount: { Self.account },
+            loadCalendar: { Self.emptyCalendar },
+            uploadAvatar: { _, _ in
+                started.fulfill()
+                await gate.wait()
+                return AvatarMediaResponse(mediaReference: "late")
+            },
+            updateProfile: { _ in
+                updateCount += 1
+                return ProfileResponse(profile: Self.account.profile)
+            }
+        )
+        await sut.loadProfile()
+        let upload = Task { await sut.updateAvatar(data: Data(), contentType: "image/jpeg") }
+        await fulfillment(of: [started], timeout: 1)
+        await sut.logout()
+        await gate.open()
+        let result = await upload.value
+        XCTAssertFalse(result)
+        XCTAssertEqual(updateCount, 0)
+        XCTAssertNil(sut.account)
+        XCTAssertFalse(sut.isAvatarUpdating)
+        XCTAssertNil(sut.avatarErrorMessage)
+    }
+
+    func testNewCalendarRetryWinsOverLateFailure() async {
+        let session = AuthSessionStub(isLoggedIn: true)
+        let started = expectation(description: "old calendar started")
+        let gate = ProfileAsyncGate()
+        var attempts = 0
+        let sut = ProfileViewModel(
+            authSession: session,
+            loadAccount: { Self.account },
+            loadCalendar: {
+                attempts += 1
+                if attempts == 1 {
+                    started.fulfill()
+                    await gate.wait()
+                    throw APIClientError.invalidResponse
+                }
+                return Self.emptyCalendar
+            }
+        )
+        let first = Task { await sut.loadProfile() }
+        await fulfillment(of: [started], timeout: 1)
+        await sut.retryCalendar()
+        await gate.open()
+        await first.value
+        XCTAssertEqual(sut.tripCalendar, Self.emptyCalendar)
+        XCTAssertNil(sut.calendarErrorMessage)
+        XCTAssertFalse(sut.isCalendarLoading)
+    }
+
+    func testNicknameResponseCannotRestoreAccountAfterLogout() async {
+        let session = AuthSessionStub(isLoggedIn: true)
+        let started = expectation(description: "nickname save started")
+        let gate = ProfileAsyncGate()
+        let sut = ProfileViewModel(
+            authSession: session,
+            loadAccount: { Self.account },
+            loadCalendar: { Self.emptyCalendar },
+            updateProfile: { _ in
+                started.fulfill()
+                await gate.wait()
+                return ProfileResponse(profile: Self.account.profile)
+            }
+        )
+        await sut.loadProfile()
+        let save = Task { await sut.updateNickname("行者") }
+        await fulfillment(of: [started], timeout: 1)
+        await sut.logout()
+        await gate.open()
+        let result = await save.value
+        XCTAssertFalse(result)
+        XCTAssertNil(sut.account)
+        XCTAssertFalse(sut.isLoggedIn)
+        XCTAssertFalse(sut.isSavingProfile)
+        XCTAssertNil(sut.profileUpdateErrorMessage)
+    }
+
+    private static let account = AccountResponse(
+        account: AccountProjection(identity: "account-1"),
+        profile: ProfileProjection(identity: "profile-1", maskedPhone: "***", nickname: nil, avatar: nil)
+    )
 
     private static let emptyCalendar = PersonalTripCalendar(
         windowStartDate: LocalDate(year: 2025, month: 9, day: 3),
@@ -411,15 +748,6 @@ final class ProfileViewModelTests: XCTestCase {
         return try String(contentsOf: walkRoot.appendingPathComponent(relativePath), encoding: .utf8)
     }
 
-    private static let emptyEquipment = PersonalEquipmentCollection(
-        items: [],
-        summary: PersonalEquipmentSummary(
-            equipmentItemCount: 0,
-            equipmentListCount: 0,
-            knownTotalWeight: EquipmentWeight(grams: 0),
-            missingWeightItemCount: 0
-        )
-    )
 }
 
 private final class AuthSessionStub: AuthSession {
@@ -434,5 +762,21 @@ private final class AuthSessionStub: AuthSession {
     func logout() {
         didLogout = true
         isLoggedIn = false
+    }
+}
+
+private actor ProfileAsyncGate {
+    private var isOpen = false
+    private var continuations: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { continuations.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        continuations.forEach { $0.resume() }
+        continuations.removeAll()
     }
 }

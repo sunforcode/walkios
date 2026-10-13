@@ -121,9 +121,23 @@ extension RouteBusinessComponents {
 }
 
 #if DEBUG
+extension RoutePointDetailProjection {
+    static let `default` = RoutePointDetailProjection(
+        id: "point-camp-1",
+        name: "林线营地",
+        type: "营地",
+        location: "路线第 18.6 km",
+        description: "营地位于林线边缘的平缓台地，应避开低洼积水区域。",
+        details: [
+            RoutePointDetailItemProjection(id: "point-elevation", label: "海拔", value: "3,260 m"),
+            RoutePointDetailItemProjection(id: "point-water", label: "水源", value: "营地下方约 180 m 有季节性溪流"),
+        ]
+    )
+}
+
 #Preview("RoutePointDetail.default") {
     RouteBusinessComponents.RoutePointDetail(
-        projection: BusinessComponentPreviewFixtures.routePointDetail,
+        projection: RoutePointDetailProjection.default,
         onDismiss: {}
     )
     .background(AppColors.pageBase)

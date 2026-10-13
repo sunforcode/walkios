@@ -130,10 +130,99 @@ extension SharedBusinessComponents {
 }
 
 #if DEBUG
+extension GenerationEquipmentSelectionProjection {
+    private static let listA = GenerationEquipmentListOptionProjection(
+        equipmentListID: "list-a",
+        name: "贡嘎西南坡三日夏季清单",
+        itemCount: 14,
+        knownTotalWeightGrams: 9200,
+        missingWeightItemCount: 0
+    )
+
+    private static let listB = GenerationEquipmentListOptionProjection(
+        equipmentListID: "list-b",
+        name: "高海拔垭口穿越轻量化清单",
+        itemCount: 11,
+        knownTotalWeightGrams: 7400,
+        missingWeightItemCount: 2
+    )
+
+    private static let listLong = GenerationEquipmentListOptionProjection(
+        equipmentListID: "list-long",
+        name: "含备用保暖、防潮与应急通讯的长距离多日徒步综合装备清单",
+        itemCount: 23,
+        knownTotalWeightGrams: 12_600,
+        missingWeightItemCount: 4
+    )
+
+    static let `default` = GenerationEquipmentSelectionProjection(
+        equipmentItemCount: 18,
+        equipmentListCount: 2,
+        knownTotalWeightGrams: 9800,
+        missingWeightItemCount: 0,
+        equipmentLists: [GenerationEquipmentSelectionProjection.listA, GenerationEquipmentSelectionProjection.listB],
+        selectedEquipmentListID: nil
+    )
+
+    static let selected = GenerationEquipmentSelectionProjection(
+        equipmentItemCount: 18,
+        equipmentListCount: 2,
+        knownTotalWeightGrams: 9800,
+        missingWeightItemCount: 0,
+        equipmentLists: [GenerationEquipmentSelectionProjection.listA, GenerationEquipmentSelectionProjection.listB],
+        selectedEquipmentListID: "list-b"
+    )
+
+    static let noPersonalEquipment = GenerationEquipmentSelectionProjection(
+        equipmentItemCount: 0,
+        equipmentListCount: 2,
+        knownTotalWeightGrams: 0,
+        missingWeightItemCount: 0,
+        equipmentLists: [GenerationEquipmentSelectionProjection.listA, GenerationEquipmentSelectionProjection.listB],
+        selectedEquipmentListID: nil
+    )
+
+    static let noLists = GenerationEquipmentSelectionProjection(
+        equipmentItemCount: 18,
+        equipmentListCount: 0,
+        knownTotalWeightGrams: 9800,
+        missingWeightItemCount: 0,
+        equipmentLists: [],
+        selectedEquipmentListID: nil
+    )
+
+    static let empty = GenerationEquipmentSelectionProjection(
+        equipmentItemCount: 0,
+        equipmentListCount: 0,
+        knownTotalWeightGrams: 0,
+        missingWeightItemCount: 0,
+        equipmentLists: [],
+        selectedEquipmentListID: nil
+    )
+
+    static let partialWeight = GenerationEquipmentSelectionProjection(
+        equipmentItemCount: 18,
+        equipmentListCount: 2,
+        knownTotalWeightGrams: 7600,
+        missingWeightItemCount: 3,
+        equipmentLists: [GenerationEquipmentSelectionProjection.listA, GenerationEquipmentSelectionProjection.listB],
+        selectedEquipmentListID: nil
+    )
+
+    static let long = GenerationEquipmentSelectionProjection(
+        equipmentItemCount: 26,
+        equipmentListCount: 3,
+        knownTotalWeightGrams: 14_200,
+        missingWeightItemCount: 5,
+        equipmentLists: [GenerationEquipmentSelectionProjection.listLong, GenerationEquipmentSelectionProjection.listA, GenerationEquipmentSelectionProjection.listB],
+        selectedEquipmentListID: "list-long"
+    )
+}
+
 #Preview("GenerationEquipmentSelection.default") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.GenerationEquipmentSelection(
-            projection: BusinessComponentPreviewFixtures.generationEquipmentDefault,
+            projection: GenerationEquipmentSelectionProjection.default,
             onManageEquipment: {},
             onSelectEquipmentList: { _ in }
         )
@@ -143,7 +232,7 @@ extension SharedBusinessComponents {
 #Preview("GenerationEquipmentSelection.selected") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.GenerationEquipmentSelection(
-            projection: BusinessComponentPreviewFixtures.generationEquipmentSelected,
+            projection: GenerationEquipmentSelectionProjection.selected,
             onManageEquipment: {},
             onSelectEquipmentList: { _ in }
         )
@@ -153,7 +242,7 @@ extension SharedBusinessComponents {
 #Preview("GenerationEquipmentSelection.noPersonalEquipment") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.GenerationEquipmentSelection(
-            projection: BusinessComponentPreviewFixtures.generationEquipmentNoPersonalEquipment,
+            projection: GenerationEquipmentSelectionProjection.noPersonalEquipment,
             onManageEquipment: {},
             onSelectEquipmentList: { _ in }
         )
@@ -163,7 +252,7 @@ extension SharedBusinessComponents {
 #Preview("GenerationEquipmentSelection.noEquipmentLists") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.GenerationEquipmentSelection(
-            projection: BusinessComponentPreviewFixtures.generationEquipmentNoLists,
+            projection: GenerationEquipmentSelectionProjection.noLists,
             onManageEquipment: {},
             onSelectEquipmentList: { _ in }
         )
@@ -173,7 +262,7 @@ extension SharedBusinessComponents {
 #Preview("GenerationEquipmentSelection.empty") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.GenerationEquipmentSelection(
-            projection: BusinessComponentPreviewFixtures.generationEquipmentEmpty,
+            projection: GenerationEquipmentSelectionProjection.empty,
             onManageEquipment: {},
             onSelectEquipmentList: { _ in }
         )
@@ -183,7 +272,7 @@ extension SharedBusinessComponents {
 #Preview("GenerationEquipmentSelection.partialWeight") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.GenerationEquipmentSelection(
-            projection: BusinessComponentPreviewFixtures.generationEquipmentPartialWeight,
+            projection: GenerationEquipmentSelectionProjection.partialWeight,
             onManageEquipment: {},
             onSelectEquipmentList: { _ in }
         )
@@ -193,7 +282,7 @@ extension SharedBusinessComponents {
 #Preview("GenerationEquipmentSelection.longContent") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.GenerationEquipmentSelection(
-            projection: BusinessComponentPreviewFixtures.generationEquipmentLong,
+            projection: GenerationEquipmentSelectionProjection.long,
             onManageEquipment: {},
             onSelectEquipmentList: { _ in }
         )

@@ -3,7 +3,7 @@ import WalkData
 import WalkDesignSystem
 
 struct ProfileView: View {
-    @ObservedObject private var viewModel: ProfileViewModel
+    private let viewModel: ProfileViewModel
     private let onNavigate: (AppDestination) -> Void
     private let onOpenAccountMenu: () -> Void
     private let onAuthenticate: (PendingAuthIntent) -> Void
@@ -26,7 +26,7 @@ struct ProfileView: View {
     var body: some View {
         PageShell(
             title: "我的",
-            description: viewModel.isLoggedIn ? "行程、装备与账户，都在这里" : "登录后管理行程与徒步装备",
+            description: "行程日历与账户",
             background: {
                 ZStack {
                     AppColors.pageMiddle
@@ -61,7 +61,9 @@ struct ProfileView: View {
 
     @ViewBuilder
     private var avatarHeaderContent: some View {
-        if viewModel.isAccountLoading && viewModel.account == nil {
+        if !viewModel.isLoggedIn {
+            EmptyView()
+        } else if viewModel.isAccountLoading && viewModel.account == nil {
             AvatarButton(
                 variant: .pageHeader,
                 state: .loading,
@@ -88,8 +90,8 @@ struct ProfileView: View {
 
     private var guestContent: some View {
         EmptyStateView(
-            title: "你的徒步记录，都在这里",
-            message: "登录后查看个人行程、行程日历、个人装备和装备清单。",
+            title: "登录后查看行程日历与账户",
+            message: "登录后可以查看行程日历并管理个人资料。",
             icon: "person.crop.circle",
             actionTitle: "登录",
             action: { onAuthenticate(.profile) }
@@ -102,7 +104,6 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
             VStack(alignment: .leading, spacing: Spacing.md) {
                 tripCalendarSection
-                equipmentSection
             }
         }
         .padding(.horizontal, Spacing.pageHorizontal)
@@ -128,23 +129,4 @@ struct ProfileView: View {
         }
     }
 
-    @ViewBuilder
-    private var equipmentSection: some View {
-        if viewModel.isEquipmentLoading && viewModel.equipmentSummary == nil {
-            LoadingView(message: "正在加载装备概况", variant: .section)
-                .frame(minHeight: 96)
-        } else if let error = viewModel.equipmentErrorMessage {
-            ErrorView(
-                message: error,
-                title: "装备概况加载失败",
-                variant: .section,
-                retry: { Task { await viewModel.retryEquipment() } }
-            )
-        } else if let summary = viewModel.equipmentSummary {
-            PersonalEquipmentSummaryCard(
-                summary: summary,
-                onActivate: { onNavigate(.personalEquipment) }
-            )
-        }
-    }
 }

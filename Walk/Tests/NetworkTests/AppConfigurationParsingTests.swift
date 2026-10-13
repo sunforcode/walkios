@@ -173,19 +173,13 @@ final class AppConfigurationParsingTests: XCTestCase {
         XCTAssertEqual(configuration.dataMode, .remoteOnly)
     }
 
-    func testBaselineContextIgnoresPersonalDebugSettings() throws {
-        let settings = DebugSettings(dataMode: .real, server: nil)
-        let configuration = try parse(
-            arguments: [
-                "-WalkBaselineScenario", "page-trips--loaded",
-                "-WalkEnvironment", "test",
-            ],
-            bundleInfo: ["WalkDataMode": "mock", "WalkAPIBaseURL": "https://api.example.invalid/v1"],
-            debugSettings: settings
-        )
-
-        XCTAssertEqual(configuration.executionContext, .baseline)
-        XCTAssertEqual(configuration.dataMode, .mock)
+    func testRetiredBaselineKeysAreRejected() {
+        assertError(.retiredKey("-WalkBaselineScenario")) {
+            try parse(arguments: ["-WalkBaselineScenario", "page-trips--loaded", "-WalkDataMode", "mock"])
+        }
+        assertError(.retiredKey("WALK_BASELINE_SCENARIO")) {
+            try parse(environment: ["WALK_BASELINE_SCENARIO": "page-trips--loaded", "WALK_DATA_MODE": "mock"])
+        }
     }
 
     // MARK: - Release
@@ -225,6 +219,161 @@ final class AppConfigurationParsingTests: XCTestCase {
         }
     }
 
+    func testOfflineDemoReleaseAcceptsOnlyItsExplicitBundledOfflineConfiguration() throws {
+        let configuration = try AppConfiguration(
+            arguments: ["Walk"], environment: [:], bundleInfo: offlineDemoBundle, isDebugBuild: false
+        )
+        XCTAssertEqual(configuration.dataMode, .mock)
+        XCTAssertFalse(configuration.dataMode.usesRealNetwork)
+        XCTAssertEqual(configuration.environmentName, "offline-demo")
+        XCTAssertEqual(configuration.baseURL.absoluteString, "https://offline.walk.invalid/api/v1")
+        XCTAssertEqual(configuration.baseURL.scheme, "https")
+        XCTAssertEqual(configuration.baseURL.host, "offline.walk.invalid")
+        XCTAssertNil(configuration.baseURL.user)
+        XCTAssertNil(configuration.baseURL.password)
+        XCTAssertNil(configuration.baseURL.port)
+        XCTAssertEqual(configuration.executionContext, .app)
+        XCTAssertEqual(configuration.offlinePolicy, .fail)
+        XCTAssertNoThrow(try configuration.validate())
+    }
+
+    func testOfflineDemoReleaseIgnoresLaunchEnvironmentAndDebugSettingsOverrides() throws {
+        let settings = DebugSettings(
+            dataMode: .real,
+            server: .init(environmentName: "production", baseURL: URL(string: testURL)!)
+        )
+        let arguments = ["Walk", "-WalkDistribution", "production", "-WalkDataMode", "real",
+                         "-APIBaseURL", testURL, "-WalkEnvironment", "production", "-WalkOfflinePolicy", "invalid"]
+        let environment = ["WALK_DISTRIBUTION": "production", "WALK_DATA_MODE": "remoteOnly",
+                           "WALK_API_BASE_URL": testURL, "WALK_ENVIRONMENT": "production",
+                           "WALK_OFFLINE_POLICY": "invalid", "XCTestConfigurationFilePath": "/tmp/demo.xctestconfiguration"]
+        let expected = try AppConfiguration(
+            arguments: ["Walk"], environment: [:], bundleInfo: offlineDemoBundle, isDebugBuild: false
+        )
+        for source in ["arguments", "environment", "settings", "all"] {
+            let configuration = try AppConfiguration(
+                arguments: source == "arguments" || source == "all" ? arguments : ["Walk"],
+                environment: source == "environment" || source == "all" ? environment : [:],
+                bundleInfo: offlineDemoBundle,
+                debugSettings: source == "settings" || source == "all" ? settings : nil,
+                isDebugBuild: false
+            )
+            XCTAssertEqual(configuration, expected, source)
+            XCTAssertEqual(configuration.offlinePolicy, .fail, source)
+        }
+    }
+
+    func testProductionReleaseRemainsRealWithOrWithoutDistributionMarker() throws {
+        for marker in [nil, "production"] as [String?] {
+            var bundle: [String: Any] = ["WalkDataMode": "real", "WalkAPIBaseURL": testURL, "WalkEnvironment": "production"]
+            bundle["WalkDistribution"] = marker
+            let configuration = try AppConfiguration(
+                arguments: ["Walk", "-WalkDistribution", "offline-demo", "-WalkDataMode", "mock"],
+                environment: ["WALK_DISTRIBUTION": "offline-demo", "WALK_DATA_MODE": "mock"],
+                bundleInfo: bundle, debugSettings: DebugSettings(dataMode: .mock, server: nil), isDebugBuild: false
+            )
+            XCTAssertEqual(configuration.dataMode, .real)
+            XCTAssertEqual(configuration.environmentName, "production")
+            XCTAssertEqual(configuration.baseURL.absoluteString, testURL)
+            XCTAssertEqual(configuration.offlinePolicy, .fail)
+            bundle["WalkDataMode"] = "mock"
+            assertError(.releaseRequiresReal) {
+                try AppConfiguration(arguments: ["Walk"], environment: [:], bundleInfo: bundle, isDebugBuild: false)
+            }
+        }
+    }
+
+    func testOfflineDemoRequiresBundledMarkerAndCannotBeEnabledAtRuntime() {
+        for marker in [nil, "", "production"] as [String?] {
+            var bundle = offlineDemoBundle
+            bundle["WalkDistribution"] = marker
+            assertError(.releaseRequiresReal) {
+                try AppConfiguration(
+                    arguments: ["Walk", "-WalkDistribution", "offline-demo"],
+                    environment: ["WALK_DISTRIBUTION": "offline-demo"],
+                    bundleInfo: bundle, isDebugBuild: false
+                )
+            }
+        }
+    }
+
+    func testUnknownReleaseDistributionIsRejectedEvenWithValidRealConfiguration() {
+        for marker in ["offline", "demo", "Offline-Demo", "OFFLINE-DEMO", "staging"] {
+            XCTAssertThrowsError(try AppConfiguration(
+                arguments: ["Walk"], environment: [:],
+                bundleInfo: ["WalkDistribution": marker, "WalkDataMode": "real",
+                             "WalkEnvironment": "production", "WalkAPIBaseURL": testURL],
+                isDebugBuild: false
+            ), marker) { error in
+                XCTAssertTrue(error is AppConfigurationError, marker)
+            }
+        }
+    }
+
+    func testOfflineDemoRejectsMissingOrWrongModeAndEnvironmentInsteadOfFallingBackToReal() {
+        for key in ["WalkDataMode", "WalkEnvironment"] {
+            let invalidValues: [String?] = key == "WalkDataMode"
+                ? [nil, "", "real", "remoteOnly", "local", "invalid"]
+                : [nil, "", "production", "development", "Offline-Demo"]
+            for value in invalidValues {
+                var bundle = offlineDemoBundle
+                bundle[key] = value
+                XCTAssertThrowsError(try AppConfiguration(
+                    arguments: ["Walk"], environment: [:], bundleInfo: bundle, isDebugBuild: false
+                ), "\(key)=\(value ?? "missing")") { error in
+                    XCTAssertTrue(error is AppConfigurationError)
+                }
+            }
+        }
+        var bundle = offlineDemoBundle
+        bundle["WalkDataMode"] = "real"
+        bundle["WalkEnvironment"] = "production"
+        bundle["WalkAPIBaseURL"] = testURL
+        XCTAssertThrowsError(try AppConfiguration(
+            arguments: ["Walk"], environment: [:], bundleInfo: bundle, isDebugBuild: false
+        ), "offline-demo marker 不能以真实生产配置静默启动")
+    }
+
+    func testOfflineDemoRejectsEveryAddressOtherThanExactOfflineURL() {
+        let invalidURLs: [String?] = [
+            nil, "", testURL, "https://api.walk.terencew.cn/walkbg/api/v1",
+            "http://offline.walk.invalid/api/v1", "https://other.invalid/api/v1",
+            "https://offline.walk.invalid.example.test/api/v1",
+            "https://user@offline.walk.invalid/api/v1", "https://user:password@offline.walk.invalid/api/v1",
+            "https://offline.walk.invalid:8443/api/v1", "https://offline.walk.invalid:443/api/v1",
+            "https://offline.walk.invalid/other", "https://offline.walk.invalid/api/v1/",
+            "https://offline.walk.invalid/api/v1?target=production", "https://offline.walk.invalid/api/v1#fragment",
+        ]
+        for value in invalidURLs {
+            var bundle = offlineDemoBundle
+            bundle["WalkAPIBaseURL"] = value
+            XCTAssertThrowsError(try AppConfiguration(
+                arguments: ["Walk"], environment: [:], bundleInfo: bundle, isDebugBuild: false
+            ), value ?? "missing") { error in
+                XCTAssertTrue(error is AppConfigurationError)
+            }
+        }
+    }
+
+    func testDebugIgnoresReleaseDistributionKeyAndPreservesItsExistingPrecedence() throws {
+        for marker in ["offline-demo", "production", "unknown-release-distribution"] {
+            let bundle: [String: Any] = ["WalkDistribution": marker, "WalkDataMode": "real",
+                                         "WalkAPIBaseURL": testURL, "WalkEnvironment": "development"]
+            let fromBundle = try parse(bundleInfo: bundle)
+            XCTAssertEqual(fromBundle.dataMode, .real)
+            XCTAssertEqual(fromBundle.baseURL.absoluteString, testURL)
+            let fromLaunch = try parse(
+                arguments: ["-WalkDataMode", "mock", "-WalkEnvironment", "debug-test"], bundleInfo: bundle
+            )
+            XCTAssertEqual(fromLaunch.dataMode, .mock)
+            XCTAssertEqual(fromLaunch.environmentName, "debug-test")
+        }
+        assertError(.productionRequiresRealNetwork) {
+            try parse(bundleInfo: ["WalkDistribution": "offline-demo", "WalkDataMode": "mock",
+                                   "WalkEnvironment": "production", "WalkAPIBaseURL": "https://offline.walk.invalid/api/v1"])
+        }
+    }
+
     // MARK: - 校验
 
     func testRealNetworkModesRejectPlaceholderAddress() {
@@ -259,6 +408,11 @@ final class AppConfigurationParsingTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    private var offlineDemoBundle: [String: Any] {
+        ["WalkDistribution": "offline-demo", "WalkDataMode": "mock",
+         "WalkEnvironment": "offline-demo", "WalkAPIBaseURL": "https://offline.walk.invalid/api/v1"]
+    }
 
     private func parse(
         arguments: [String] = [],

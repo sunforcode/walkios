@@ -21,7 +21,7 @@ enum RouteDetailLayout {
 @MainActor
 struct RouteDetailView: View {
     let routeId: String
-    @StateObject private var viewModel: RouteDetailViewModel
+    @State private var viewModel: RouteDetailViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var selectedMapDetail: RouteMapDetailPresentation?
     private let onGenerateTrip: (String) -> Void
@@ -58,7 +58,7 @@ struct RouteDetailView: View {
         onGenerateTrip: @escaping (String) -> Void
     ) {
         self.routeId = routeId
-        _viewModel = StateObject(wrappedValue: viewModel)
+        _viewModel = State(initialValue: viewModel)
         self.onGenerateTrip = onGenerateTrip
     }
 
@@ -162,7 +162,8 @@ struct RouteDetailView: View {
         .ignoresSafeArea(edges: [.top, .horizontal])
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
-        .task { await viewModel.loadRoute(id: routeId) }
+        .task(id: routeId) { await viewModel.loadRoute(id: routeId) }
+        .task(id: viewModel.sceneRequestID) { await viewModel.refreshScenes() }
     }
 
     /// 纯地图贴底层：选中区间信息卡悬浮在 dock 之上，不遮挡唤回把手。
@@ -284,6 +285,7 @@ struct RouteDetailView: View {
         } else if let presentation = viewModel.presentation {
             RouteDetailScrollOverlay(
                 presentation: presentation,
+                elevationProfile: viewModel.elevationProfileProjection,
                 topSpacerHeight: topSpacerHeight,
                 firstSectionHeight: firstSectionHeight,
                 panelDragOffset: $panelDragOffset,
@@ -475,7 +477,7 @@ private enum RouteMapDetailPresentation: Identifiable {
     NavigationStack {
         RouteDetailView(
             routeId: "route-1",
-            service: PreviewHelpers.routeService,
+            service: RouteService(apiClient: MockAPIClient(fixtures: DefaultMockFixtures.all())),
             onGenerateTrip: { _ in }
         )
     }

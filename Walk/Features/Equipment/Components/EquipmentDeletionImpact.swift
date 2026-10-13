@@ -44,15 +44,32 @@ struct EquipmentDeletionImpact: View {
 }
 
 #if DEBUG
+extension PersonalEquipmentDeletionImpact {
+    static let referenced = PersonalEquipmentDeletionImpact(
+        personalEquipmentId: "equipment-001",
+        equipmentListReferenceCount: 2,
+        affectedEquipmentLists: [
+            EquipmentListReference(identity: "list-001", name: "周末轻装清单"),
+            EquipmentListReference(identity: "list-002", name: "连续降雨与高海拔过夜备用清单"),
+        ]
+    )
+
+    static let unreferenced = PersonalEquipmentDeletionImpact(
+        personalEquipmentId: "equipment-003",
+        equipmentListReferenceCount: 0,
+        affectedEquipmentLists: []
+    )
+}
+
 #Preview("EquipmentDeletionImpact.default") {
     BusinessComponentPreviewHost {
-        EquipmentDeletionImpact(impact: BusinessComponentPreviewFixtures.deletionImpact)
+        EquipmentDeletionImpact(impact: PersonalEquipmentDeletionImpact.referenced)
     }
 }
 
 #Preview("EquipmentDeletionImpact.none") {
     BusinessComponentPreviewHost {
-        EquipmentDeletionImpact(impact: BusinessComponentPreviewFixtures.deletionImpactNone)
+        EquipmentDeletionImpact(impact: PersonalEquipmentDeletionImpact.unreferenced)
     }
 }
 #endif

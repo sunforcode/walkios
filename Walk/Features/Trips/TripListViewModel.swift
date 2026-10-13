@@ -1,39 +1,24 @@
-import SwiftUI
+import Foundation
+import Observation
 import WalkData
-import WalkDesignSystem
 
-@MainActor
-final class TripListViewModel: ObservableObject {
-    @Published private(set) var currentTrips: [PersonalTripSummary] = []
-    @Published private(set) var historicalTrips: [PersonalTripSummary] = []
-    @Published var isLoading = false
-    @Published var errorMessage: String?
+@MainActor @Observable
+final class TripListViewModel {
+    private(set) var currentTrips: [PersonalTripSummary] = []
+    private(set) var historicalTrips: [PersonalTripSummary] = []
+    private(set) var isLoading = false
+    private(set) var errorMessage: String?
 
     private let fetchTrips: () async throws -> PersonalTripCollection
-    let automaticallyLoads: Bool
+    @ObservationIgnored private var loading: TripRequestLifetime?
+    let automaticallyLoads = true
 
     init(service: any PersonalTripServicing) {
         self.fetchTrips = { try await service.list() }
-        self.automaticallyLoads = true
     }
 
     init(loadTrips: @escaping () async throws -> PersonalTripCollection) {
         self.fetchTrips = loadTrips
-        self.automaticallyLoads = true
-    }
-
-    init(baselineState: TripListBaselineState) {
-        self.fetchTrips = { PersonalTripCollection(currentTrips: [], historicalTrips: []) }
-        self.automaticallyLoads = false
-        switch baselineState {
-        case .loading:
-            self.isLoading = true
-        case .loaded(let collection):
-            self.currentTrips = collection.currentTrips
-            self.historicalTrips = collection.historicalTrips
-        case .error(let message):
-            self.errorMessage = message
-        }
     }
 
     var isEmpty: Bool {
@@ -41,22 +26,36 @@ final class TripListViewModel: ObservableObject {
     }
 
     func loadTrips() async {
+        guard !Task.isCancelled, loading == nil || loading?.isCancelled == true else { return }
+        let request = TripRequestLifetime()
+        loading = request
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
-
-        do {
-            let collection = try await fetchTrips()
-            currentTrips = collection.currentTrips
-            historicalTrips = collection.historicalTrips
-        } catch let error as LocalizedError {
-            currentTrips = []
-            historicalTrips = []
-            errorMessage = error.errorDescription ?? error.localizedDescription
-        } catch {
-            currentTrips = []
-            historicalTrips = []
-            errorMessage = "加载失败：\(error.localizedDescription)"
+        defer {
+            if loading === request {
+                loading = nil
+                isLoading = false
+            }
+        }
+        await withTaskCancellationHandler {
+            do {
+                let collection = try await fetchTrips()
+                guard loading === request, !request.isCancelled, !Task.isCancelled else { return }
+                currentTrips = collection.currentTrips
+                historicalTrips = collection.historicalTrips
+            } catch {
+                guard loading === request, !request.isCancelled, !Task.isCancelled,
+                      !tripRequestWasCancelled(error) else { return }
+                currentTrips = []
+                historicalTrips = []
+                if let localized = error as? LocalizedError {
+                    errorMessage = localized.errorDescription ?? error.localizedDescription
+                } else {
+                    errorMessage = "加载失败：\(error.localizedDescription)"
+                }
+            }
+        } onCancel: {
+            request.cancel()
         }
     }
 

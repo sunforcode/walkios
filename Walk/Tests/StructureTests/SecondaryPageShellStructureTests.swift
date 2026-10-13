@@ -21,6 +21,8 @@ final class SecondaryPageShellStructureTests: XCTestCase {
         "Profile/ProfileDetailsPage.swift",
         "Routes/RouteDiscoveryView.swift",
         "Trips/CreateTripView.swift",
+        "Trips/TripEquipment.swift",
+        "Trips/TripDayWeatherViews.swift",
         "Trips/TripListView.swift",
     ]
 
@@ -28,15 +30,15 @@ final class SecondaryPageShellStructureTests: XCTestCase {
     private static let exemptFiles: [String: String] = [
         // 沉浸地图详情：返回入口属地图 dock，非页面导航行（change 批准豁免）。
         "Routes/RouteDetailView.swift": "返回入口属地图 dock，非页面导航行",
-        // 沉浸封面行程详情：封面随正文整体上滑，返回悬浮于封面顶部（PAGE-TRIP-DETAIL 自定义承载）。
-        "Trips/TripDetailView.swift": "沉浸封面自定义承载：封面随正文整体上滑，返回悬浮于封面顶部",
+        // 沉浸行程详情：场景与日期固定、时间线独滚（PAGE-TRIP-DETAIL 自定义承载）。
+        "Trips/TripDetailView.swift": "沉浸场景自定义承载：固定日期与场景，时间线独滚，返回常驻顶部",
         // 逐日阅读嵌套分页容器：外层分页容器一日一页，返回固定于浏览头（PAGE-TRIP-BROWSE 自定义承载）。
         "Trips/TripBrowseView.swift": "嵌套分页容器自定义承载：外层一日一页分页，返回固定于浏览头",
     ]
 
     /// 范围外登记：非任务栈二级页或非页面组件，不适用壳合同（附理由）。
     private static let outOfScopeFiles: [String: String] = [
-        "Home/HomeView.swift": "tab 根页，非二级页",
+        "Home/HomeView.swift": "行程 tab 根页，非二级页",
         "Profile/ProfileView.swift": "tab 根页，非二级页",
         "Profile/AccountMenuView.swift": "PAGE-ACCOUNT-MENU 以底部模态 Sheet 承载，不进入任务栈",
         "Profile/LoginView.swift": "登录模态流程页，非任务栈二级页",
@@ -63,8 +65,15 @@ final class SecondaryPageShellStructureTests: XCTestCase {
         }
     }
 
-    /// 反向强制：Features 下以 `View.swift` / `Page.swift` 结尾的源码文件
-    /// 必须出现在走壳清单、豁免登记或范围外登记之一；登记表不得残留已退役文件。
+    func testEquipmentRootAndTaskHaveDistinctScrollOwners() throws {
+        let source = try featuresSource("Equipment/EquipmentListView.swift")
+        XCTAssertTrue(source.contains("PageShell("), "一级装备根页由 PageShell 承载")
+        XCTAssertTrue(source.contains("UtilityPage("), "行程内管理使用同一个页面的任务壳")
+        let scrolls = source.components(separatedBy: "ScrollView(showsIndicators:").count - 1
+        XCTAssertEqual(scrolls, 1, "根页拥有一个滚动区，任务分支沿用 UtilityPage 滚动")
+    }
+
+    /// 反向强制：页面命名文件及既有非标准文件名页面必须登记；不得残留已退役文件。
     func testEveryPageNamedFileIsRegistered() throws {
         let allFiles = try Self.pageNamedFeatureFiles()
         let registered = Self.shellRequiredFiles
@@ -94,8 +103,10 @@ final class SecondaryPageShellStructureTests: XCTestCase {
         for case let url as URL in enumerator ?? NSEnumerator() {
             guard url.pathExtension == "swift" else { continue }
             let name = url.lastPathComponent
-            guard name.hasSuffix("View.swift") || name.hasSuffix("Page.swift") else { continue }
             let relative = String(url.standardizedFileURL.path.dropFirst(root.path.count + 1))
+            let isExistingPageContainer = relative == "Trips/TripEquipment.swift"
+                || relative == "Trips/TripDayWeatherViews.swift"
+            guard name.hasSuffix("View.swift") || name.hasSuffix("Page.swift") || isExistingPageContainer else { continue }
             files.insert(relative)
         }
         return files

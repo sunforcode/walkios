@@ -1,4 +1,5 @@
 import XCTest
+import Observation
 import WalkData
 import WalkDesignSystem
 @testable import Walk
@@ -56,8 +57,8 @@ final class RouteDetailViewModelTests: XCTestCase {
 
         XCTAssertEqual(sut.searchState, .initial)
         XCTAssertTrue(sut.searchResults.isEmpty)
-        XCTAssertNil(sut.errorMessage)
-        XCTAssertFalse(sut.isLoading)
+        XCTAssertNil(sut.searchErrorMessage)
+        XCTAssertFalse(sut.isSearching)
         XCTAssertTrue(service.searchQueries.isEmpty)
     }
 
@@ -84,6 +85,646 @@ final class RouteDetailViewModelTests: XCTestCase {
         XCTAssertEqual(sut.routes, [Self.browseSummary])
         XCTAssertFalse(sut.isLoading)
         XCTAssertNil(sut.errorMessage)
+    }
+
+    func testSearchRestoresAWhileBIsPendingIncludingEmptyResults() async {
+        for items in [[Self.searchSummary], []] {
+            let bStarted = expectation(description: "B started")
+            let gate = RouteAsyncGate()
+            let service = RouteDiscoveryServiceStub()
+            service.searchHandler = { query in
+                if query == "B" {
+                    bStarted.fulfill()
+                    await gate.wait()
+                    throw APIClientError.transport(.other("迟到错误"))
+                }
+                return PublicRouteSearchResult(state: .completed, items: items)
+            }
+            let sut = RouteDiscoveryViewModel(service: service)
+            await sut.search(query: "A", immediate: true)
+            let b = Task { await sut.search(query: "B", immediate: true) }
+            await fulfillment(of: [bStarted], timeout: 1)
+            XCTAssertTrue(sut.isSearching)
+            XCTAssertTrue(sut.searchResults.isEmpty, "不能用 A 的结果冒充当前 B")
+
+            await sut.search(query: "A")
+            XCTAssertFalse(sut.isSearching, "恢复已完成查询必须结束 B 的 loading")
+            XCTAssertEqual(sut.searchState, .completed)
+            XCTAssertEqual(sut.searchResults, items)
+            XCTAssertEqual(service.searchQueries, ["A", "B"])
+
+            await gate.open()
+            await b.value
+            XCTAssertFalse(sut.isSearching)
+            XCTAssertNil(sut.searchErrorMessage)
+            XCTAssertEqual(sut.searchResults, items)
+        }
+    }
+
+    func testSearchRestoresNoResultsWithoutAnotherRequestButSubmitRefreshes() async {
+        let service = RouteDiscoveryServiceStub(searchResults: [
+            PublicRouteSearchResult(state: .completed, items: []),
+            PublicRouteSearchResult(state: .completed, items: [Self.searchSummary]),
+        ])
+        let sut = RouteDiscoveryViewModel(service: service)
+        await sut.search(query: "A", immediate: true)
+        await sut.search(query: "A")
+        XCTAssertEqual(service.searchQueries, ["A"])
+        XCTAssertEqual(sut.searchState, .completed)
+        XCTAssertTrue(sut.searchResults.isEmpty)
+        XCTAssertFalse(sut.isSearching)
+
+        await sut.search(query: "A", immediate: true)
+        XCTAssertEqual(service.searchQueries, ["A", "A"])
+        XCTAssertEqual(sut.searchResults, [Self.searchSummary])
+    }
+
+    func testSearchIgnoresOldSuccessEmptyResultAndFailure() async {
+        let lateResults: [Result<PublicRouteSearchResult, Error>] = [
+            .success(PublicRouteSearchResult(state: .completed, items: [Self.searchSummary])),
+            .success(PublicRouteSearchResult(state: .completed, items: [])),
+            .failure(APIClientError.transport(.other("旧错误"))),
+        ]
+        for lateResult in lateResults {
+            let started = expectation(description: "old search started")
+            let gate = RouteAsyncGate()
+            let service = RouteDiscoveryServiceStub()
+            service.searchHandler = { query in
+                if query == "A" {
+                    started.fulfill()
+                    await gate.wait()
+                    return try lateResult.get()
+                }
+                return PublicRouteSearchResult(state: .completed, items: [])
+            }
+            let sut = RouteDiscoveryViewModel(service: service)
+            let old = Task { await sut.search(query: "A", immediate: true) }
+            await fulfillment(of: [started], timeout: 1)
+            await sut.search(query: "B", immediate: true)
+            await gate.open()
+            await old.value
+            XCTAssertEqual(sut.lastSearchQuery, "B")
+            XCTAssertEqual(sut.searchState, .completed)
+            XCTAssertTrue(sut.searchResults.isEmpty)
+            XCTAssertNil(sut.searchErrorMessage)
+            XCTAssertFalse(sut.isSearching)
+        }
+    }
+
+    func testClearingSearchInvalidatesPendingResult() async {
+        let started = expectation(description: "search started")
+        let gate = RouteAsyncGate()
+        let service = RouteDiscoveryServiceStub()
+        service.searchHandler = { _ in
+            started.fulfill()
+            await gate.wait()
+            return PublicRouteSearchResult(state: .completed, items: [Self.searchSummary])
+        }
+        let sut = RouteDiscoveryViewModel(service: service)
+        let task = Task { await sut.search(query: "A", immediate: true) }
+        await fulfillment(of: [started], timeout: 1)
+        await sut.search(query: " \t\n\r\u{3000}")
+        XCTAssertFalse(sut.isSearching)
+        await gate.open()
+        await task.value
+        XCTAssertEqual(sut.searchState, .initial)
+        XCTAssertTrue(sut.searchResults.isEmpty)
+        XCTAssertNil(sut.searchErrorMessage)
+    }
+
+    func testSearchCancellationDoesNotPublishLateSuccess() async {
+        let started = expectation(description: "search started")
+        let gate = RouteAsyncGate()
+        let service = RouteDiscoveryServiceStub()
+        service.searchHandler = { _ in
+            started.fulfill()
+            await gate.wait()
+            return PublicRouteSearchResult(state: .completed, items: [Self.searchSummary])
+        }
+        let sut = RouteDiscoveryViewModel(service: service)
+        let task = Task { await sut.search(query: "A", immediate: true) }
+        await fulfillment(of: [started], timeout: 1)
+        let cancelled = expectation(description: "search cancellation published")
+        withObservationTracking { _ = sut.isSearching } onChange: { cancelled.fulfill() }
+        task.cancel()
+        await fulfillment(of: [cancelled], timeout: 1)
+        XCTAssertFalse(sut.isSearching)
+        await gate.open()
+        await task.value
+        XCTAssertFalse(sut.isSearching)
+        XCTAssertTrue(sut.searchResults.isEmpty)
+        XCTAssertNil(sut.searchErrorMessage)
+        XCTAssertNil(sut.lastSearchQuery)
+    }
+
+    func testSearchContentOwnsAndCancelsManualSearchTaskAcrossLifecycle() throws {
+        let source = try productionSource(at: "Features/Routes/RouteDiscoveryView.swift")
+        let start = try XCTUnwrap(source.range(of: "private struct RouteSearchContent: View {"))
+        let end = try XCTUnwrap(source.range(of: "private struct SearchFocusActivator:", range: start.upperBound..<source.endIndex))
+        func normalized(_ value: String) -> String {
+            value.split(separator: "\n")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .joined(separator: "\n")
+        }
+        let content = normalized(String(source[start.lowerBound..<end.lowerBound]))
+
+        XCTAssertTrue(content.contains("@State private var manualSearchTask: Task<Void, Never>?"))
+        XCTAssertTrue(content.contains(normalized("""
+        .task(id: boundQuery.wrappedValue) {
+            await viewModel.search(query: boundQuery.wrappedValue)
+        }
+        """)), "query 变化仍走模型默认的 300ms 防抖")
+        XCTAssertTrue(content.contains(normalized("""
+        .onChange(of: boundQuery.wrappedValue) { _, _ in
+            cancelManualSearch()
+        }
+        """)))
+        XCTAssertTrue(content.contains(".onDisappear(perform: cancelManualSearch)"))
+        XCTAssertTrue(content.contains(normalized("""
+        private func submitSearch() {
+            cancelManualSearch()
+            let query = boundQuery.wrappedValue
+            manualSearchTask = Task {
+                await viewModel.search(query: query, immediate: true)
+            }
+        }
+        """)), "再次提交先取消旧任务，再立即搜索本次输入")
+        XCTAssertTrue(content.contains(normalized("""
+        private func cancelManualSearch() {
+            manualSearchTask?.cancel()
+            manualSearchTask = nil
+        }
+        """)))
+        XCTAssertFalse(content.contains("defer"), "旧任务结束不能清空新任务句柄")
+    }
+
+    func testOldSearchCancellationCannotEndNewLoading() async {
+        let aStarted = expectation(description: "A started")
+        let bStarted = expectation(description: "B started")
+        let aGate = RouteAsyncGate()
+        let bGate = RouteAsyncGate()
+        let service = RouteDiscoveryServiceStub()
+        service.searchHandler = { query in
+            if query == "A" {
+                aStarted.fulfill()
+                await aGate.wait()
+            } else {
+                bStarted.fulfill()
+                await bGate.wait()
+            }
+            return PublicRouteSearchResult(state: .completed, items: [])
+        }
+        let sut = RouteDiscoveryViewModel(service: service)
+        let a = Task { await sut.search(query: "A", immediate: true) }
+        await fulfillment(of: [aStarted], timeout: 1)
+        let b = Task { await sut.search(query: "B", immediate: true) }
+        await fulfillment(of: [bStarted], timeout: 1)
+        a.cancel()
+        await aGate.open()
+        await a.value
+        XCTAssertTrue(sut.isSearching)
+        await bGate.open()
+        await b.value
+        XCTAssertFalse(sut.isSearching)
+        XCTAssertEqual(sut.lastSearchQuery, "B")
+    }
+
+    func testSearchBlankPredicateDoesNotExpandUnicodeWhitespace() async {
+        XCTAssertTrue(RouteDiscoveryViewModel.isEmptyQuery(" \t\n\r\u{3000}"))
+        XCTAssertFalse(RouteDiscoveryViewModel.isEmptyQuery("\u{00A0}"))
+        XCTAssertFalse(RouteDiscoveryViewModel.isEmptyQuery("\u{2003}"))
+        let service = RouteDiscoveryServiceStub()
+        let sut = RouteDiscoveryViewModel(service: service)
+        await sut.search(query: "\u{00A0}", immediate: true)
+        XCTAssertEqual(service.searchQueries, ["\u{00A0}"])
+    }
+
+    func testDiscoveryAndSearchHaveIndependentLoadingAndErrors() async {
+        let started = expectation(description: "discovery started")
+        let gate = RouteAsyncGate()
+        let service = RouteDiscoveryServiceStub(searchError: APIClientError.transport(.other("搜索失败")))
+        service.featuredHandler = {
+            started.fulfill()
+            await gate.wait()
+            return PublicRouteDiscoveryResult(items: [Self.browseSummary])
+        }
+        let sut = RouteDiscoveryViewModel(service: service)
+        let task = Task { await sut.loadRoutes() }
+        await fulfillment(of: [started], timeout: 1)
+        await sut.search(query: "A", immediate: true)
+        XCTAssertTrue(sut.isLoading)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isSearching)
+        XCTAssertEqual(sut.searchErrorMessage, "搜索失败")
+        await gate.open()
+        await task.value
+        XCTAssertEqual(sut.routes, [Self.browseSummary])
+        XCTAssertEqual(sut.searchErrorMessage, "搜索失败")
+    }
+
+    func testDiscoveryCancellationRejectsLateDataAndAllowsRetry() async {
+        let started = expectation(description: "discovery started")
+        let gate = RouteAsyncGate()
+        let service = RouteDiscoveryServiceStub(featured: PublicRouteDiscoveryResult(items: [Self.browseSummary]))
+        service.featuredHandler = {
+            started.fulfill()
+            await gate.wait()
+            return PublicRouteDiscoveryResult(items: [Self.browseSummary])
+        }
+        let sut = RouteDiscoveryViewModel(service: service)
+        let task = Task { await sut.loadRoutes() }
+        await fulfillment(of: [started], timeout: 1)
+        task.cancel()
+        await gate.open()
+        await task.value
+        XCTAssertFalse(sut.isLoading)
+        XCTAssertTrue(sut.routes.isEmpty)
+        XCTAssertNil(sut.errorMessage)
+        service.featuredHandler = nil
+        await sut.retry()
+        XCTAssertEqual(sut.routes, [Self.browseSummary])
+        XCTAssertEqual(service.featuredCallCount, 2)
+    }
+
+    func testCollectionCancellationRejectsLateDataAndAllowsRetry() async {
+        let started = expectation(description: "collection started")
+        let gate = RouteAsyncGate()
+        let service = RouteDiscoveryServiceStub(all: PublicRouteCollectionResult(items: [Self.browseSummary]))
+        service.collectionHandler = {
+            started.fulfill()
+            await gate.wait()
+            return PublicRouteCollectionResult(items: [Self.browseSummary])
+        }
+        let sut = RouteCollectionViewModel(service: service)
+        let task = Task { await sut.loadRoutes() }
+        await fulfillment(of: [started], timeout: 1)
+        task.cancel()
+        await gate.open()
+        await task.value
+        XCTAssertFalse(sut.isLoading)
+        XCTAssertTrue(sut.routes.isEmpty)
+        XCTAssertNil(sut.errorMessage)
+        service.collectionHandler = nil
+        await sut.retry()
+        XCTAssertEqual(sut.routes, [Self.browseSummary])
+        XCTAssertEqual(service.collectionCallCount, 2)
+    }
+
+    func testDiscoveryCancellationFinishesBeforeServiceAndOldFailureCannotEndRetry() async {
+        let firstStarted = expectation(description: "first discovery started")
+        let secondStarted = expectation(description: "second discovery started")
+        let cancelled = expectation(description: "discovery cancellation published")
+        let firstGate = RouteAsyncGate()
+        let secondGate = RouteAsyncGate()
+        let service = RouteDiscoveryServiceStub()
+        var calls = 0
+        service.featuredHandler = {
+            calls += 1
+            if calls == 1 {
+                firstStarted.fulfill()
+                await firstGate.wait()
+                throw APIClientError.transport(.other("旧错误"))
+            }
+            secondStarted.fulfill()
+            await secondGate.wait()
+            return PublicRouteDiscoveryResult(items: [Self.browseSummary])
+        }
+        let sut = RouteDiscoveryViewModel(service: service)
+        let first = Task { await sut.loadRoutes() }
+        await fulfillment(of: [firstStarted], timeout: 1)
+        await sut.loadRoutes()
+        XCTAssertEqual(calls, 1, "进行中的重复加载不另起请求")
+        withObservationTracking { _ = sut.isLoading } onChange: { cancelled.fulfill() }
+        first.cancel()
+        await fulfillment(of: [cancelled], timeout: 1)
+        XCTAssertFalse(sut.isLoading, "不等待不合作的 Service 才结束取消状态")
+        let second = Task { await sut.retry() }
+        await fulfillment(of: [secondStarted], timeout: 1)
+        await firstGate.open()
+        await first.value
+        XCTAssertTrue(sut.isLoading)
+        XCTAssertNil(sut.errorMessage)
+        await secondGate.open()
+        await second.value
+        XCTAssertEqual(sut.routes, [Self.browseSummary])
+    }
+
+    func testCollectionCancellationFinishesBeforeServiceAndOldSuccessCannotEndRetry() async {
+        let firstStarted = expectation(description: "first collection started")
+        let secondStarted = expectation(description: "second collection started")
+        let cancelled = expectation(description: "collection cancellation published")
+        let firstGate = RouteAsyncGate()
+        let secondGate = RouteAsyncGate()
+        let service = RouteDiscoveryServiceStub()
+        var calls = 0
+        service.collectionHandler = {
+            calls += 1
+            if calls == 1 {
+                firstStarted.fulfill()
+                await firstGate.wait()
+                return PublicRouteCollectionResult(items: [Self.browseSummary])
+            }
+            secondStarted.fulfill()
+            await secondGate.wait()
+            return PublicRouteCollectionResult(items: [])
+        }
+        let sut = RouteCollectionViewModel(service: service)
+        let first = Task { await sut.loadRoutes() }
+        await fulfillment(of: [firstStarted], timeout: 1)
+        await sut.loadRoutes()
+        XCTAssertEqual(calls, 1)
+        withObservationTracking { _ = sut.isLoading } onChange: { cancelled.fulfill() }
+        first.cancel()
+        await fulfillment(of: [cancelled], timeout: 1)
+        XCTAssertFalse(sut.isLoading)
+        let second = Task { await sut.retry() }
+        await fulfillment(of: [secondStarted], timeout: 1)
+        await firstGate.open()
+        await first.value
+        XCTAssertTrue(sut.isLoading, "旧 defer 不得结束新 loading")
+        XCTAssertTrue(sut.routes.isEmpty, "已取消请求的迟到结果不得发布")
+        await secondGate.open()
+        await second.value
+        XCTAssertTrue(sut.routes.isEmpty)
+        XCTAssertFalse(sut.isLoading)
+    }
+
+    func testSearchCancellationAtQueryChangeSkipsDebounceRequestAndPreservesRestoration() async {
+        let service = RouteDiscoveryServiceStub(search: PublicRouteSearchResult(state: .completed, items: [Self.searchSummary]))
+        let sut = RouteDiscoveryViewModel(service: service)
+        await sut.search(query: "A", immediate: true)
+        withObservationTracking {
+            _ = sut.searchContext.query
+        } onChange: {
+            // Observation 在写入任务内同步通知；精确取消 B，不靠抢在 300ms 前唤醒测试。
+            withUnsafeCurrentTask { $0?.cancel() }
+        }
+        let task = Task { await sut.search(query: "B") }
+        await task.value
+        XCTAssertFalse(sut.isSearching)
+        XCTAssertTrue(sut.searchResults.isEmpty)
+        XCTAssertNil(sut.searchErrorMessage)
+        XCTAssertEqual(service.searchQueries, ["A"])
+        await sut.search(query: "A")
+        XCTAssertEqual(sut.searchResults, [Self.searchSummary])
+    }
+
+    func testDetailOldSuccessAndFailureCannotFinishNewLoading() async {
+        let aDetail = Self.detail(routeID: "A", availability: .missing, mainTrack: nil)
+        let bDetail = Self.detail(routeID: "B", availability: .missing, mainTrack: nil)
+        let lateResults: [Result<PublicRouteDetail, Error>] = [
+            .success(aDetail), .failure(APIClientError.transport(.other("旧错误"))),
+        ]
+        for lateResult in lateResults {
+            let aStarted = expectation(description: "detail A started")
+            let bStarted = expectation(description: "detail B started")
+            let aGate = RouteAsyncGate()
+            let bGate = RouteAsyncGate()
+            let service = RouteDetailServiceStub(detail: bDetail)
+            service.loadHandler = { id in
+                if id == "A" {
+                    aStarted.fulfill()
+                    await aGate.wait()
+                    return try lateResult.get()
+                }
+                bStarted.fulfill()
+                await bGate.wait()
+                return bDetail
+            }
+            let sut = RouteDetailViewModel(service: service)
+            let a = Task { await sut.loadRoute(id: "A") }
+            await fulfillment(of: [aStarted], timeout: 1)
+            let b = Task { await sut.loadRoute(id: "B") }
+            await fulfillment(of: [bStarted], timeout: 1)
+            await aGate.open()
+            await a.value
+            XCTAssertTrue(sut.isLoading, "旧 defer 不得结束 B 的 loading")
+            XCTAssertNil(sut.route)
+            XCTAssertNil(sut.errorMessage)
+            await bGate.open()
+            await b.value
+            XCTAssertEqual(sut.route, bDetail)
+            service.loadHandler = nil
+            await sut.retry()
+            XCTAssertEqual(service.loadedIDs, ["A", "B", "B"])
+        }
+    }
+
+    func testDetailLatestResultSurvivesLateOldSuccess() async {
+        let aDetail = Self.detail(routeID: "A", availability: .missing, mainTrack: nil)
+        let bDetail = Self.detail(routeID: "B", availability: .missing, mainTrack: nil)
+        let started = expectation(description: "old detail started")
+        let gate = RouteAsyncGate()
+        let service = RouteDetailServiceStub(detail: bDetail)
+        service.loadHandler = { id in
+            guard id == "A" else { return bDetail }
+            started.fulfill()
+            await gate.wait()
+            return aDetail
+        }
+        let sut = RouteDetailViewModel(service: service)
+        let old = Task { await sut.loadRoute(id: "A") }
+        await fulfillment(of: [started], timeout: 1)
+        await sut.loadRoute(id: "B")
+        await gate.open()
+        await old.value
+        XCTAssertEqual(sut.route, bDetail)
+        XCTAssertFalse(sut.isLoading)
+        XCTAssertNil(sut.errorMessage)
+    }
+
+    func testDetailSwitchClearsPreviousRouteProjectionAndCancelledResult() async {
+        let aDetail = Self.detail(routeID: "A", availability: .valid, mainTrack: PublicRouteMainTrack(
+            identity: "track-A",
+            path: [PublicRouteGeoPosition(latitude: 29, longitude: 101, referenceSystem: "WGS84")]
+        ))
+        let bDetail = Self.detail(routeID: "B", availability: .missing, mainTrack: nil)
+        let service = RouteDetailServiceStub(detail: aDetail)
+        let sut = RouteDetailViewModel(service: service)
+        await sut.loadRoute(id: "A")
+        sut.togglePointHighlight(for: "point-1")
+        XCTAssertFalse(sut.mapCoordinates.isEmpty)
+        let started = expectation(description: "new detail started")
+        let gate = RouteAsyncGate()
+        service.loadHandler = { _ in
+            started.fulfill()
+            await gate.wait()
+            return bDetail
+        }
+        let task = Task { await sut.loadRoute(id: "B") }
+        await fulfillment(of: [started], timeout: 1)
+        XCTAssertNil(sut.route)
+        XCTAssertTrue(sut.mapCoordinates.isEmpty)
+        XCTAssertTrue(sut.waypointAnnotations.isEmpty)
+        XCTAssertNil(sut.highlightedPointIdentity)
+        let cancelled = expectation(description: "detail cancellation published")
+        withObservationTracking { _ = sut.isLoading } onChange: { cancelled.fulfill() }
+        task.cancel()
+        await fulfillment(of: [cancelled], timeout: 1)
+        XCTAssertFalse(sut.isLoading)
+        await gate.open()
+        await task.value
+        XCTAssertNil(sut.route)
+        XCTAssertFalse(sut.isLoading)
+        XCTAssertNil(sut.errorMessage)
+    }
+
+    func testDetailSameIDReloadRejectsOldResponseByGeneration() async {
+        let oldDetail = Self.detail(availability: .missing, mainTrack: nil)
+        let newDetail = Self.detail(availability: .pendingReview, mainTrack: nil)
+        let started = expectation(description: "first same ID load started")
+        let gate = RouteAsyncGate()
+        let service = RouteDetailServiceStub(detail: newDetail)
+        var calls = 0
+        service.loadHandler = { _ in
+            calls += 1
+            guard calls == 1 else { return newDetail }
+            started.fulfill()
+            await gate.wait()
+            return oldDetail
+        }
+        let sut = RouteDetailViewModel(service: service)
+        let old = Task { await sut.loadRoute(id: "route-1") }
+        await fulfillment(of: [started], timeout: 1)
+        await sut.loadRoute(id: "route-1")
+        await gate.open()
+        await old.value
+        XCTAssertEqual(sut.route, newDetail)
+        XCTAssertFalse(sut.isLoading)
+    }
+
+    func testCancelledOldDetailCannotEndNewLoading() async {
+        let detail = Self.detail(routeID: "B", availability: .missing, mainTrack: nil)
+        let aStarted = expectation(description: "detail A started")
+        let bStarted = expectation(description: "detail B started")
+        let aGate = RouteAsyncGate()
+        let bGate = RouteAsyncGate()
+        let service = RouteDetailServiceStub(detail: detail)
+        service.loadHandler = { id in
+            if id == "A" {
+                aStarted.fulfill()
+                await aGate.wait()
+                throw CancellationError()
+            }
+            bStarted.fulfill()
+            await bGate.wait()
+            return detail
+        }
+        let sut = RouteDetailViewModel(service: service)
+        let a = Task { await sut.loadRoute(id: "A") }
+        await fulfillment(of: [aStarted], timeout: 1)
+        let b = Task { await sut.loadRoute(id: "B") }
+        await fulfillment(of: [bStarted], timeout: 1)
+        a.cancel()
+        await aGate.open()
+        await a.value
+        XCTAssertTrue(sut.isLoading)
+        XCTAssertNil(sut.errorMessage)
+        await bGate.open()
+        await b.value
+        XCTAssertEqual(sut.route, detail)
+        XCTAssertFalse(sut.isLoading)
+    }
+
+    func testServiceCancellationDoesNotFailDiscoveryWithoutTaskCancellation() async {
+        let service = RouteDiscoveryServiceStub(featured: PublicRouteDiscoveryResult(items: [Self.browseSummary]))
+        service.featuredHandler = { throw APIClientError.transport(.cancelled) }
+        let sut = RouteDiscoveryViewModel(service: service)
+        await sut.loadRoutes()
+        XCTAssertFalse(Task.isCancelled)
+        XCTAssertFalse(sut.isLoading)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertTrue(sut.routes.isEmpty)
+        service.featuredHandler = nil
+        await sut.retry()
+        XCTAssertEqual(sut.routes, [Self.browseSummary])
+    }
+
+    func testServiceCancellationDoesNotFailSearchWithoutTaskCancellation() async {
+        let service = RouteDiscoveryServiceStub(search: PublicRouteSearchResult(state: .completed, items: [Self.searchSummary]))
+        let sut = RouteDiscoveryViewModel(service: service)
+        await sut.search(query: "A", immediate: true)
+        service.searchHandler = { _ in throw APIClientError.transport(.cancelled) }
+        await sut.search(query: "B", immediate: true)
+        XCTAssertFalse(Task.isCancelled)
+        XCTAssertFalse(sut.isSearching)
+        XCTAssertNil(sut.searchErrorMessage)
+        XCTAssertTrue(sut.searchResults.isEmpty)
+        await sut.search(query: "A")
+        XCTAssertEqual(sut.searchResults, [Self.searchSummary])
+    }
+
+    func testServiceCancellationDoesNotFailCollectionWithoutTaskCancellation() async {
+        let service = RouteDiscoveryServiceStub(all: PublicRouteCollectionResult(items: [Self.browseSummary]))
+        service.collectionHandler = { throw APIClientError.transport(.cancelled) }
+        let sut = RouteCollectionViewModel(service: service)
+        await sut.loadRoutes()
+        XCTAssertFalse(Task.isCancelled)
+        XCTAssertFalse(sut.isLoading)
+        XCTAssertNil(sut.errorMessage)
+        service.collectionHandler = nil
+        await sut.retry()
+        XCTAssertEqual(sut.routes, [Self.browseSummary])
+    }
+
+    func testServiceCancellationDoesNotFailDetailAndKeepsSnapshotOnRefresh() async {
+        let detail = Self.detail(availability: .missing, mainTrack: nil)
+        let service = RouteDetailServiceStub(detail: detail, loadErrors: [APIClientError.transport(.cancelled)])
+        let sut = RouteDetailViewModel(service: service)
+        await sut.loadRoute(id: detail.routeId)
+        XCTAssertFalse(Task.isCancelled)
+        XCTAssertFalse(sut.isLoading)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertNil(sut.route)
+        await sut.retry()
+        let snapshot = sut.state.snapshot
+        service.loadHandler = { _ in throw APIClientError.transport(.cancelled) }
+        await sut.retry()
+        XCTAssertFalse(sut.isLoading)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertEqual(sut.route, detail)
+        XCTAssertEqual(sut.state.snapshot?.waypointAnnotations, snapshot?.waypointAnnotations)
+    }
+
+    func testDetailSnapshotIsPublishedWithRouteAndUnaffectedBySelection() async throws {
+        let detail = Self.detail(availability: .valid, mainTrack: PublicRouteMainTrack(
+            identity: "track", path: [
+                PublicRouteGeoPosition(latitude: 29, longitude: 101, referenceSystem: "WGS84"),
+                PublicRouteGeoPosition(latitude: 30, longitude: 102, referenceSystem: "WGS84"),
+            ]
+        ))
+        let sut = RouteDetailViewModel(service: RouteDetailServiceStub(detail: detail))
+        await sut.loadRoute(id: detail.routeId)
+        let snapshot = try XCTUnwrap(sut.state.snapshot)
+        XCTAssertEqual(snapshot.route, sut.route)
+        XCTAssertEqual(snapshot.mapCoordinates.map(\.latitude), [29, 30])
+        XCTAssertEqual(snapshot.waypointAnnotations, sut.waypointAnnotations)
+        sut.togglePointHighlight(for: "point-1")
+        XCTAssertEqual(sut.state.snapshot?.route, snapshot.route)
+        XCTAssertEqual(sut.mapCoordinates.map(\.latitude), snapshot.mapCoordinates.map(\.latitude))
+        XCTAssertFalse(sut.highlightedAnnotationIDs.isEmpty)
+    }
+
+    func testDetailHeavyProjectionUsesStoredSnapshotAndNonisolatedBuilder() throws {
+        let source = try productionSource(at: "Features/Routes/RouteDetailViewModel.swift")
+        let state = try productionSource(at: "Features/Routes/RouteDetailState.swift")
+        XCTAssertTrue(source.contains("nonisolated static func makeSnapshot"))
+        XCTAssertTrue(source.contains("await Self.makeSnapshot(from: detail)"))
+        XCTAssertTrue(source.contains("state.snapshot?.mapCoordinates ?? []"))
+        XCTAssertTrue(source.contains("state.snapshot?.mapSegments ?? []"))
+        XCTAssertTrue(source.contains("state.snapshot?.poiAnnotations ?? []"))
+        XCTAssertTrue(source.contains("state.snapshot?.elevationSamples ?? []"))
+        XCTAssertTrue(state.contains("let route: PublicRouteDetail"))
+        XCTAssertTrue(state.contains("let mapCoordinates: [CLLocationCoordinate2D]"))
+        XCTAssertTrue(state.contains("let mapSegments: [RouteMapSegment]"))
+        XCTAssertTrue(source.contains("state.snapshot?.dayMapSegments ?? []"))
+        XCTAssertTrue(source.contains("state.snapshot?.coloredMapSegments ?? []"))
+        let page = try productionSource(at: "Features/Routes/RouteDetailView.swift")
+        let overlay = try productionSource(at: "Features/Routes/RouteDetailViewSupport.swift")
+        XCTAssertTrue(page.contains("elevationProfile: viewModel.elevationProfileProjection"))
+        XCTAssertTrue(overlay.contains("let elevationProfile: ElevationProfileProjection?"))
+        XCTAssertFalse(overlay.contains("presentation.elevationProfileProjection"))
+        XCTAssertFalse(source.contains("guard let profile = elevationProfile else"), "章节元数据不能重建海拔采样数组")
     }
 
     func testRootOwnsRouteListSearchAndDetailNavigation() throws {
@@ -490,6 +1131,14 @@ final class RouteDetailViewModelTests: XCTestCase {
         XCTAssertEqual(presentation.elevationProfile?.samples, sut.elevationSamples)
         XCTAssertEqual(presentation.elevationProfile?.minElevation, 3_000)
         XCTAssertEqual(presentation.elevationProfile?.maxElevation, 3_200)
+        let snapshot = try XCTUnwrap(sut.state.snapshot)
+        XCTAssertEqual(snapshot.elevationSamples, sut.elevationSamples)
+        XCTAssertEqual(snapshot.elevationProfile, presentation.elevationProfileProjection)
+        XCTAssertEqual(sut.elevationProfileProjection, snapshot.elevationProfile)
+        XCTAssertEqual(sut.pureMapDockProjection.elevation, snapshot.elevationProfile)
+        sut.togglePointHighlight(for: "point-1")
+        XCTAssertEqual(sut.elevationProfileProjection, snapshot.elevationProfile)
+        XCTAssertEqual(sut.elevationSamples, snapshot.elevationSamples)
         let source = try routeDetailPageSources()
         XCTAssertTrue(source.contains("RouteBusinessComponents.ElevationProfile("))
     }
@@ -779,6 +1428,7 @@ final class RouteDetailViewModelTests: XCTestCase {
     )
 
     private static func detail(
+        routeID: String = "route-1",
         routeType: PublicRouteType = .multiDay,
         availability: MainTrackAvailability,
         mainTrack: PublicRouteMainTrack?,
@@ -793,7 +1443,7 @@ final class RouteDetailViewModelTests: XCTestCase {
         waterSources: [PublicRouteWaterSource]? = nil
     ) -> PublicRouteDetail {
         PublicRouteDetail(
-            routeId: "route-1",
+            routeId: routeID,
             currentVersion: PublicRouteVersionDetail(
                 versionId: "version-1",
                 summary: PublicRouteSummary(
@@ -856,7 +1506,8 @@ final class RouteDetailViewModelTests: XCTestCase {
 private final class RouteDetailServiceStub: RouteDetailServicing {
     private let detail: PublicRouteDetail
     private var loadErrors: [Error]
-    var loadedIDs: [String] = []
+    private(set) var loadedIDs: [String] = []
+    var loadHandler: ((String) async throws -> PublicRouteDetail)?
 
     init(detail: PublicRouteDetail, loadErrors: [Error] = []) {
         self.detail = detail
@@ -865,17 +1516,24 @@ private final class RouteDetailServiceStub: RouteDetailServicing {
 
     func getRouteDetail(id: String) async throws -> PublicRouteDetail {
         loadedIDs.append(id)
+        if let loadHandler { return try await loadHandler(id) }
         if !loadErrors.isEmpty { throw loadErrors.removeFirst() }
         return detail
     }
 }
 
+@MainActor
 private final class RouteDiscoveryServiceStub: RouteDiscoveryServicing {
     private let featured: PublicRouteDiscoveryResult
     private let allRoutes: PublicRouteCollectionResult
     private var searchResults: [PublicRouteSearchResult]
     private let searchError: Error?
     private(set) var searchQueries: [String?] = []
+    private(set) var featuredCallCount = 0
+    private(set) var collectionCallCount = 0
+    var featuredHandler: (() async throws -> PublicRouteDiscoveryResult)?
+    var collectionHandler: (() async throws -> PublicRouteCollectionResult)?
+    var searchHandler: ((String?) async throws -> PublicRouteSearchResult)?
 
     init(
         featured: PublicRouteDiscoveryResult = PublicRouteDiscoveryResult(items: []),
@@ -890,14 +1548,44 @@ private final class RouteDiscoveryServiceStub: RouteDiscoveryServicing {
         self.searchError = searchError
     }
 
-    func getFeaturedRoutes() async throws -> PublicRouteDiscoveryResult { featured }
-    func getRoutes() async throws -> PublicRouteCollectionResult { allRoutes }
+    func getFeaturedRoutes() async throws -> PublicRouteDiscoveryResult {
+        featuredCallCount += 1
+        if let featuredHandler { return try await featuredHandler() }
+        return featured
+    }
+
+    func getRoutes() async throws -> PublicRouteCollectionResult {
+        collectionCallCount += 1
+        if let collectionHandler { return try await collectionHandler() }
+        return allRoutes
+    }
+
     func searchRoutes(query: String?) async throws -> PublicRouteSearchResult {
         searchQueries.append(query)
+        if let searchHandler { return try await searchHandler(query) }
         if let searchError { throw searchError }
         guard !searchResults.isEmpty else {
             return PublicRouteSearchResult(state: .initial, items: [])
         }
         return searchResults.removeFirst()
+    }
+}
+
+/// 故意不响应 Task 取消，以覆盖 Service 不合作取消时的迟到结果。
+private actor RouteAsyncGate {
+    private var isOpen = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func open() {
+        isOpen = true
+        continuation?.resume()
+        continuation = nil
     }
 }

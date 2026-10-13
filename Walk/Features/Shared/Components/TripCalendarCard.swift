@@ -56,10 +56,29 @@ extension SharedBusinessComponents {
 }
 
 #if DEBUG
+extension TripCalendarCardProjection {
+    private static let sampleDays: [TripHeatmapDayProjection] = TripHeatmapDayProjection.sampleBusinessDates.enumerated().map { index, date in
+        TripHeatmapDayProjection(
+            businessDate: date,
+            level: index.isMultiple(of: 53) ? (index.isMultiple(of: 106) ? .medium : .low) : .empty
+        )
+    }
+
+    static let `default` = TripCalendarCardProjection(
+        days: TripCalendarCardProjection.sampleDays,
+        emptyHint: nil
+    )
+
+    static let empty = TripCalendarCardProjection(
+        days: TripHeatmapDayProjection.emptyYear,
+        emptyHint: "过去 365 天还没有个人行程"
+    )
+}
+
 #Preview("TripCalendarCard.default") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.TripCalendarCard(
-            projection: BusinessComponentPreviewFixtures.tripCalendarDefault,
+            projection: TripCalendarCardProjection.default,
             onActivate: {}
         )
     }
@@ -68,7 +87,7 @@ extension SharedBusinessComponents {
 #Preview("TripCalendarCard.empty") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.TripCalendarCard(
-            projection: BusinessComponentPreviewFixtures.tripCalendarEmpty,
+            projection: TripCalendarCardProjection.empty,
             onActivate: {}
         )
     }

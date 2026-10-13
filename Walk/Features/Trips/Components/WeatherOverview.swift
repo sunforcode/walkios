@@ -42,10 +42,28 @@ extension TripBusinessComponents {
 }
 
 #if DEBUG
+extension WeatherOverviewProjection {
+    static let `default` = WeatherOverviewProjection(
+        summary: TripWeatherValueProjection(value: "行程前半段多云，后半段有阵雨。", state: nil),
+        importantImpacts: [
+            "午后通过垭口时可能遇到短时雷雨。",
+            "山脊阵风可能影响队伍行进节奏。",
+        ]
+    )
+
+    static let stale = WeatherOverviewProjection(
+        summary: TripWeatherValueProjection(
+            value: "原概况提示垭口区域以多云和间歇阵雨为主。",
+            state: .stale
+        ),
+        importantImpacts: ["请结合逐日天气与实际现场条件判断。"]
+    )
+}
+
 #Preview("WeatherOverview.default") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.WeatherOverview(
-            projection: BusinessComponentPreviewFixtures.weatherOverviewDefault
+            projection: WeatherOverviewProjection.default
         )
     }
 }
@@ -53,7 +71,7 @@ extension TripBusinessComponents {
 #Preview("WeatherOverview.stale") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.WeatherOverview(
-            projection: BusinessComponentPreviewFixtures.weatherOverviewStale
+            projection: WeatherOverviewProjection.stale
         )
     }
 }

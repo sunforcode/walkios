@@ -6,21 +6,21 @@ import WalkDesignSystem
 
 @MainActor
 final class RootNavigationTests: XCTestCase {
-    func testAppShellStartsOnHomeWithThreeApprovedTabs() {
+    func testAppShellStartsOnTripsWithFourApprovedTabs() {
         let sut = AppShellState()
 
-        XCTAssertEqual(sut.selectedTab, .home)
-        XCTAssertEqual(AppTab.allCases, [.home, .routes, .profile])
-        XCTAssertEqual(AppTab.allCases.map(\.title), ["首页", "路线", "我的"])
+        XCTAssertEqual(sut.selectedTab, .trips)
+        XCTAssertEqual(AppTab.allCases.map(\.rawValue), ["trips", "routes", "equipment", "profile"])
+        XCTAssertEqual(AppTab.allCases.map(\.title), ["行程", "路线", "装备", "我的"])
     }
 
     func testAppShellKeepsIndependentNavigationPaths() {
         var sut = AppShellState()
         sut.setPath([.routeDetail("route-1")], for: .routes)
-        sut.selectTab(.home)
+        sut.selectTab(.trips)
 
         XCTAssertEqual(sut.path(for: .routes), [.routeDetail("route-1")])
-        XCTAssertTrue(sut.path(for: .home).isEmpty)
+        XCTAssertTrue(sut.path(for: .trips).isEmpty)
     }
 
     func testShowRouteDiscoverySelectsRoutesTabAtRoot() {
@@ -120,7 +120,7 @@ final class RootNavigationTests: XCTestCase {
     func testPendingAuthIntentPreservesRouteAndSourceContext() {
         XCTAssertEqual(PendingAuthIntent.createTrip(routeID: "route-1"), .createTrip(routeID: "route-1"))
         XCTAssertEqual(PendingAuthIntent.profile, .profile)
-        XCTAssertEqual(PendingAuthIntent.homeStart, .homeStart)
+        XCTAssertEqual(PendingAuthIntent.trips, .trips)
     }
 
     func testAuthenticationGatePresentsLoginAsModalWithoutDiscardingCurrentPath() {
@@ -158,14 +158,12 @@ final class RootNavigationTests: XCTestCase {
     func testProductionRootHasNoGuideToolOrUnscopedCreateBranches() throws {
         let rootSource = try productionSource(at: "App/RootView.swift")
         let destinationSource = try productionSource(at: "App/RootNavigation.swift")
-        let homeSource = try productionSource(at: "Features/Home/HomeView.swift")
         let createSource = try productionSource(at: "Features/Trips/CreateTripView.swift")
 
         XCTAssertFalse(rootSource.contains("GuidesTab"))
         XCTAssertFalse(rootSource.contains("DrawerView"))
         XCTAssertFalse(destinationSource.contains("case navigation"))
         XCTAssertFalse(destinationSource.contains("case tool"))
-        XCTAssertFalse(homeSource.contains("onOpenTools"))
         XCTAssertFalse(createSource.contains("UnscopedCreateTripGuidanceView"))
     }
 
@@ -174,6 +172,98 @@ final class RootNavigationTests: XCTestCase {
 
         XCTAssertTrue(source.contains("actionTitle: \"查找路线\""))
         XCTAssertFalse(source.contains("创建行程"))
+    }
+
+    func testAllFourStacksRemainIndependent() {
+        var sut = AppShellState()
+        sut.setPath([.routeDetail("route")], for: .routes)
+        sut.setPath([.tripDetail("trip"), .tripEquipment("trip"), .personalEquipment], for: .trips)
+        sut.setPath([.equipmentEdit(equipmentID: "gear")], for: .equipment)
+        sut.setPath([.profileDetails], for: .profile)
+        sut.selectTab(.equipment)
+        XCTAssertEqual(sut.path(for: .trips).last, .personalEquipment)
+        sut.setPath([.tripDetail("trip"), .tripEquipment("trip")], for: .trips)
+        XCTAssertEqual(sut.path(for: .equipment), [.equipmentEdit(equipmentID: "gear")])
+        XCTAssertEqual(sut.path(for: .routes), [.routeDetail("route")])
+        XCTAssertEqual(sut.path(for: .profile), [.profileDetails])
+    }
+
+    func testSessionLossClearsPersonalStacksAndRevisionsButRetainsPublicSource() {
+        var sut = AppShellState()
+        sut.setPath([.routeDetail("route"), .createTrip(routeID: "route")], for: .routes)
+        sut.setPath([.tripDetail("trip"), .personalEquipment], for: .trips)
+        sut.setPath([.equipmentEdit(equipmentID: "gear")], for: .equipment)
+        sut.recordTripRevision("revision", tripID: "trip")
+        sut.presentAccountMenu()
+        sut.clearPersonalNavigation()
+        XCTAssertEqual(sut.path(for: .routes), [.routeDetail("route")])
+        XCTAssertTrue(sut.path(for: .trips).isEmpty)
+        XCTAssertTrue(sut.path(for: .equipment).isEmpty)
+        XCTAssertNil(sut.reloadRevision(for: "trip"))
+        XCTAssertFalse(sut.isAccountMenuPresented)
+    }
+
+    func testLogoutClearsEveryStackAndReturnsToTrips() {
+        var sut = AppShellState()
+        for tab in AppTab.allCases { sut.setPath([.tripDetail("trip")], for: tab) }
+        sut.selectTab(.equipment)
+        sut.routeListShowsBackEntry = true
+        sut.presentAccountMenu()
+        sut.presentLogin()
+        sut.recordTripRevision("revision", tripID: "trip")
+        sut.resetAfterLogout()
+        XCTAssertEqual(sut.selectedTab, .trips)
+        XCTAssertTrue(AppTab.allCases.allSatisfy { sut.path(for: $0).isEmpty })
+        XCTAssertNil(sut.reloadRevision(for: "trip"))
+        XCTAssertFalse(sut.routeListShowsBackEntry)
+        XCTAssertFalse(sut.isAccountMenuPresented)
+        XCTAssertFalse(sut.isLoginPresented)
+    }
+
+    func testReauthenticationRestoresOnlyCurrentTaskAfterPersonalDataIsCleared() {
+        var sut = AppShellState()
+        sut.selectTab(.trips)
+        let path: [AppDestination] = [.tripDetail("trip"), .tripEquipment("trip")]
+        sut.setPath(path, for: .trips)
+        sut.setPath([.equipmentEdit(equipmentID: "gear")], for: .equipment)
+        sut.recordTripRevision("old-revision", tripID: "trip")
+        sut.suspendSelectedTask()
+        sut.clearPersonalNavigation()
+        XCTAssertTrue(sut.path(for: .trips).isEmpty)
+        sut.selectTab(.routes)
+        sut.resumeSuspendedTask()
+        XCTAssertEqual(sut.selectedTab, .trips)
+        XCTAssertEqual(sut.path(for: .trips), path)
+        XCTAssertTrue(sut.path(for: .equipment).isEmpty)
+        XCTAssertNil(sut.reloadRevision(for: "trip"))
+        sut.setPath([], for: .trips)
+        sut.resumeSuspendedTask()
+        XCTAssertTrue(sut.path(for: .trips).isEmpty, "恢复意图只能消费一次")
+    }
+
+    func testCancelledReauthenticationAndLogoutCannotRestoreSuspendedTask() {
+        for logout in [false, true] {
+            var sut = AppShellState()
+            sut.selectTab(.trips)
+            sut.setPath([.tripDetail("private-trip")], for: .trips)
+            sut.suspendSelectedTask()
+            sut.clearPersonalNavigation()
+            if logout { sut.resetAfterLogout() } else { sut.discardSuspendedTask() }
+            sut.resumeSuspendedTask()
+            XCTAssertTrue(sut.path(for: .trips).isEmpty)
+        }
+    }
+
+    func testTripEquipmentModelsAreReusedOnlyWithinCurrentSession() {
+        let session = TripEquipmentSession()
+        let client = MockAPIClient(fixtures: DefaultMockFixtures.all())
+        let service = TripEquipmentService(apiClient: client)
+        let equipment = EquipmentService(apiClient: client)
+        let original = session.model(tripID: "trip-1", service: service, equipmentService: equipment)
+        XCTAssertTrue(original === session.model(tripID: "trip-1", service: service, equipmentService: equipment))
+        XCTAssertFalse(original === session.model(tripID: "trip-2", service: service, equipmentService: equipment))
+        session.clear()
+        XCTAssertFalse(original === session.model(tripID: "trip-1", service: service, equipmentService: equipment))
     }
 
     private func productionSource(at relativePath: String) throws -> String {

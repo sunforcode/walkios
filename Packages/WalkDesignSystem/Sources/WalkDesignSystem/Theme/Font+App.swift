@@ -4,6 +4,10 @@ import SwiftUI
 public enum AppTypography {
      public static let brandMark = Font.system(size: 18, weight: .bold)
      public static let displayTitle = Font.system(size: 32, weight: .bold)
+     public static let editorialTitleBaseSize: CGFloat = 42
+     public static func editorialTitle(size: CGFloat) -> Font {
+         .system(size: size, weight: .semibold, design: .serif)
+     }
      public static let pageTitle = Font.system(size: 32, weight: .bold)
      public static let contextTitle = Font.system(size: 18, weight: .semibold)
      public static let dayDate = Font.system(size: 27, weight: .bold)
@@ -47,6 +51,7 @@ public enum AppTypography {
 public extension Font {
      public static let brandMark = AppTypography.brandMark
      public static let displayTitle = AppTypography.displayTitle
+     public static func editorialTitle(size: CGFloat) -> Font { AppTypography.editorialTitle(size: size) }
      public static let pageTitle = AppTypography.pageTitle
      public static let contextTitle = AppTypography.contextTitle
      public static let dayDate = AppTypography.dayDate

@@ -2,80 +2,25 @@ import SwiftUI
 import WalkData
 import WalkDesignSystem
 
-enum EquipmentEditMode: Equatable {
-    case create
-    case edit(equipmentID: String)
-
-    init(equipmentID: String?) {
-        if let equipmentID {
-            self = .edit(equipmentID: equipmentID)
-        } else {
-            self = .create
-        }
-    }
-}
-
-struct EquipmentEditFormValues: Equatable {
-    let name: String
-    let ownedQuantity: Int
-    let unitWeightGrams: String
-
-    static let empty = EquipmentEditFormValues(name: "", ownedQuantity: 1, unitWeightGrams: "")
-}
-
-enum EquipmentEditPresentation {
-    static func isDirty(current: EquipmentEditFormValues, initial: EquipmentEditFormValues) -> Bool {
-        canonical(current) != canonical(initial)
-    }
-
-    private static func canonical(_ values: EquipmentEditFormValues) -> EquipmentEditFormValues {
-        EquipmentEditFormValues(
-            name: values.name.trimmingCharacters(in: .whitespacesAndNewlines),
-            ownedQuantity: values.ownedQuantity,
-            unitWeightGrams: values.unitWeightGrams.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
-    }
-}
-
-private enum EquipmentEditMutationIntent {
-    case save
-    case loadDeletionImpact
-    case delete
-}
-
 struct EquipmentEditView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var viewModel: EquipmentListViewModel
-    @State private var name = ""
-    @State private var quantityText = "1"
-    @State private var unitWeightGrams = ""
-    @State private var initialFormValues = EquipmentEditFormValues.empty
-    @State private var isNameFieldTouched = false
-    @State private var isQuantityFieldTouched = false
-    @State private var isWeightFieldTouched = false
-    @State private var showingDeletionConfirmation = false
-    @State private var showingDiscardConfirmation = false
-    @State private var mutationIntent: EquipmentEditMutationIntent?
-    @State private var failedMutationIntent: EquipmentEditMutationIntent?
+    @State private var viewModel: EquipmentEditViewModel
 
-    private let equipmentID: String?
-
-    init(service: any EquipmentServicing, equipmentID: String? = nil) {
-        self.equipmentID = equipmentID
-        _viewModel = StateObject(wrappedValue: EquipmentListViewModel(service: service))
+    init(service: any PersonalEquipmentManaging, equipmentID: String? = nil) {
+        _viewModel = State(initialValue: EquipmentEditViewModel(service: service, equipmentID: equipmentID))
     }
 
     var body: some View {
         UtilityPage(
-            title: mode == .create ? "新增一件装备" : "更新装备",
-            description: "本页只维护装备名称、实际拥有数量和可选的单件重量。",
+            title: viewModel.state.mode == .create ? "新增一件装备" : "更新装备",
+            description: "填写装备名称、分类、类型、拥有数量和可选的单件重量。",
             onBack: requestDismissal,
             bottomFixed: {
-                if isFormAvailable {
+                if viewModel.state.isFormAvailable {
                     PrimaryAction(
-                        title: mutationIntent == .save && viewModel.isMutating ? "正在保存" : "保存",
-                        isLoading: mutationIntent == .save && viewModel.isMutating,
-                        isDisabled: !isInputValid,
+                        title: viewModel.state.operation == .running(.save) ? "正在保存" : "保存",
+                        isLoading: viewModel.state.operation == .running(.save),
+                        isDisabled: !viewModel.state.isInputValid,
                         fillsWidth: true,
                         action: save
                     )
@@ -85,62 +30,56 @@ struct EquipmentEditView: View {
             pageContent
         }
         .navigationBarBackButtonHidden(true)
-        .interactiveDismissDisabled(isDirty)
+        .interactiveDismissDisabled(viewModel.state.isDirty)
         .background(
-            InteractiveDismissAttemptObserver(isDisabled: isDirty) {
-                showingDiscardConfirmation = true
+            InteractiveDismissAttemptObserver(isDisabled: viewModel.state.isDirty) {
+                _ = viewModel.requestDismissal()
             }
         )
         .overlay {
-            if showingDiscardConfirmation {
+            if viewModel.state.confirmation == .discard {
                 ConfirmationDialog(
                     title: "放弃未保存的修改？",
                     message: "返回后本页修改不会保存。",
                     confirmationTitle: "放弃修改",
                     cancelTitle: "继续编辑",
                     variant: .discard,
-                    onCancel: { showingDiscardConfirmation = false },
+                    onCancel: viewModel.cancelConfirmation,
                     onConfirm: {
-                        showingDiscardConfirmation = false
-                        initialFormValues = currentFormValues
+                        viewModel.discardChanges()
                         dismiss()
                     }
                 )
-            } else if showingDeletionConfirmation, let equipment = viewModel.editingEquipment {
+            } else if viewModel.state.confirmation == .deletion,
+                      let equipment = viewModel.state.loadedEquipment {
                 ConfirmationDialog(
                     title: "删除“\(equipment.name)”？",
-                    message: deletionConfirmationMessage,
+                    message: viewModel.state.deletionMessage,
                     confirmationTitle: "确认删除",
                     variant: .danger,
-                    isLoading: mutationIntent == .delete && viewModel.isMutating,
-                    onCancel: {
-                        guard !viewModel.isMutating else { return }
-                        showingDeletionConfirmation = false
-                    },
+                    isLoading: viewModel.state.operation == .running(.delete),
+                    onCancel: viewModel.cancelConfirmation,
                     onConfirm: confirmDeletion
                 )
             }
         }
-        .task { await loadEquipmentIfNeeded() }
-    }
-
-    private var mode: EquipmentEditMode {
-        EquipmentEditMode(equipmentID: equipmentID)
+        .task { await viewModel.load() }
+        .onDisappear { viewModel.invalidatePendingOperations() }
     }
 
     @ViewBuilder
     private var pageContent: some View {
-        switch mode {
+        switch viewModel.state.mode {
         case .create:
             formPage
         case .edit:
-            switch viewModel.editLoadState {
+            switch viewModel.state.loadState {
             case .idle, .loading:
                 LoadingView(message: "正在加载装备", variant: .section)
                     .frame(minHeight: 320)
             case .failed:
-                ErrorView(message: viewModel.errorMessage ?? "装备加载失败", variant: .section) {
-                    Task { await loadEquipmentIfNeeded() }
+                ErrorView(message: viewModel.state.errorMessage ?? "装备加载失败", variant: .section) {
+                    Task { await viewModel.load() }
                 }
                 .frame(minHeight: 320)
             case .loaded:
@@ -153,58 +92,55 @@ struct EquipmentEditView: View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
             PersonalEquipmentForm(
                 projection: PersonalEquipmentFormProjection(
-                    name: name,
-                    ownedQuantity: quantityText,
-                    unitWeight: unitWeightGrams,
-                    nameError: nameFieldError,
-                    ownedQuantityError: quantityFieldError,
-                    unitWeightError: weightFieldError,
-                    saveError: saveErrorMessage,
-                    isDisabled: viewModel.isMutating
+                    name: viewModel.state.draft.name,
+                    ownedQuantity: viewModel.state.draft.quantityText,
+                    unitWeight: viewModel.state.draft.unitWeightGrams,
+                    category: viewModel.state.draft.category,
+                    equipmentType: viewModel.state.draft.equipmentType,
+                    equipmentTypes: EquipmentClassificationOptions.types(for: viewModel.state.draft.category),
+                    nameError: viewModel.state.nameFieldError,
+                    ownedQuantityError: viewModel.state.quantityFieldError,
+                    unitWeightError: viewModel.state.weightFieldError,
+                    saveError: viewModel.state.saveErrorMessage,
+                    isDisabled: viewModel.state.isMutating
                 ),
                 onChangeField: updateFormField
             )
 
-            if mode != .create {
+            if viewModel.state.mode != .create {
                 editOnlyDangerZone
             }
         }
     }
 
     private func updateFormField(_ field: PersonalEquipmentFormField, _ value: String) {
-        failedMutationIntent = nil
         switch field {
-        case .name:
-            name = value
-            isNameFieldTouched = true
-            viewModel.clearNameError()
-        case .ownedQuantity:
-            quantityText = value
-            isQuantityFieldTouched = true
-        case .unitWeight:
-            unitWeightGrams = value
-            isWeightFieldTouched = true
+        case .name: viewModel.updateName(value)
+        case .category: viewModel.updateCategory(CatalogEquipmentCategory(rawValue: value))
+        case .equipmentType: viewModel.updateEquipmentType(CatalogEquipmentType(rawValue: value))
+        case .ownedQuantity: viewModel.updateQuantity(value)
+        case .unitWeight: viewModel.updateWeight(value)
         }
     }
 
     private var editOnlyDangerZone: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            if let impact = viewModel.deletionImpact {
+            if let impact = viewModel.state.deletionImpact {
                 EquipmentDeletionImpact(impact: impact)
             }
 
-            if let errorMessage = deletionErrorMessage {
+            if let errorMessage = viewModel.state.deletionErrorMessage {
                 ErrorView(message: errorMessage, title: "删除失败", variant: .form)
             }
 
             DangerAction(
-                title: mutationIntent == .loadDeletionImpact && viewModel.isMutating ? "正在读取删除影响" : "删除这件装备",
+                title: viewModel.state.operation == .running(.loadDeletionImpact) ? "正在读取删除影响" : "删除这件装备",
                 systemImage: "trash",
-                isLoading: mutationIntent == .loadDeletionImpact && viewModel.isMutating,
-                isDisabled: viewModel.isMutating,
+                isLoading: viewModel.state.operation == .running(.loadDeletionImpact),
+                isDisabled: viewModel.state.isMutating,
                 fillsWidth: true
             ) {
-                prepareDeletion()
+                Task { _ = await viewModel.prepareDeletion() }
             }
         }
         .padding(.top, Spacing.lg)
@@ -215,175 +151,19 @@ struct EquipmentEditView: View {
         }
     }
 
-    private var trimmedName: String {
-        name.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var trimmedQuantity: String {
-        quantityText.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var parsedQuantity: Int? {
-        Int(trimmedQuantity)
-    }
-
-    private var trimmedWeight: String {
-        unitWeightGrams.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var parsedWeight: Int? {
-        trimmedWeight.isEmpty ? nil : Int(trimmedWeight)
-    }
-
-    private var nameFieldError: String? {
-        if let conflict = viewModel.nameErrorMessage { return conflict }
-        return isNameFieldTouched && trimmedName.isEmpty ? "请输入装备名称" : nil
-    }
-
-    private var quantityFieldError: String? {
-        guard isQuantityFieldTouched else { return nil }
-        return (parsedQuantity ?? 0) > 0 ? nil : "请输入大于零的正整数"
-    }
-
-    private var weightFieldError: String? {
-        guard isWeightFieldTouched, !trimmedWeight.isEmpty else { return nil }
-        return (parsedWeight ?? 0) > 0 ? nil : "请输入大于零的克重"
-    }
-
-    private var isInputValid: Bool {
-        !trimmedName.isEmpty
-            && parsedQuantity.map { $0 > 0 } == true
-            && (trimmedWeight.isEmpty || parsedWeight.map { $0 > 0 } == true)
-            && viewModel.nameErrorMessage == nil
-            && !viewModel.isMutating
-    }
-
-    private var currentFormValues: EquipmentEditFormValues {
-        EquipmentEditFormValues(
-            name: name,
-            ownedQuantity: parsedQuantity ?? 0,
-            unitWeightGrams: unitWeightGrams
-        )
-    }
-
-    private var isDirty: Bool {
-        isFormAvailable
-            && EquipmentEditPresentation.isDirty(current: currentFormValues, initial: initialFormValues)
-    }
-
-    private var isFormAvailable: Bool {
-        switch mode {
-        case .create:
-            return true
-        case .edit:
-            return viewModel.editLoadState == .loaded
-        }
-    }
-
-    private var saveErrorMessage: String? {
-        guard failedMutationIntent == .save,
-              viewModel.nameErrorMessage == nil else {
-            return nil
-        }
-        return viewModel.errorMessage
-    }
-
-    private var deletionErrorMessage: String? {
-        guard failedMutationIntent == .loadDeletionImpact || failedMutationIntent == .delete else { return nil }
-        return viewModel.errorMessage
-    }
-
-    private var deletionConfirmationMessage: String {
-        deletionMessage
-    }
-
-    private var deletionMessage: String {
-        let prefix = "删除后会从用户装备清单移除，但不会修改已经生成的行程装备。"
-        guard let impact = viewModel.deletionImpact,
-              impact.equipmentListReferenceCount > 0 else {
-            return prefix
-        }
-        let names = impact.affectedEquipmentLists.map(\.name).joined(separator: "、")
-        return "\(prefix) 当前会影响 \(impact.equipmentListReferenceCount) 份用户清单：\(names)。"
-    }
-
-    private func loadEquipmentIfNeeded() async {
-        guard let equipmentID else { return }
-        await viewModel.loadEquipment(id: equipmentID)
-        guard let equipment = viewModel.editingEquipment else { return }
-        name = equipment.name
-        quantityText = String(equipment.ownedQuantity)
-        unitWeightGrams = equipment.unitWeight.map { AccountEquipmentFormatting.decimalText($0.grams) } ?? ""
-        initialFormValues = EquipmentEditFormValues(
-            name: equipment.name,
-            ownedQuantity: equipment.ownedQuantity,
-            unitWeightGrams: equipment.unitWeight.map { AccountEquipmentFormatting.decimalText($0.grams) } ?? ""
-        )
-        isNameFieldTouched = false
-        isQuantityFieldTouched = false
-        isWeightFieldTouched = false
-    }
-
     private func requestDismissal() {
-        if isDirty {
-            showingDiscardConfirmation = true
-        } else {
-            dismiss()
-        }
+        if viewModel.requestDismissal() { dismiss() }
     }
 
     private func save() {
-        guard isInputValid, let quantity = parsedQuantity else { return }
-        viewModel.deletionImpact = nil
-        failedMutationIntent = nil
-        mutationIntent = .save
         Task {
-            await viewModel.saveEquipment(
-                equipmentID: equipmentID,
-                name: trimmedName,
-                ownedQuantity: quantity,
-                unitWeightGrams: parsedWeight
-            )
-            mutationIntent = nil
-            if viewModel.lastMutationSucceeded {
-                initialFormValues = currentFormValues
-                dismiss()
-            } else {
-                failedMutationIntent = .save
-            }
-        }
-    }
-
-    private func prepareDeletion() {
-        guard !viewModel.isMutating, let equipment = viewModel.editingEquipment else { return }
-        viewModel.deletionImpact = nil
-        failedMutationIntent = nil
-        mutationIntent = .loadDeletionImpact
-        Task {
-            await viewModel.loadDeletionImpact(id: equipment.identity)
-            mutationIntent = nil
-            if viewModel.lastMutationSucceeded {
-                showingDeletionConfirmation = true
-            } else {
-                failedMutationIntent = .loadDeletionImpact
-            }
+            if await viewModel.save() { dismiss() }
         }
     }
 
     private func confirmDeletion() {
-        guard !viewModel.isMutating, let equipment = viewModel.editingEquipment else { return }
-        failedMutationIntent = nil
-        mutationIntent = .delete
         Task {
-            await viewModel.deleteEquipment(id: equipment.identity)
-            mutationIntent = nil
-            if viewModel.lastMutationSucceeded {
-                showingDeletionConfirmation = false
-                dismiss()
-            } else {
-                showingDeletionConfirmation = false
-                failedMutationIntent = .delete
-            }
+            if await viewModel.deleteEquipment() { dismiss() }
         }
     }
 }

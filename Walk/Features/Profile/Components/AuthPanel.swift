@@ -6,8 +6,6 @@ import WalkDesignSystem
 enum AuthPanelStage: Equatable {
     case phone
     case code
-    case confirmingFocus
-    case focusError
 }
 
 struct AuthPanelProjection: Equatable {
@@ -34,7 +32,6 @@ struct AuthPanel: View {
     let onChangeCode: (String) -> Void
     let onVerifyCode: () -> Void
     let onResendCode: () -> Void
-    let onRetryFocusTrip: () -> Void
 
     @FocusState private var isFieldFocused: Bool
 
@@ -98,19 +95,6 @@ struct AuthPanel: View {
             phoneContent
         case .code:
             codeContent
-        case .confirmingFocus:
-            LoadingView(
-                message: "正在确认焦点行程",
-                detail: "登录已完成，正在恢复刚才的个人任务。",
-                variant: .section
-            )
-        case .focusError:
-            ErrorView(
-                message: projection.operationError ?? "暂时无法恢复刚才的个人任务。",
-                title: "焦点行程确认失败",
-                variant: .form,
-                retry: onRetryFocusTrip
-            )
         }
     }
 
@@ -232,8 +216,6 @@ struct AuthPanel: View {
         switch projection.stage {
         case .phone: "登录 Walk"
         case .code: "输入验证码"
-        case .confirmingFocus: "确认焦点行程"
-        case .focusError: "继续个人任务"
         }
     }
 
@@ -254,49 +236,137 @@ struct AuthPanel: View {
 }
 
 #if DEBUG
+extension AuthPanelProjection {
+    private static let fixedExpiry = Date(timeIntervalSince1970: 1_789_690_500)
+
+    private static let fixedResend = Date(timeIntervalSince1970: 1_789_689_900)
+
+    private static let fixedRetry = Date(timeIntervalSince1970: 1_789_690_020)
+
+    static let phone = AuthPanelProjection(
+        stage: .phone,
+        sourceContext: "登录后继续管理个人资料与装备。",
+        phone: "+8613800138000"
+    )
+
+    static let phoneInvalid = AuthPanelProjection(
+        stage: .phone,
+        sourceContext: "登录后继续管理个人资料与装备。",
+        phone: "138",
+        fieldError: "请输入有效的 E.164 手机号",
+        isPrimaryEnabled: false
+    )
+
+    static let sending = AuthPanelProjection(
+        stage: .phone,
+        sourceContext: "登录后继续管理个人资料与装备。",
+        phone: "+8613800138000",
+        isLoading: true,
+        isPrimaryEnabled: false
+    )
+
+    static let throttled = AuthPanelProjection(
+        stage: .phone,
+        sourceContext: "登录后继续管理个人资料与装备。",
+        phone: "+8613800138000",
+        retryAvailableAt: AuthPanelProjection.fixedRetry,
+        isPrimaryEnabled: false
+    )
+
+    static let sendFailed = AuthPanelProjection(
+        stage: .phone,
+        sourceContext: "登录后继续管理个人资料与装备。",
+        phone: "+8613800138000",
+        operationError: "验证码发送失败，请保留手机号后重试。"
+    )
+
+    static let code = AuthPanelProjection(
+        stage: .code,
+        sourceContext: "完成验证后将继续刚才的任务。",
+        phone: "+8613800138000",
+        code: "012345",
+        verificationID: "verification-001",
+        expiresAt: AuthPanelProjection.fixedExpiry,
+        resendAvailableAt: AuthPanelProjection.fixedResend
+    )
+
+    static let codeInvalid = AuthPanelProjection(
+        stage: .code,
+        sourceContext: "完成验证后将继续刚才的任务。",
+        phone: "+8613800138000",
+        code: "01234",
+        verificationID: "verification-001",
+        expiresAt: AuthPanelProjection.fixedExpiry,
+        resendAvailableAt: AuthPanelProjection.fixedResend,
+        fieldError: "验证码不正确",
+        isPrimaryEnabled: false
+    )
+
+    static let expired = AuthPanelProjection(
+        stage: .code,
+        sourceContext: "完成验证后将继续刚才的任务。",
+        phone: "+8613800138000",
+        code: "012345",
+        verificationID: "verification-001",
+        expiresAt: AuthPanelProjection.fixedExpiry,
+        resendAvailableAt: AuthPanelProjection.fixedResend,
+        operationError: "验证码已过期，请重新获取。",
+        isPrimaryEnabled: false
+    )
+
+    static let verifying = AuthPanelProjection(
+        stage: .code,
+        sourceContext: "完成验证后将继续刚才的任务。",
+        phone: "+8613800138000",
+        code: "012345",
+        verificationID: "verification-001",
+        expiresAt: AuthPanelProjection.fixedExpiry,
+        resendAvailableAt: AuthPanelProjection.fixedResend,
+        isLoading: true,
+        isPrimaryEnabled: false,
+        isSecondaryEnabled: false
+    )
+
+
+}
+
 #Preview("AuthPanel.phone") {
-    BusinessComponentPreviewHost { AuthPanel.preview(BusinessComponentPreviewFixtures.authPhone) }
+    BusinessComponentPreviewHost { AuthPanel.preview(AuthPanelProjection.phone) }
 }
 
 #Preview("AuthPanel.phoneInvalid") {
-    BusinessComponentPreviewHost { AuthPanel.preview(BusinessComponentPreviewFixtures.authPhoneInvalid) }
+    BusinessComponentPreviewHost { AuthPanel.preview(AuthPanelProjection.phoneInvalid) }
 }
 
 #Preview("AuthPanel.sending") {
-    BusinessComponentPreviewHost { AuthPanel.preview(BusinessComponentPreviewFixtures.authSending) }
+    BusinessComponentPreviewHost { AuthPanel.preview(AuthPanelProjection.sending) }
 }
 
 #Preview("AuthPanel.throttled") {
-    BusinessComponentPreviewHost { AuthPanel.preview(BusinessComponentPreviewFixtures.authThrottled) }
+    BusinessComponentPreviewHost { AuthPanel.preview(AuthPanelProjection.throttled) }
 }
 
 #Preview("AuthPanel.sendFailed") {
-    BusinessComponentPreviewHost { AuthPanel.preview(BusinessComponentPreviewFixtures.authSendFailed) }
+    BusinessComponentPreviewHost { AuthPanel.preview(AuthPanelProjection.sendFailed) }
 }
 
 #Preview("AuthPanel.code") {
-    BusinessComponentPreviewHost { AuthPanel.preview(BusinessComponentPreviewFixtures.authCode) }
+    BusinessComponentPreviewHost { AuthPanel.preview(AuthPanelProjection.code) }
 }
 
 #Preview("AuthPanel.codeInvalid") {
-    BusinessComponentPreviewHost { AuthPanel.preview(BusinessComponentPreviewFixtures.authCodeInvalid) }
+    BusinessComponentPreviewHost { AuthPanel.preview(AuthPanelProjection.codeInvalid) }
 }
 
 #Preview("AuthPanel.expired") {
-    BusinessComponentPreviewHost { AuthPanel.preview(BusinessComponentPreviewFixtures.authExpired) }
+    BusinessComponentPreviewHost { AuthPanel.preview(AuthPanelProjection.expired) }
 }
 
 #Preview("AuthPanel.verifying") {
-    BusinessComponentPreviewHost { AuthPanel.preview(BusinessComponentPreviewFixtures.authVerifying) }
+    BusinessComponentPreviewHost { AuthPanel.preview(AuthPanelProjection.verifying) }
 }
 
-#Preview("AuthPanel.confirmingFocus") {
-    BusinessComponentPreviewHost { AuthPanel.preview(BusinessComponentPreviewFixtures.authConfirmingFocus) }
-}
 
-#Preview("AuthPanel.focusError") {
-    BusinessComponentPreviewHost { AuthPanel.preview(BusinessComponentPreviewFixtures.authFocusError) }
-}
 
 private extension AuthPanel {
     static func preview(_ projection: AuthPanelProjection) -> AuthPanel {
@@ -307,8 +377,7 @@ private extension AuthPanel {
             onSendCode: {},
             onChangeCode: { _ in },
             onVerifyCode: {},
-            onResendCode: {},
-            onRetryFocusTrip: {}
+            onResendCode: {}
         )
     }
 }

@@ -62,6 +62,23 @@ final class ArchitectureDependencyTests: XCTestCase {
         XCTAssertEqual(sites, ["AppEnvironment.swift"], "生产依赖只由 AppEnvironment 装配")
     }
 
+    /// SwiftUI coding standard: migrated Feature models and consumers use one observation mechanism.
+    func testFeatureModelsDoNotRetainLegacyObservationOrSharedMutationResultFlags() throws {
+        let forbidden = [
+            #"\bObservableObject\b"#,
+            #"@Published\b"#,
+            #"@(StateObject|ObservedObject|EnvironmentObject)\b"#,
+            #"\blastMutationSucceeded\b"#,
+        ]
+        var violations: [String] = []
+        for (file, source) in try Self.sources(under: "Walk/Features") {
+            for pattern in forbidden where source.range(of: pattern, options: .regularExpression) != nil {
+                violations.append("\(file): \(pattern)")
+            }
+        }
+        XCTAssertEqual(violations.sorted(), [], "Feature 使用 Observation；操作结果属于本次调用，不共享最后成功标志")
+    }
+
     // MARK: - Helpers
 
     private static let repoRoot = URL(fileURLWithPath: #filePath)

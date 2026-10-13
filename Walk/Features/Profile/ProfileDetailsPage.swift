@@ -5,7 +5,7 @@ import WalkDesignSystem
 // MARK: - 个人资料设置页（任务栈页 + 共享内容）
 
 struct ProfileDetailsView: View {
-    @ObservedObject var viewModel: ProfileViewModel
+    let viewModel: ProfileViewModel
 
     init(viewModel: ProfileViewModel) {
         self.viewModel = viewModel
@@ -21,9 +21,9 @@ struct ProfileDetailsView: View {
 /// 个人资料设置内容：头像、昵称、脱敏手机号按左右行排列；
 /// 昵称保存与头像更新使用共享账号状态与既有账号接口。
 struct ProfileSettingsContent: View {
-    @ObservedObject var viewModel: ProfileViewModel
+    let viewModel: ProfileViewModel
     @State private var nickname = ""
-    @State private var didSyncNickname = false
+    @State private var didInitializeNickname = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
@@ -40,7 +40,7 @@ struct ProfileSettingsContent: View {
             PrimaryAction(
                 title: "保存昵称",
                 isLoading: viewModel.isSavingProfile,
-                isDisabled: viewModel.isSavingProfile,
+                isDisabled: !didInitializeNickname || viewModel.isSavingProfile || viewModel.isAvatarUpdating,
                 fillsWidth: true
             ) {
                 Task { await viewModel.updateNickname(nickname) }
@@ -53,10 +53,14 @@ struct ProfileSettingsContent: View {
                 errorText(error)
             }
         }
-        .task {
-            guard !didSyncNickname else { return }
-            nickname = viewModel.account?.profile.nickname ?? ""
-            didSyncNickname = true
+        .task(id: viewModel.account?.account.identity) {
+            guard !didInitializeNickname, let account = viewModel.account else { return }
+            nickname = account.profile.nickname ?? ""
+            didInitializeNickname = true
+        }
+        .onDisappear {
+            nickname = ""
+            didInitializeNickname = false
         }
     }
 
@@ -83,6 +87,7 @@ struct ProfileSettingsContent: View {
                 .multilineTextAlignment(.trailing)
                 .foregroundStyle(AppColors.textPrimary)
                 .textInputAutocapitalization(.sentences)
+                .disabled(!didInitializeNickname)
         }
     }
 

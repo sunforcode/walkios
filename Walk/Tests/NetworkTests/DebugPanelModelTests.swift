@@ -60,6 +60,53 @@ final class DebugPanelModelTests: XCTestCase {
 
     // MARK: - 动作
 
+    func testComponentCatalogActionOnlyOpensPreviewWithoutChangingConfigurationOrCache() {
+        let saved = DebugSettings(
+            dataMode: .remoteOnly,
+            server: .init(environmentName: "production", baseURL: URL(string: "https://vialu.cn/walkbg/api/v1")!),
+            offlinePolicy: .useCache
+        )
+        store.save(saved)
+        let storedData = defaults.data(forKey: DebugSettingsStore.key)
+        let effective = configuration(.real, "development")
+        let model = makeModel(effective: effective)
+        let infoBefore = model.infoSections()
+        var openCount = 0
+        let sections = model.actionSections(openComponentCatalog: { openCount += 1 })
+        XCTAssertEqual(openCount, 0, "创建动作列表不能打开预览")
+        guard let previewSection = sections.first(where: { $0.title == "组件预览" }) else {
+            return XCTFail("missing action section 组件预览")
+        }
+        XCTAssertEqual(previewSection.actions.map(\.title), ["打开组件目录"])
+        guard let action = previewSection.actions.first else {
+            return XCTFail("missing action 组件预览/打开组件目录")
+        }
+
+        action.perform()
+
+        XCTAssertEqual(openCount, 1)
+        XCTAssertEqual(model.effective, effective, "预览不能修改本次有效配置")
+        XCTAssertEqual(store.load(), saved, "预览不能修改待生效设置")
+        XCTAssertEqual(defaults.data(forKey: DebugSettingsStore.key), storedData)
+        XCTAssertEqual(model.infoSections(), infoBefore)
+        XCTAssertEqual(clearCount, 0, "预览不能清除响应缓存")
+    }
+
+    func testComponentCatalogActionDoesNotCreateSettingsWhenNoneAreSaved() {
+        let effective = configuration(.mock, "development")
+        let model = makeModel(effective: effective)
+        var openCount = 0
+
+        perform("打开组件目录", in: "组件预览", model: model, openComponentCatalog: { openCount += 1 })
+
+        XCTAssertEqual(openCount, 1)
+        XCTAssertEqual(model.effective, effective)
+        XCTAssertNil(store.load())
+        XCTAssertNil(defaults.data(forKey: DebugSettingsStore.key))
+        XCTAssertNil(model.infoSections().first { $0.title == "重启后生效" })
+        XCTAssertEqual(clearCount, 0)
+    }
+
     func testModeActionsWriteOnlyTheModeDimension() {
         store.save(DebugSettings(
             dataMode: .mock,
@@ -155,8 +202,13 @@ final class DebugPanelModelTests: XCTestCase {
         section.rows.first { $0.title == title }?.value
     }
 
-    private func perform(_ actionTitle: String, in sectionTitle: String, model: DebugPanelModel) {
-        guard let action = model.actionSections()
+    private func perform(
+        _ actionTitle: String,
+        in sectionTitle: String,
+        model: DebugPanelModel,
+        openComponentCatalog: @escaping () -> Void = {}
+    ) {
+        guard let action = model.actionSections(openComponentCatalog: openComponentCatalog)
             .first(where: { $0.title == sectionTitle })?
             .actions.first(where: { $0.title == actionTitle }) else {
             return XCTFail("missing action \(sectionTitle)/\(actionTitle)")

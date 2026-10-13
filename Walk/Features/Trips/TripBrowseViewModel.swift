@@ -1,17 +1,17 @@
-import SwiftUI
+import Foundation
+import Observation
 import WalkData
 
-// MARK: - ViewModel
-
-@MainActor
-final class TripBrowseViewModel: ObservableObject {
-    @Published private(set) var trip: PersonalTripDetail?
-    @Published private(set) var pages: [TripBrowsePage] = []
-    @Published private(set) var isLoading = false
-    @Published private(set) var errorMessage: String?
+@MainActor @Observable
+final class TripBrowseViewModel {
+    private(set) var trip: PersonalTripDetail?
+    private(set) var pages: [TripBrowsePage] = []
+    private(set) var isLoading = false
+    private(set) var errorMessage: String?
 
     private let loadDetail: (String) async throws -> PersonalTripDetail
     private let loadDays: (String) async throws -> PersonalTripDays
+    @ObservationIgnored private var loading: TripRequestLifetime?
 
     init(service: any PersonalTripServicing) {
         self.loadDetail = { try await service.detail(tripID: $0) }
@@ -26,24 +26,47 @@ final class TripBrowseViewModel: ObservableObject {
         self.loadDays = loadDays
     }
 
-    func loadTrip(id: String) async {
+    @discardableResult
+    func loadTrip(id: String) async -> Bool {
+        guard !Task.isCancelled, loading == nil || loading?.isCancelled == true else { return false }
+        let request = TripRequestLifetime()
+        loading = request
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
-
-        do {
-            async let loadedDetail = loadDetail(id)
-            async let loadedDays = loadDays(id)
-            let (detail, days) = try await (loadedDetail, loadedDays)
-            guard detail.revision == days.revision,
-                  days.tripID == detail.trip.identity else {
-                throw APIClientError.invalidResponse
+        defer {
+            if loading === request {
+                loading = nil
+                isLoading = false
             }
-            trip = detail
-            pages = TripBrowsePagePlan.plan(days: days)
-        } catch {
-            errorMessage = TripBrowseErrorFormatter.message(error, operation: "加载")
         }
+        return await withTaskCancellationHandler {
+            do {
+                async let loadedDetail = loadDetail(id)
+                async let loadedDays = loadDays(id)
+                let (detail, days) = try await (loadedDetail, loadedDays)
+                guard loading === request, !request.isCancelled, !Task.isCancelled else { return false }
+                guard detail.revision == days.revision,
+                      days.tripID == detail.trip.identity else {
+                    throw APIClientError.invalidResponse
+                }
+                trip = detail
+                pages = TripBrowsePagePlan.plan(days: days)
+                return true
+            } catch {
+                guard loading === request, !request.isCancelled, !Task.isCancelled,
+                      !tripRequestWasCancelled(error) else { return false }
+                errorMessage = TripBrowseErrorFormatter.message(error, operation: "加载")
+                return false
+            }
+        } onCancel: {
+            request.cancel()
+        }
+    }
+
+    /// 首次和失败重试使用同一成功路径；未发布结果时不改变页面位置。
+    func loadInitialDay(id: String, dayNumber: Int) async -> Int? {
+        guard await loadTrip(id: id), !Task.isCancelled else { return nil }
+        return initialDayIndex(dayNumber: dayNumber)
     }
 
     func initialDayIndex(dayNumber: Int) -> Int {

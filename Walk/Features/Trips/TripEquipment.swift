@@ -2,125 +2,31 @@ import SwiftUI
 import WalkData
 import WalkDesignSystem
 
-final class TripEquipmentViewModel: ObservableObject {
-    @Published var projection: TripEquipmentProjection?
-    @Published var isLoading = false
-    @Published var isMutating = false
-    @Published var errorMessage: String?
-
-    let tripID: String
-    private let service: any TripEquipmentServicing
-    private var hasLoaded = false
-    private var shouldRecheckOnAppearance = false
-
-    var isEditable: Bool { projection?.editable == true }
-
-    init(tripID: String, service: any TripEquipmentServicing) {
-        self.tripID = tripID
-        self.service = service
-    }
-
-    func load() async {
-        isLoading = true
-        errorMessage = nil
-        defer { isLoading = false }
-        do {
-            projection = try await service.getEquipment(tripID: tripID)
-            hasLoaded = true
-        } catch {
-            errorMessage = message(for: error, operation: "加载")
-        }
-    }
-
-    func prepareForPersonalEquipment() {
-        shouldRecheckOnAppearance = true
-    }
-
-    func handleAppearance() async {
-        guard hasLoaded else {
-            await load()
-            return
-        }
-        guard shouldRecheckOnAppearance else { return }
-        shouldRecheckOnAppearance = false
-        await recheckOwnership()
-    }
-
-    func addItem(name: String, quantity: Int, unitWeightGrams: Int?, note: String?) async {
-        await mutate(operation: "添加") {
-            try await service.addItem(
-                tripID: tripID,
-                name: name,
-                quantity: quantity,
-                unitWeightGrams: unitWeightGrams,
-                note: note
-            )
-        }
-    }
-
-    func updateItem(itemID: String, update: TripEquipmentItemUpdate) async {
-        await mutate(operation: "更新") {
-            try await service.updateItem(tripID: tripID, itemID: itemID, update: update)
-        }
-    }
-
-    func deleteItem(itemID: String) async {
-        await mutate(operation: "删除") {
-            try await service.deleteItem(tripID: tripID, itemID: itemID)
-        }
-    }
-
-    func recheckOwnership() async {
-        await mutate(operation: "重新核对") {
-            try await service.recheckOwnership(tripID: tripID)
-        }
-    }
-
-    private func mutate(
-        operation: String,
-        action: () async throws -> TripEquipmentProjection
-    ) async {
-        isMutating = true
-        errorMessage = nil
-        defer { isMutating = false }
-        do {
-            projection = try await action()
-        } catch {
-            errorMessage = message(for: error, operation: operation)
-        }
-    }
-
-    private func message(for error: Error, operation: String) -> String {
-        if let localized = error as? LocalizedError,
-           let description = localized.errorDescription {
-            return description
-        }
-        return "\(operation)失败：\(error.localizedDescription)"
-    }
-}
-
 struct TripEquipmentView: View {
-    @StateObject private var viewModel: TripEquipmentViewModel
-    @State private var editorMode: TripEquipmentEditorMode?
-    @State private var editorName = ""
-    @State private var editorQuantity = 1
-    @State private var editorUnitWeight = ""
-    @State private var editorNote = ""
-    @State private var deletingItem: TripEquipmentItem?
-    @State private var lastFailedDeletionItemID: String?
+    @State private var viewModel: TripEquipmentViewModel
     private let onManagePersonalEquipment: () -> Void
     private let onRevisionChange: (String) -> Void
 
     init(
         tripID: String,
-        service: any TripEquipmentServicing,
+        service: any TripEquipmentPreparing,
+        equipmentService: (any EquipmentServicing)? = nil,
         onManagePersonalEquipment: @escaping () -> Void = {},
         onRevisionChange: @escaping (String) -> Void = { _ in }
     ) {
-        _viewModel = StateObject(wrappedValue: TripEquipmentViewModel(
+        self.init(viewModel: TripEquipmentViewModel(
             tripID: tripID,
-            service: service
-        ))
+            service: service,
+            equipmentService: equipmentService
+        ), onManagePersonalEquipment: onManagePersonalEquipment, onRevisionChange: onRevisionChange)
+    }
+
+    init(
+        viewModel: TripEquipmentViewModel,
+        onManagePersonalEquipment: @escaping () -> Void = {},
+        onRevisionChange: @escaping (String) -> Void = { _ in }
+    ) {
+        _viewModel = State(initialValue: viewModel)
         self.onManagePersonalEquipment = onManagePersonalEquipment
         self.onRevisionChange = onRevisionChange
     }
@@ -129,17 +35,17 @@ struct TripEquipmentView: View {
         UtilityPage(
             title: "行程装备",
             bottomFixed: {
-                if viewModel.projection?.editable == true {
+                if viewModel.projection?.editable == true, viewModel.state.sourceMode == nil {
                     PrimaryAction(
-                        title: editorMode == nil ? "新增本次装备" : "保存本次装备",
-                        isLoading: viewModel.isMutating && editorMode != nil,
-                        isDisabled: viewModel.isMutating || (editorMode != nil && !editorInputIsValid),
+                        title: viewModel.state.editor == nil ? "新增本次装备" : "保存本次装备",
+                        isLoading: viewModel.isMutating && viewModel.state.editor != nil,
+                        isDisabled: viewModel.isMutating || viewModel.state.requiresReload || (viewModel.state.editor != nil && !viewModel.editorInputIsValid),
                         fillsWidth: true,
                         action: {
-                            if editorMode == nil {
-                                beginAdding()
+                            if viewModel.state.editor == nil {
+                                viewModel.beginAdding()
                             } else {
-                                saveEditor()
+                                Task { await viewModel.saveEditor() }
                             }
                         }
                     )
@@ -163,32 +69,29 @@ struct TripEquipmentView: View {
             .frame(maxWidth: .infinity, minHeight: 420, alignment: .center)
         }
         .overlay {
-            if let item = deletingItem {
+            if viewModel.state.deletingItem != nil {
                 ConfirmationDialog(
                     title: "删除这件本次装备？",
                     message: "仅从本次行程快照中删除，不会删除个人装备。",
                     confirmationTitle: "删除装备",
                     variant: .danger,
                     isLoading: viewModel.isMutating,
-                    error: item.identity == lastFailedDeletionItemID ? viewModel.errorMessage : nil,
-                    onCancel: {
-                        guard !viewModel.isMutating else { return }
-                        deletingItem = nil
-                        lastFailedDeletionItemID = nil
-                        viewModel.errorMessage = nil
-                    },
-                    onConfirm: { deleteItem(item) }
+                    error: viewModel.state.deletionError,
+                    onCancel: viewModel.cancelDeletion,
+                    onConfirm: { Task { await viewModel.confirmDeletion() } }
                 )
             }
         }
-        .onAppear { Task { await viewModel.handleAppearance() } }
+        .task { await viewModel.handleAppearance() }
         .onChange(of: viewModel.projection?.revision) { revision in
             if let revision { onRevisionChange(revision) }
         }
     }
 
     private func scrollContent(_ projection: TripEquipmentProjection) -> some View {
-        LazyVStack(alignment: .leading, spacing: Spacing.xl) {
+        // 分区只有概览、选择器和清单；无需延迟分区布局。
+        // eager 容器避免滚动进入 ViewThatFits 操作区时反复估算分区高度。
+        VStack(alignment: .leading, spacing: Spacing.xl) {
             contextRow(projection.trip)
             TripBusinessComponents.TripEquipmentOverview(
                 projection: TripEquipmentOverviewProjection(
@@ -209,23 +112,36 @@ struct TripEquipmentView: View {
                 )
             }
 
-            if projection.editable, editorMode != nil {
+            if projection.editable, let sourceProjection = viewModel.sourcePickerProjection {
+                TripBusinessComponents.TripEquipmentSourcePicker(
+                    projection: sourceProjection,
+                    onSelectSource: { mode in Task { await viewModel.beginSelectingSource(mode) } },
+                    onSelectCandidate: viewModel.selectSourceCandidate,
+                    onChangeQuantity: viewModel.updateSourceQuantity,
+                    onConfirm: { Task { await viewModel.confirmSourceSelection() } },
+                    onRetry: { Task { await viewModel.retrySource() } },
+                    onReload: { Task { await viewModel.reloadAfterConflict() } },
+                    onCancel: viewModel.cancelSourceSelection
+                )
+            }
+
+            if projection.editable, viewModel.state.editor != nil {
                 SharedBusinessComponents.InlineEquipmentEditor(
                     projection: InlineEquipmentEditorProjection(
-                        title: editorMode?.title ?? "本次装备",
-                        name: editorName,
-                        quantity: editorQuantity,
-                        unitWeight: editorUnitWeight,
-                        note: editorNote,
-                        nameError: editorNameError,
-                        unitWeightError: editorUnitWeightError,
+                        title: viewModel.state.editor?.title ?? "本次装备",
+                        name: viewModel.state.draft.name,
+                        quantity: viewModel.state.draft.quantity,
+                        unitWeight: viewModel.state.draft.unitWeight,
+                        note: viewModel.state.draft.note,
+                        nameError: viewModel.editorNameError,
+                        unitWeightError: viewModel.editorUnitWeightError,
                         noteError: nil,
                         saveError: viewModel.errorMessage,
                         isLoading: viewModel.isMutating
                     ),
                     onChangeField: updateEditorField,
-                    onChangeQuantity: { editorQuantity = $0 },
-                    onCancel: cancelEditing
+                    onChangeQuantity: viewModel.updateQuantity,
+                    onCancel: viewModel.cancelEditing
                 )
             }
 
@@ -241,9 +157,9 @@ struct TripEquipmentView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(projection.snapshot.items.enumerated()), id: \.element.id) { index, item in
                             TripBusinessComponents.TripEquipmentItemRow(
-                                projection: equipmentItemProjection(item, editable: projection.editable && editorMode == nil),
-                                onRequestEdit: { _ in beginEditing(item) },
-                                onRequestDelete: { _ in deletingItem = item }
+                                projection: equipmentItemProjection(item, editable: projection.editable && viewModel.state.editor == nil && viewModel.state.sourceMode == nil && !viewModel.isMutating && !viewModel.state.requiresReload),
+                                onRequestEdit: { _ in viewModel.beginEditing(item) },
+                                onRequestDelete: { _ in viewModel.requestDelete(item) }
                             )
                             if index < projection.snapshot.items.count - 1 {
                                 Rectangle()
@@ -256,17 +172,22 @@ struct TripEquipmentView: View {
                 }
             }
 
-            if projection.editable, editorMode == nil {
+            if projection.editable, viewModel.state.editor == nil, viewModel.state.sourceMode == nil {
                 secondaryActions
             }
 
-            if let error = viewModel.errorMessage, viewModel.projection != nil, editorMode == nil {
+            if let error = viewModel.errorMessage, viewModel.projection != nil, viewModel.state.editor == nil, viewModel.state.sourceMode == nil {
                 ErrorView(
                     message: error,
                     title: "操作未完成",
                     variant: .section,
                     retry: nil
                 )
+            }
+
+            if viewModel.state.offersReload, viewModel.state.sourceMode == nil {
+                SecondaryAction(title: "重新加载当前清单", isDisabled: viewModel.isMutating,
+                                action: { Task { await viewModel.reloadAfterConflict() } })
             }
 
             independentCopyNote
@@ -288,6 +209,15 @@ struct TripEquipmentView: View {
     }
 
     private var secondaryActions: some View {
+        VStack(spacing: Spacing.md) {
+            if viewModel.canSelectSource {
+                SecondaryAction(title: "从我的装备选入", isDisabled: viewModel.isMutating,
+                                fillsWidth: true,
+                                action: { Task { await viewModel.beginSelectingSource(.equipment) } })
+                SecondaryAction(title: "追加常用清单", isDisabled: viewModel.isMutating,
+                                fillsWidth: true,
+                                action: { Task { await viewModel.beginSelectingSource(.list) } })
+            }
         ViewThatFits(in: .horizontal) {
             HStack(spacing: Spacing.sm) {
                 SecondaryAction(
@@ -320,26 +250,12 @@ struct TripEquipmentView: View {
                 )
             }
         }
+        }
     }
 
     private func managePersonalEquipment() {
         viewModel.prepareForPersonalEquipment()
         onManagePersonalEquipment()
-    }
-
-    /// 删除确认失败保留投影与 Dialog，错误就位显示；成功才关闭。
-    private func deleteItem(_ item: TripEquipmentItem) {
-        guard !viewModel.isMutating else { return }
-        let itemID = item.identity
-        Task {
-            await viewModel.deleteItem(itemID: itemID)
-            if viewModel.errorMessage != nil {
-                lastFailedDeletionItemID = itemID
-            } else {
-                deletingItem = nil
-                lastFailedDeletionItemID = nil
-            }
-        }
     }
 
     private var independentCopyNote: some View {
@@ -351,85 +267,11 @@ struct TripEquipmentView: View {
         )
     }
 
-    private var editorNameError: String? {
-        editorName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "请输入装备名称"
-            : nil
-    }
-
-    private var editorUnitWeightError: String? {
-        let weight = editorUnitWeight.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !weight.isEmpty else { return nil }
-        return (Int(weight) ?? 0) > 0 ? nil : "请输入大于零的克重"
-    }
-
-    private var editorInputIsValid: Bool {
-        editorNameError == nil && editorQuantity > 0 && editorUnitWeightError == nil
-    }
-
     private func updateEditorField(_ field: InlineEquipmentEditorField, _ value: String) {
         switch field {
-        case .name:
-            editorName = value
-        case .unitWeight:
-            editorUnitWeight = value
-        case .note:
-            editorNote = value
-        }
-    }
-
-    private func beginAdding() {
-        editorMode = .adding
-        editorName = ""
-        editorQuantity = 1
-        editorUnitWeight = ""
-        editorNote = ""
-        viewModel.errorMessage = nil
-    }
-
-    private func beginEditing(_ item: TripEquipmentItem) {
-        editorMode = .editing(item)
-        editorName = item.name
-        editorQuantity = item.quantity
-        editorUnitWeight = item.unitWeight.map { AccountEquipmentFormatting.decimalText($0.grams) } ?? ""
-        editorNote = item.note ?? ""
-        viewModel.errorMessage = nil
-    }
-
-    private func cancelEditing() {
-        editorMode = nil
-        viewModel.errorMessage = nil
-    }
-
-    private func saveEditor() {
-        guard let mode = editorMode, editorInputIsValid else { return }
-        let name = editorName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let weightText = editorUnitWeight.trimmingCharacters(in: .whitespacesAndNewlines)
-        let noteText = editorNote.trimmingCharacters(in: .whitespacesAndNewlines)
-        let weight = weightText.isEmpty ? nil : Int(weightText)
-        let note = noteText.isEmpty ? nil : noteText
-
-        Task {
-            switch mode {
-            case .adding:
-                await viewModel.addItem(
-                    name: name,
-                    quantity: editorQuantity,
-                    unitWeightGrams: weight,
-                    note: note
-                )
-            case .editing(let item):
-                await viewModel.updateItem(
-                    itemID: item.identity,
-                    update: TripEquipmentItemUpdate(
-                        name: name,
-                        quantity: editorQuantity,
-                        unitWeight: weight.map { .value(EquipmentWeight(grams: $0)) } ?? .clear,
-                        note: note.map(TripEquipmentUpdateField.value) ?? .clear
-                    )
-                )
-            }
-            if viewModel.errorMessage == nil { editorMode = nil }
+        case .name: viewModel.updateName(value)
+        case .unitWeight: viewModel.updateUnitWeight(value)
+        case .note: viewModel.updateNote(value)
         }
     }
 
@@ -449,19 +291,9 @@ func equipmentItemProjection(
         unitWeightGrams: item.unitWeight?.grams,
         note: item.note,
         source: TripEquipmentItemSourceProjection(rawValue: item.source.rawValue) ?? .systemSuggestion,
-        ownershipStatus: TripEquipmentOwnershipStatusProjection(rawValue: item.ownershipStatus.rawValue) ?? .owned,
+        ownershipStatus: item.ownershipCheckApplicable == false
+            ? .notApplicable
+            : (TripEquipmentOwnershipStatusProjection(rawValue: item.ownershipStatus.rawValue) ?? .owned),
         editable: editable
     )
-}
-
-private enum TripEquipmentEditorMode {
-    case adding
-    case editing(TripEquipmentItem)
-
-    var title: String {
-        switch self {
-        case .adding: "新增本次装备"
-        case .editing: "修改本次装备"
-        }
-    }
 }

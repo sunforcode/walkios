@@ -1,13 +1,14 @@
 import SwiftUI
+import Observation
 import WalkData
 import WalkDesignSystem
 
 enum TripDetailBlock: Equatable, CaseIterable {
     case identity
-    case days
-    case route
     case weather
     case equipment
+    case days
+    case route
     case notices
 }
 
@@ -156,11 +157,7 @@ struct TripDetailPresentation: Equatable {
     }
 
     var blocks: [TripDetailBlock] {
-        var result: [TripDetailBlock] = [.identity, .days, .route]
-        if !weatherDayProjections.isEmpty || detail.trip.weatherOverview?.summary.value != nil {
-            result.append(.weather)
-        }
-        result.append(.equipment)
+        var result: [TripDetailBlock] = [.identity, .weather, .equipment, .days, .route]
         if !notices.isEmpty { result.append(.notices) }
         return result
     }
@@ -301,7 +298,8 @@ struct TripDetailPresentation: Equatable {
         }
 
         return TripDayHikeSummaryProjection(
-            segment: tripNonEmpty(hike.routeSectionSnapshot?.name) ?? "徒步段",
+            segment: hike.routeSectionSnapshot == nil && hike.routeSectionConfidence?.status == "unavailable"
+                ? "徒步区段待确认" : tripNonEmpty(hike.routeSectionSnapshot?.name) ?? "徒步段",
             distance: hike.distance?.value.map { Self.distanceText($0.meters) },
             ascent: hike.ascent?.value.map { "\(Int($0.meters.rounded())) m" },
             duration: hike.estimatedDuration?.value.map { tripDurationTextForProjection($0.seconds) },
@@ -366,28 +364,36 @@ struct TripDetailActionPolicy: Equatable {
     }
 }
 
-@MainActor
-final class TripDetailViewModel: ObservableObject {
-    @Published private(set) var trip: PersonalTripDetail?
-    @Published private(set) var days: PersonalTripDays?
-    @Published private(set) var weather: PersonalTripWeather?
-    @Published private(set) var isWeatherUnavailable = false
-    @Published private(set) var routeVersionStatus: PersonalTripRouteVersionStatus?
-    @Published var isLoading = false
-    @Published private(set) var isMutating = false
-    @Published var errorMessage: String?
-    @Published private(set) var migrationErrorMessage: String?
+@MainActor @Observable
+final class TripDetailViewModel {
+    private(set) var state = TripDetailState()
+
+    var trip: PersonalTripDetail? { state.projection?.detail }
+    var days: PersonalTripDays? { state.projection?.days }
+    var weather: PersonalTripWeather? { state.projection?.weather }
+    var scenes: PersonalTripScenes? { state.projection?.scenes }
+    var sceneRequestID: UUID? { isLoading || isMutating ? nil : state.projection?.sceneRequestID }
+    var isWeatherUnavailable: Bool { state.projection?.isWeatherUnavailable == true }
+    var routeVersionStatus: PersonalTripRouteVersionStatus? { state.projection?.routeVersionStatus }
+    var isLoading: Bool { state.isLoading }
+    var isMutating: Bool { state.isMutating }
+    var errorMessage: String? { state.errorMessage }
+    var migrationErrorMessage: String? { state.migrationErrorMessage }
 
     private let loadDetail: (String) async throws -> PersonalTripDetail
     private let loadDays: (String) async throws -> PersonalTripDays
     private let loadWeather: (String) async throws -> PersonalTripWeather
+    private let loadScenes: (String) async throws -> PersonalTripScenes
     private let loadRouteVersionStatus: (String) async throws -> PersonalTripRouteVersionStatus
     private let cancel: (String, String, Bool, String) async throws -> PersonalTripDetail
     private let migrate: (String, String, String, String) async throws -> PersonalTripDetail
     private let idempotencyKey: () -> String
     private let initialMigrationErrorMessage: String?
-    private var pendingCancelIntent: MutationIntent?
-    private var pendingMigrationIntent: MutationIntent?
+    @ObservationIgnored private var pendingCancelIntent: MutationIntent?
+    @ObservationIgnored private var pendingMigrationIntent: MutationIntent?
+    @ObservationIgnored private var loading: TripRequestLifetime?
+    @ObservationIgnored private var refreshingStatus: TripRequestLifetime?
+    @ObservationIgnored private var refreshingScenes: TripRequestLifetime?
 
     private struct MutationIntent: Equatable {
         let signature: String
@@ -398,6 +404,7 @@ final class TripDetailViewModel: ObservableObject {
         self.loadDetail = { try await service.detail(tripID: $0) }
         self.loadDays = { try await service.days(tripID: $0) }
         self.loadWeather = { try await service.weather(tripID: $0) }
+        self.loadScenes = { try await service.scenes(tripID: $0) }
         self.loadRouteVersionStatus = { try await service.routeVersionStatus(tripID: $0) }
         self.cancel = {
             try await service.cancel(
@@ -423,6 +430,7 @@ final class TripDetailViewModel: ObservableObject {
         loadDetail: @escaping (String) async throws -> PersonalTripDetail,
         loadDays: @escaping (String) async throws -> PersonalTripDays,
         loadWeather: @escaping (String) async throws -> PersonalTripWeather,
+        loadScenes: @escaping (String) async throws -> PersonalTripScenes = { _ in throw APIClientError.http(statusCode: 404) },
         loadRouteVersionStatus: ((String) async throws -> PersonalTripRouteVersionStatus)? = nil,
         cancelTrip: @escaping (String, String, Bool, String) async throws -> PersonalTripDetail = { tripID, _, _, _ in
             throw APIClientError.mockNotFound("POST /trips/\(tripID)/cancellations")
@@ -436,6 +444,7 @@ final class TripDetailViewModel: ObservableObject {
         self.loadDetail = loadDetail
         self.loadDays = loadDays
         self.loadWeather = loadWeather
+        self.loadScenes = loadScenes
         self.loadRouteVersionStatus = loadRouteVersionStatus ?? {
             try await loadDetail($0).routeVersionStatus
         }
@@ -454,83 +463,147 @@ final class TripDetailViewModel: ObservableObject {
     }
 
     func loadTrip(id: String) async {
-        isLoading = true
-        errorMessage = nil
-        migrationErrorMessage = nil
-        isWeatherUnavailable = false
-        defer { isLoading = false }
+        guard !Task.isCancelled, !isMutating,
+              loading == nil || loading?.isCancelled == true else { return }
+        let request = TripRequestLifetime()
+        loading = request
+        refreshingScenes?.cancel()
+        refreshingStatus?.cancel()
+        refreshingStatus = nil
+        state.phase = .loading
+        state.errorMessage = nil
+        state.migrationErrorMessage = nil
+        defer {
+            if loading === request {
+                loading = nil
+                state.phase = .idle
+            }
+        }
 
-        do {
-            async let loadedDetail = loadDetail(id)
-            async let loadedDays = loadDays(id)
-            let (detail, days) = try await (loadedDetail, loadedDays)
-            try requireMatchingRevision(detail: detail, days: days)
-
+        await withTaskCancellationHandler {
             do {
-                let weather = try await loadWeather(id)
-                guard PersonalTripWeatherValidator.isValid(
-                    weather,
-                    tripID: detail.trip.identity,
-                    revision: detail.revision
-                ) else {
-                    throw APIClientError.invalidResponse
+                async let loadedDetail = loadDetail(id)
+                async let loadedDays = loadDays(id)
+                let (detail, days) = try await (loadedDetail, loadedDays)
+                guard loading === request, !request.isCancelled, !Task.isCancelled else { return }
+                try requireMatchingRevision(detail: detail, days: days)
+
+                let weather: PersonalTripWeather?
+                do {
+                    let loadedWeather = try await loadWeather(id)
+                    guard loading === request, !request.isCancelled, !Task.isCancelled else { return }
+                    guard PersonalTripWeatherValidator.isValid(
+                        loadedWeather,
+                        tripID: detail.trip.identity,
+                        revision: detail.revision
+                    ) else {
+                        throw APIClientError.invalidResponse
+                    }
+                    weather = loadedWeather
+                } catch {
+                    guard loading === request, !request.isCancelled, !Task.isCancelled,
+                          !tripRequestWasCancelled(error) else { return }
+                    // 天气失败独立降级；取消不是天气不可用，也不能发布旧的主投影。
+                    #if DEBUG
+                    print("[TripDetail] 天气投影降级为不可用：\(error)")
+                    #endif
+                    weather = nil
                 }
                 replaceProjection(detail: detail, days: days, weather: weather)
+                state.migrationErrorMessage = initialMigrationErrorMessage
             } catch {
-                // 天气是详情页的辅助信息：后端投影不可用（trip_weather_projection_unavailable）、
-                // 解码失败或关联结构校验不通过时，降级为天气不可用并记录原因，
-                // 不得拖垮整个行程详情页。
-                #if DEBUG
-                print("⚠️ [TripDetail] 天气投影降级为不可用：\(error)")
-                #endif
-                replaceProjection(detail: detail, days: days, weather: nil)
-                isWeatherUnavailable = true
+                guard loading === request, !request.isCancelled, !Task.isCancelled,
+                      !tripRequestWasCancelled(error) else { return }
+                state.errorMessage = message(for: error, operation: "加载")
             }
-            migrationErrorMessage = initialMigrationErrorMessage
-        } catch {
-            errorMessage = message(for: error, operation: "加载")
+        } onCancel: {
+            request.cancel()
         }
     }
 
     func refreshRouteVersionStatus(id: String) async {
-        do {
-            let status = try await loadRouteVersionStatus(id)
-            guard let trip, status.tripRevision == trip.revision else {
-                throw APIClientError.invalidResponse
+        guard !Task.isCancelled, !isMutating, !isLoading, let trip,
+              refreshingStatus == nil || refreshingStatus?.isCancelled == true else { return }
+        let request = TripRequestLifetime()
+        refreshingStatus = request
+        defer { if refreshingStatus === request { refreshingStatus = nil } }
+        await withTaskCancellationHandler {
+            do {
+                let status = try await loadRouteVersionStatus(id)
+                guard refreshingStatus === request, !request.isCancelled, !Task.isCancelled else { return }
+                guard status.tripRevision == trip.revision else {
+                    throw APIClientError.invalidResponse
+                }
+                state.projection?.routeVersionStatus = status
+                state.errorMessage = nil
+            } catch {
+                guard refreshingStatus === request, !request.isCancelled, !Task.isCancelled,
+                      !tripRequestWasCancelled(error) else { return }
+                state.errorMessage = message(for: error, operation: "刷新版本状态")
             }
-            routeVersionStatus = status
-            errorMessage = nil
-        } catch {
-            errorMessage = message(for: error, operation: "刷新版本状态")
+        } onCancel: {
+            request.cancel()
         }
     }
 
+    /// 独立任务只替换艺术投影，不占用主页面的 loading/error，也不授予日事实映射。
+    func refreshScenes() async {
+        guard !Task.isCancelled, let batch = sceneRequestID, let projection = state.projection else { return }
+        refreshingScenes?.cancel()
+        let request = TripRequestLifetime()
+        refreshingScenes = request
+        defer { if refreshingScenes === request { refreshingScenes = nil } }
+        await withTaskCancellationHandler {
+            do {
+                let value = try await loadScenes(projection.detail.trip.identity)
+                guard !Task.isCancelled, !request.isCancelled, refreshingScenes === request,
+                      sceneRequestID == batch else { return }
+                guard value.isValid(
+                        tripID: projection.detail.trip.identity,
+                        tripRevision: projection.detail.revision,
+                        routeVersionID: projection.detail.routeReference.adoptedRouteVersionID,
+                        tripDayIDs: Set(projection.days.days.map(\.identity))
+                      ) else {
+                    state.projection?.scenes = nil
+                    return
+                }
+                state.projection?.scenes = value
+            } catch {
+                guard !Task.isCancelled, !request.isCancelled, refreshingScenes === request,
+                      sceneRequestID == batch else { return }
+                state.projection?.scenes = nil
+            }
+        } onCancel: { request.cancel() }
+    }
+
+    func dismissError() { state.errorMessage = nil }
+
     func cancelTrip(id: String) async {
-        guard let trip, actionPolicy?.canCancel == true else { return }
+        guard !Task.isCancelled, !isMutating, let trip, actionPolicy?.canCancel == true else { return }
         let signature = "\(id)|\(trip.revision)|true"
         let intent = intent(for: signature, current: pendingCancelIntent)
         pendingCancelIntent = intent
         await mutate(operation: "取消行程") {
             do {
                 let detail = try await cancel(id, trip.revision, true, intent.idempotencyKey)
-                pendingCancelIntent = nil
+                // 未发布的取消结果仍需用原幂等键重试，不能推断远端未生效。
+                if !Task.isCancelled { pendingCancelIntent = nil }
                 return detail
             } catch {
-                if !Self.hasUnknownResult(error) { pendingCancelIntent = nil }
+                if !Task.isCancelled, !Self.hasUnknownResult(error) { pendingCancelIntent = nil }
                 throw error
             }
         }
     }
 
     func migrateTrip(id: String) async {
-        guard let trip else { return }
-        isMutating = true
-        errorMessage = nil
-        migrationErrorMessage = nil
-        defer { isMutating = false }
+        guard !Task.isCancelled, !isMutating, let trip else { return }
+        beginMutation()
+        defer { state.phase = .idle }
 
         do {
             let latestStatus = try await loadRouteVersionStatus(id)
+            guard !Task.isCancelled else { return }
             guard latestStatus.tripRevision == trip.revision,
                   latestStatus.versionRelationship == .newerPublicVersionAvailable,
                   latestStatus.migrationEligible,
@@ -542,16 +615,18 @@ final class TripDetailViewModel: ObservableObject {
             pendingMigrationIntent = intent
             do {
                 let migrated = try await migrate(id, trip.revision, target, intent.idempotencyKey)
+                guard !Task.isCancelled else { return }
                 pendingMigrationIntent = nil
                 replaceWithMutationProjection(migrated)
             } catch {
-                if !Self.hasUnknownResult(error) { pendingMigrationIntent = nil }
+                if !Task.isCancelled, !Self.hasUnknownResult(error) { pendingMigrationIntent = nil }
                 throw error
             }
         } catch {
+            guard !Task.isCancelled, !tripRequestWasCancelled(error) else { return }
             let message = message(for: error, operation: "迁移行程")
-            migrationErrorMessage = message
-            errorMessage = message
+            state.migrationErrorMessage = message
+            state.errorMessage = message
         }
     }
 
@@ -559,14 +634,28 @@ final class TripDetailViewModel: ObservableObject {
         operation: String,
         action: () async throws -> PersonalTripDetail
     ) async {
-        isMutating = true
-        errorMessage = nil
-        defer { isMutating = false }
+        guard !Task.isCancelled, !isMutating else { return }
+        beginMutation()
+        defer { state.phase = .idle }
         do {
-            replaceWithMutationProjection(try await action())
+            let detail = try await action()
+            guard !Task.isCancelled else { return }
+            replaceWithMutationProjection(detail)
         } catch {
-            errorMessage = message(for: error, operation: operation)
+            guard !Task.isCancelled, !tripRequestWasCancelled(error) else { return }
+            state.errorMessage = message(for: error, operation: operation)
         }
+    }
+
+    private func beginMutation() {
+        refreshingScenes?.cancel()
+        loading?.cancel()
+        loading = nil
+        refreshingStatus?.cancel()
+        refreshingStatus = nil
+        state.phase = .mutating
+        state.errorMessage = nil
+        state.migrationErrorMessage = nil
     }
 
     private func intent(for signature: String, current: MutationIntent?) -> MutationIntent {
@@ -575,6 +664,7 @@ final class TripDetailViewModel: ObservableObject {
     }
 
     private static func hasUnknownResult(_ error: Error) -> Bool {
+        if tripRequestWasCancelled(error) { return true }
         switch error {
         case APIClientError.transport:
             return true
@@ -603,15 +693,16 @@ final class TripDetailViewModel: ObservableObject {
         days: PersonalTripDays,
         weather: PersonalTripWeather?
     ) {
-        trip = detail
-        self.days = days
-        self.weather = weather
-        routeVersionStatus = detail.routeVersionStatus
+        state.projection = .init(
+            detail: detail,
+            days: days,
+            weather: weather,
+            routeVersionStatus: detail.routeVersionStatus
+        )
     }
 
     private func replaceWithMutationProjection(_ detail: PersonalTripDetail) {
-        trip = detail
-        days = PersonalTripDays(
+        let days = PersonalTripDays(
             tripID: detail.trip.identity,
             revision: detail.revision,
             startDate: detail.trip.startDate,
@@ -620,9 +711,7 @@ final class TripDetailViewModel: ObservableObject {
             hikingDayCount: detail.trip.hikingDayCount,
             days: detail.days
         )
-        weather = nil
-        isWeatherUnavailable = true
-        routeVersionStatus = detail.routeVersionStatus
+        replaceProjection(detail: detail, days: days, weather: nil)
     }
 
     private func message(for error: Error, operation: String) -> String {

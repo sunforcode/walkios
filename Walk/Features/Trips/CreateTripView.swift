@@ -59,195 +59,11 @@ struct CreateTripEquipmentListPresentation: Equatable {
     }
 }
 
-@MainActor
-final class CreateTripViewModel: ObservableObject {
-    @Published private(set) var context: PersonalTripGenerationContext?
-    @Published var departureCity = "" {
-        didSet { invalidateTransportSelectionIfNeeded(previousValue: oldValue, currentValue: departureCity) }
-    }
-    @Published var startDate = BusinessCalendar.startOfToday() {
-        didSet { invalidateTransportSelectionIfNeeded(previousValue: oldValue, currentValue: startDate) }
-    }
-    @Published var selectedEquipmentListID: String? {
-        didSet { invalidateTransportSelectionIfNeeded(previousValue: oldValue, currentValue: selectedEquipmentListID) }
-    }
-    @Published private(set) var transportSelection: PersonalTripTransportSelection?
-    @Published var selectedTransportOptionID: String?
-    @Published private(set) var createdTripID: String?
-    @Published private(set) var isVersionConflict = false
-    @Published var isLoading = false
-    @Published var isSubmitting = false
-    @Published var errorMessage: String?
-
-    let routeID: String
-
-    private let loadContext: (String) async throws -> PersonalTripGenerationContext
-    private let createTrip: (
-        PersonalTripCreateRequest,
-        String
-    ) async throws -> PersonalTripGenerationResult
-    private let idempotencyKey: () -> String
-    private var lastRequest: PersonalTripCreateRequest?
-    private var lastIdempotencyKey: String?
-    private var hasLoaded = false
-    private var shouldRefreshContextOnAppearance = false
-
-    init(routeID: String, service: any PersonalTripServicing) {
-        self.routeID = routeID
-        self.loadContext = { try await service.generationContext(routeID: $0) }
-        self.createTrip = { try await service.create($0, idempotencyKey: $1) }
-        self.idempotencyKey = { UUID().uuidString }
-    }
-
-    init(
-        routeID: String,
-        loadContext: @escaping (String) async throws -> PersonalTripGenerationContext,
-        createTrip: @escaping (
-            PersonalTripCreateRequest,
-            String
-        ) async throws -> PersonalTripGenerationResult,
-        idempotencyKey: @escaping () -> String = { UUID().uuidString }
-    ) {
-        self.routeID = routeID
-        self.loadContext = loadContext
-        self.createTrip = createTrip
-        self.idempotencyKey = idempotencyKey
-    }
-
-    var canSubmit: Bool {
-        guard context?.route.generationEligibility.eligible == true,
-              !departureCity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !isVersionConflict else {
-            return false
-        }
-        guard transportSelection != nil else { return true }
-        return selectedTransportOptionID != nil
-    }
-
-    func load() async {
-        isLoading = true
-        errorMessage = nil
-        defer { isLoading = false }
-
-        do {
-            context = try await loadContext(routeID)
-            hasLoaded = true
-            isVersionConflict = false
-            transportSelection = nil
-            selectedTransportOptionID = nil
-            lastRequest = nil
-            lastIdempotencyKey = nil
-            if let selectedEquipmentListID,
-               context?.equipmentLists.contains(where: { $0.equipmentListID == selectedEquipmentListID }) != true {
-                self.selectedEquipmentListID = nil
-            }
-        } catch let error as LocalizedError {
-            errorMessage = error.errorDescription ?? error.localizedDescription
-        } catch {
-            errorMessage = "加载失败：\(error.localizedDescription)"
-        }
-    }
-
-    func prepareForPersonalEquipment() {
-        shouldRefreshContextOnAppearance = true
-    }
-
-    func handleAppearance() async {
-        guard hasLoaded else {
-            await load()
-            return
-        }
-        guard shouldRefreshContextOnAppearance else { return }
-        shouldRefreshContextOnAppearance = false
-        await load()
-    }
-
-    func submit() async {
-        guard let context else { return }
-        let city = departureCity.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !city.isEmpty else { return }
-
-        let selectedTransport = transportSelection.flatMap { selection in
-            selectedTransportOptionID.map {
-                PersonalTripTransportSelectionRequest(
-                    selectionID: selection.selectionID,
-                    transportOptionID: $0
-                )
-            }
-        }
-        if transportSelection != nil && selectedTransport == nil { return }
-
-        let request = PersonalTripCreateRequest(
-            routeID: routeID,
-            routeVersionID: context.route.currentPublicRouteVersionID,
-            departureCity: city,
-            startDate: LocalDate(date: startDate, calendar: .business),
-            equipmentListID: selectedEquipmentListID,
-            transportSelection: selectedTransport
-        )
-        let key: String
-        if lastRequest == request, let lastIdempotencyKey {
-            key = lastIdempotencyKey
-        } else {
-            key = idempotencyKey()
-            lastRequest = request
-            lastIdempotencyKey = key
-        }
-
-        isSubmitting = true
-        errorMessage = nil
-        defer { isSubmitting = false }
-
-        do {
-            switch try await createTrip(request, key) {
-            case .transportSelectionRequired(let selection):
-                guard selection.options.count >= 2 else {
-                    transportSelection = nil
-                    selectedTransportOptionID = nil
-                    throw APIClientError.invalidResponse
-                }
-                transportSelection = selection
-                selectedTransportOptionID = nil
-                lastRequest = nil
-                lastIdempotencyKey = nil
-            case .tripCreated(let detail):
-                transportSelection = nil
-                createdTripID = detail.trip.identity
-            }
-        } catch {
-            // personal-trip-api 409 route_version_conflict：进入 versionConflict 校准态，
-            // 保留输入但不允许继续提交旧版本；恢复动作 refreshRouteVersion / viewCurrentRoute。
-            if let apiError = error as? APIClientError,
-               case .api(let code, _, _, _) = apiError,
-               code == "route_version_conflict" {
-                isVersionConflict = true
-                transportSelection = nil
-                selectedTransportOptionID = nil
-                lastRequest = nil
-                lastIdempotencyKey = nil
-            } else if let localized = error as? LocalizedError {
-                errorMessage = localized.errorDescription ?? localized.localizedDescription
-            } else {
-                errorMessage = "生成失败：\(error.localizedDescription)"
-            }
-        }
-    }
-
-    private func invalidateTransportSelectionIfNeeded<Value: Equatable>(
-        previousValue: Value,
-        currentValue: Value
-    ) {
-        guard previousValue != currentValue, transportSelection != nil else { return }
-        transportSelection = nil
-        selectedTransportOptionID = nil
-        lastRequest = nil
-        lastIdempotencyKey = nil
-    }
-}
-
 struct CreateTripView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var viewModel: CreateTripViewModel
+    @State private var viewModel: CreateTripViewModel
+    @State private var submissionTask: Task<Void, Never>?
+    @State private var isVisible = false
     @FocusState private var isDepartureCityFocused: Bool
     private let onManagePersonalEquipment: () -> Void
     private let onTripCreated: (String) -> Void
@@ -258,7 +74,7 @@ struct CreateTripView: View {
         onManagePersonalEquipment: @escaping () -> Void = {},
         onTripCreated: @escaping (String) -> Void = { _ in }
     ) {
-        _viewModel = StateObject(wrappedValue: CreateTripViewModel(
+        _viewModel = State(initialValue: CreateTripViewModel(
             routeID: routeID,
             service: service
         ))
@@ -271,7 +87,7 @@ struct CreateTripView: View {
         onManagePersonalEquipment: @escaping () -> Void = {},
         onTripCreated: @escaping (String) -> Void = { _ in }
     ) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+        _viewModel = State(initialValue: viewModel)
         self.onManagePersonalEquipment = onManagePersonalEquipment
         self.onTripCreated = onTripCreated
     }
@@ -292,9 +108,23 @@ struct CreateTripView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
-        .onAppear { Task { await viewModel.handleAppearance() } }
-        .onChange(of: viewModel.createdTripID) { tripID in
-            if let tripID { onTripCreated(tripID) }
+        .task { await viewModel.handleAppearance() }
+        .onAppear { isVisible = true }
+        .onDisappear {
+            isVisible = false
+            submissionTask?.cancel()
+        }
+    }
+
+    private func submitTrip() {
+        guard isVisible, submissionTask == nil, viewModel.canSubmit else { return }
+        // Button tasks are unstructured: disappearance cancels explicitly, but
+        // the handle and model write lock stay held until the request returns.
+        submissionTask = Task { @MainActor in
+            defer { submissionTask = nil }
+            await viewModel.submit()
+            guard !Task.isCancelled, isVisible, let tripID = viewModel.createdTripID else { return }
+            onTripCreated(tripID)
         }
     }
 
@@ -355,7 +185,7 @@ struct CreateTripView: View {
                     title: submitTitle,
                     isDisabled: !viewModel.canSubmit,
                     fillsWidth: true,
-                    action: { Task { await viewModel.submit() } }
+                    action: submitTrip
                 )
             }
         ) {
@@ -384,7 +214,7 @@ struct CreateTripView: View {
                         message: "\(error)\n已保留本次填写内容。",
                         title: "生成未完成",
                         variant: .form,
-                        retry: { Task { await viewModel.submit() } }
+                        retry: submitTrip
                     )
                 }
             }
@@ -398,10 +228,10 @@ struct CreateTripView: View {
             FormField(
                 label: "出发城市",
                 requirement: .required,
-                error: departureCityError,
+                error: viewModel.departureCityError,
                 isFocused: isDepartureCityFocused
             ) {
-                TextField("输入出发城市", text: $viewModel.departureCity)
+                TextField("输入出发城市", text: Binding(get: { viewModel.departureCity }, set: viewModel.updateDepartureCity))
                     .textInputAutocapitalization(.words)
                     .submitLabel(.done)
                     .focused($isDepartureCityFocused)
@@ -411,7 +241,7 @@ struct CreateTripView: View {
             FormField(label: "从出发城市启程的日期", requirement: .required) {
                 DatePicker(
                     "从出发城市启程的日期",
-                    selection: $viewModel.startDate,
+                    selection: Binding(get: { viewModel.startDate }, set: viewModel.updateStartDate),
                     displayedComponents: .date
                 )
                 .labelsHidden()
@@ -503,7 +333,7 @@ struct CreateTripView: View {
                 viewModel.prepareForPersonalEquipment()
                 onManagePersonalEquipment()
             },
-            onSelectEquipmentList: { viewModel.selectedEquipmentListID = $0 }
+            onSelectEquipmentList: viewModel.selectEquipmentList
         )
     }
 
@@ -522,7 +352,7 @@ struct CreateTripView: View {
                 },
                 selectedTransportOptionID: viewModel.selectedTransportOptionID
             ),
-            onSelectTransportOption: { viewModel.selectedTransportOptionID = $0 }
+            onSelectTransportOption: { viewModel.selectTransportOption($0) }
         )
     }
 
@@ -546,13 +376,6 @@ struct CreateTripView: View {
             return .available("约 \(hours) 小时")
         }
         return .unavailable("用时不可用")
-    }
-
-    private var departureCityError: String? {
-        guard viewModel.departureCity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
-        }
-        return "请先填写城市，再生成个人行程。"
     }
 
     private var submitTitle: String {

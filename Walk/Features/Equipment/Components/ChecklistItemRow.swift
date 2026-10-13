@@ -109,10 +109,34 @@ struct ChecklistItemRow: View {
 }
 
 #if DEBUG
+extension ChecklistItemRowProjection {
+    static let knownWeight = ChecklistItemRowProjection(
+        identity: "equipment-001",
+        listIdentity: "list-001",
+        listName: "周末轻装清单",
+        equipmentName: "双人轻量帐篷",
+        ownedQuantity: 1,
+        quantity: 1,
+        unitWeightGrams: 1_680
+    )
+
+    static let unknownWeight = ChecklistItemRowProjection(
+        identity: "equipment-002",
+        listIdentity: "list-001",
+        listName: "周末轻装清单",
+        equipmentName: "应急保温毯",
+        ownedQuantity: 3,
+        quantity: 2,
+        unitWeightGrams: nil
+    )
+
+    static let samples = [ChecklistItemRowProjection.knownWeight, ChecklistItemRowProjection.unknownWeight]
+}
+
 #Preview("ChecklistItemRow.default") {
     BusinessComponentPreviewHost {
         ChecklistItemRow(
-            projection: BusinessComponentPreviewFixtures.checklistMemberKnown,
+            projection: ChecklistItemRowProjection.knownWeight,
             onChangeQuantity: { _, _ in },
             onRemoveMember: { _ in }
         )
@@ -122,7 +146,7 @@ struct ChecklistItemRow: View {
 #Preview("ChecklistItemRow.unknownWeight") {
     BusinessComponentPreviewHost {
         ChecklistItemRow(
-            projection: BusinessComponentPreviewFixtures.checklistMemberUnknown,
+            projection: ChecklistItemRowProjection.unknownWeight,
             onChangeQuantity: { _, _ in },
             onRemoveMember: { _ in }
         )
@@ -132,7 +156,7 @@ struct ChecklistItemRow: View {
 #Preview("ChecklistItemRow.loading") {
     BusinessComponentPreviewHost {
         ChecklistItemRow(
-            projection: BusinessComponentPreviewFixtures.checklistMemberKnown,
+            projection: ChecklistItemRowProjection.knownWeight,
             isLoading: true,
             onChangeQuantity: { _, _ in },
             onRemoveMember: { _ in }

@@ -79,9 +79,20 @@ struct EquipmentListRow: View {
 }
 
 #if DEBUG
+extension EquipmentListRowProjection {
+    static let sample = EquipmentListRowProjection.personalAsset(
+        PersonalEquipmentRowProjection(
+            identity: "equipment-001",
+            name: "双人轻量帐篷",
+            ownedQuantity: 1,
+            unitWeightGrams: 1_680
+        )
+    )
+}
+
 #Preview("EquipmentListRow.personalAsset") {
     BusinessComponentPreviewHost {
-        EquipmentListRow.preview(BusinessComponentPreviewFixtures.personalEquipmentRow)
+        EquipmentListRow.preview(EquipmentListRowProjection.sample)
     }
 }
 

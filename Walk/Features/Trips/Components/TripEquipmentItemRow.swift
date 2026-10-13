@@ -19,11 +19,13 @@ enum TripEquipmentItemSourceProjection: String, Equatable {
 enum TripEquipmentOwnershipStatusProjection: String, Equatable {
     case owned
     case unconfirmedOwned = "unconfirmed_owned"
+    case notApplicable = "not_applicable"
 
     var label: String {
         switch self {
         case .owned: "已有"
         case .unconfirmedOwned: "未确认已有"
+        case .notApplicable: "不适用"
         }
     }
 }
@@ -138,6 +140,7 @@ extension TripBusinessComponents {
             switch projection.ownershipStatus {
             case .owned: "已在个人装备中确认拥有。"
             case .unconfirmedOwned: "尚未确认是否拥有，不代表缺少。"
+            case .notApplicable: "本次补给不参与个人装备拥有状态核对。"
             }
         }
 
@@ -202,10 +205,89 @@ extension TripBusinessComponents {
 }
 
 #if DEBUG
+extension TripEquipmentItemRowProjection {
+    static let `default` = TripEquipmentItemRowProjection(
+        identity: "trip-equipment-default",
+        name: "双人帐篷",
+        quantity: 1,
+        unitWeightGrams: 1800,
+        note: nil,
+        source: .systemSuggestion,
+        ownershipStatus: .owned,
+        editable: true
+    )
+
+    static let userAdjusted = TripEquipmentItemRowProjection(
+        identity: "trip-equipment-adjusted",
+        name: "饮水与水袋",
+        quantity: 2,
+        unitWeightGrams: 1250,
+        note: nil,
+        source: .userAdjusted,
+        ownershipStatus: .owned,
+        editable: true
+    )
+
+    static let userAdded = TripEquipmentItemRowProjection(
+        identity: "trip-equipment-added",
+        name: "个人急救包",
+        quantity: 1,
+        unitWeightGrams: nil,
+        note: nil,
+        source: .userAdded,
+        ownershipStatus: .unconfirmedOwned,
+        editable: true
+    )
+
+    static let unknownWeight = TripEquipmentItemRowProjection(
+        identity: "trip-equipment-unknown",
+        name: "备用保温毯",
+        quantity: 1,
+        unitWeightGrams: nil,
+        note: nil,
+        source: .systemSuggestion,
+        ownershipStatus: .unconfirmedOwned,
+        editable: true
+    )
+
+    static let withNote = TripEquipmentItemRowProjection(
+        identity: "trip-equipment-note",
+        name: "零度睡袋",
+        quantity: 1,
+        unitWeightGrams: 1200,
+        note: "舒适温标 0℃，垭口日搭配羽绒内胆使用。",
+        source: .systemSuggestion,
+        ownershipStatus: .owned,
+        editable: true
+    )
+
+    static let readonly = TripEquipmentItemRowProjection(
+        identity: "trip-equipment-readonly",
+        name: "充气防潮垫",
+        quantity: 1,
+        unitWeightGrams: 500,
+        note: nil,
+        source: .userAdjusted,
+        ownershipStatus: .owned,
+        editable: false
+    )
+
+    static let long = TripEquipmentItemRowProjection(
+        identity: "trip-equipment-long",
+        name: "含备用保暖、防潮与应急通讯的长距离多日徒步综合装备组合",
+        quantity: 3,
+        unitWeightGrams: 2400,
+        note: "含羽绒内胆、防潮坐垫与卫星通讯模块；出发前确认电池与备用充电方案。",
+        source: .userAdjusted,
+        ownershipStatus: .unconfirmedOwned,
+        editable: true
+    )
+}
+
 #Preview("TripEquipmentItemRow.default") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripEquipmentItemRow(
-            projection: BusinessComponentPreviewFixtures.tripEquipmentItemDefault,
+            projection: TripEquipmentItemRowProjection.default,
             onRequestEdit: { _ in },
             onRequestDelete: { _ in }
         )
@@ -215,7 +297,7 @@ extension TripBusinessComponents {
 #Preview("TripEquipmentItemRow.userAdjusted") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripEquipmentItemRow(
-            projection: BusinessComponentPreviewFixtures.tripEquipmentItemUserAdjusted,
+            projection: TripEquipmentItemRowProjection.userAdjusted,
             onRequestEdit: { _ in },
             onRequestDelete: { _ in }
         )
@@ -225,7 +307,7 @@ extension TripBusinessComponents {
 #Preview("TripEquipmentItemRow.userAdded") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripEquipmentItemRow(
-            projection: BusinessComponentPreviewFixtures.tripEquipmentItemUserAdded,
+            projection: TripEquipmentItemRowProjection.userAdded,
             onRequestEdit: { _ in },
             onRequestDelete: { _ in }
         )
@@ -235,7 +317,7 @@ extension TripBusinessComponents {
 #Preview("TripEquipmentItemRow.unknownWeight") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripEquipmentItemRow(
-            projection: BusinessComponentPreviewFixtures.tripEquipmentItemUnknownWeight,
+            projection: TripEquipmentItemRowProjection.unknownWeight,
             onRequestEdit: { _ in },
             onRequestDelete: { _ in }
         )
@@ -245,7 +327,7 @@ extension TripBusinessComponents {
 #Preview("TripEquipmentItemRow.withNote") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripEquipmentItemRow(
-            projection: BusinessComponentPreviewFixtures.tripEquipmentItemWithNote,
+            projection: TripEquipmentItemRowProjection.withNote,
             onRequestEdit: { _ in },
             onRequestDelete: { _ in }
         )
@@ -255,7 +337,7 @@ extension TripBusinessComponents {
 #Preview("TripEquipmentItemRow.readonly") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripEquipmentItemRow(
-            projection: BusinessComponentPreviewFixtures.tripEquipmentItemReadonly,
+            projection: TripEquipmentItemRowProjection.readonly,
             onRequestEdit: { _ in },
             onRequestDelete: { _ in }
         )
@@ -265,7 +347,7 @@ extension TripBusinessComponents {
 #Preview("TripEquipmentItemRow.longContent") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripEquipmentItemRow(
-            projection: BusinessComponentPreviewFixtures.tripEquipmentItemLong,
+            projection: TripEquipmentItemRowProjection.long,
             onRequestEdit: { _ in },
             onRequestDelete: { _ in }
         )

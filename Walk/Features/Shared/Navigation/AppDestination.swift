@@ -8,7 +8,8 @@ import WalkDesignSystem
 // 「去哪里」「需要什么认证」，不引用 App 根实现；任务栈与呈现方式仍由 App 决定。
 
 enum PendingAuthIntent: Equatable {
-    case homeStart
+    case trips
+    case equipment
     case profile
     case createTrip(routeID: String)
     case reauthenticate
@@ -31,6 +32,13 @@ enum AppDestination: Hashable {
     case personalEquipment
     case equipmentEdit(equipmentID: String?)
     case tripWeather(String)
+
+    var requiresAuthentication: Bool {
+        switch self {
+        case .routeList, .routeSearch, .routeDetail: false
+        default: true
+        }
+    }
 
     var pageID: String {
         switch self {

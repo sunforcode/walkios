@@ -64,7 +64,7 @@ extension SharedBusinessComponents {
                         label: "单件重量",
                         placeholder: "可暂不填写"
                     )
-                    .keyboardType(.numberPad)
+                    .keyboardType(.decimalPad)
                 }
 
                 FormField(label: "备注", requirement: .optional, error: projection.noteError) {
@@ -108,10 +108,39 @@ extension SharedBusinessComponents {
 }
 
 #if DEBUG
+extension InlineEquipmentEditorProjection {
+    static let `default` = InlineEquipmentEditorProjection(
+        title: "修改本次装备",
+        name: "双人轻量帐篷",
+        quantity: 1,
+        unitWeight: "1680",
+        note: "营地夜间有风"
+    )
+
+    static let validationError = InlineEquipmentEditorProjection(
+        title: "新增本次装备",
+        name: "",
+        quantity: 1,
+        unitWeight: "-20",
+        note: "",
+        nameError: "请输入装备名称",
+        unitWeightError: "请输入大于零的克重"
+    )
+
+    static let saveFailed = InlineEquipmentEditorProjection(
+        title: "修改本次装备",
+        name: "双人轻量帐篷",
+        quantity: 1,
+        unitWeight: "1680",
+        note: "营地夜间有风",
+        saveError: "网络连接中断，当前操作没有完成，请稍后重试。"
+    )
+}
+
 #Preview("InlineEquipmentEditor.default") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.InlineEquipmentEditor.preview(
-            BusinessComponentPreviewFixtures.inlineEquipmentDefault
+            InlineEquipmentEditorProjection.default
         )
     }
 }
@@ -119,7 +148,7 @@ extension SharedBusinessComponents {
 #Preview("InlineEquipmentEditor.validationError") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.InlineEquipmentEditor.preview(
-            BusinessComponentPreviewFixtures.inlineEquipmentValidationError
+            InlineEquipmentEditorProjection.validationError
         )
     }
 }
@@ -127,7 +156,7 @@ extension SharedBusinessComponents {
 #Preview("InlineEquipmentEditor.saveFailed") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.InlineEquipmentEditor.preview(
-            BusinessComponentPreviewFixtures.inlineEquipmentSaveFailed
+            InlineEquipmentEditorProjection.saveFailed
         )
     }
 }

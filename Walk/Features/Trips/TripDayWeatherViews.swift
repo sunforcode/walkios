@@ -56,6 +56,7 @@ struct TripActionPresentation: Equatable, Identifiable {
             ])
         case "hike":
             return Self.notices([
+                ("徒步路段", action.routeSectionConfidence),
                 ("起点", action.start?.confidence),
                 ("终点", action.end?.confidence),
                 ("距离", action.distance?.confidence),
@@ -126,8 +127,15 @@ struct TripDayPresentation: Equatable {
     var hasDayContent: Bool {
         !presentationItems.isEmpty
             || !pointItems.isEmpty
+            || routeGuideProjection != nil
             || !weatherLine(day.weather).isEmpty
             || !weatherPresentation.statusNotices.isEmpty
+    }
+
+    var routeGuideProjection: TripRouteGuideProjection? {
+        guard let guide = day.routeGuide else { return nil }
+        let projection = TripRouteGuideProjection(guide: guide)
+        return projection.fields.isEmpty ? nil : projection
     }
 
     var dailyRouteSummary: TripActionPresentation? {
@@ -250,69 +258,6 @@ struct TripWeatherDayComponentPresentation: Equatable {
 }
 
 
-@MainActor
-final class TripWeatherViewModel: ObservableObject {
-    @Published private(set) var weather: PersonalTripWeather?
-    @Published private(set) var detail: PersonalTripDetail?
-    @Published private(set) var isLoading = false
-    @Published private(set) var isUnavailable = false
-    @Published var errorMessage: String?
-
-    private let tripID: String
-    private let loadWeather: (String) async throws -> PersonalTripWeather
-    private let loadDetail: (String) async throws -> PersonalTripDetail
-
-    init(tripID: String, service: any PersonalTripServicing) {
-        self.tripID = tripID
-        self.loadWeather = { try await service.weather(tripID: $0) }
-        self.loadDetail = { try await service.detail(tripID: $0) }
-    }
-
-    init(
-        tripID: String,
-        loadWeather: @escaping (String) async throws -> PersonalTripWeather,
-        loadDetail: @escaping (String) async throws -> PersonalTripDetail
-    ) {
-        self.tripID = tripID
-        self.loadWeather = loadWeather
-        self.loadDetail = loadDetail
-    }
-
-    func load() async {
-        isLoading = true
-        isUnavailable = false
-        errorMessage = nil
-        defer { isLoading = false }
-        do {
-            let weather = try await loadWeather(tripID)
-            let detail = try await loadDetail(tripID)
-            guard PersonalTripWeatherValidator.isValid(
-                weather,
-                tripID: tripID,
-                revision: detail.revision
-            ) else {
-                throw APIClientError.invalidResponse
-            }
-            self.weather = weather
-            self.detail = detail
-        } catch let error where Self.isProjectionUnavailable(error) {
-            weather = nil
-            isUnavailable = true
-            // 整趟天气不可用时保留上下文：仍尝试读取行程详情供分支 B 展示；失败则省略上下文。
-            detail = try? await loadDetail(tripID)
-        } catch {
-            weather = nil
-            detail = nil
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        }
-    }
-
-    private static func isProjectionUnavailable(_ error: Error) -> Bool {
-        guard case APIClientError.api(let code, _, _, _) = error else { return false }
-        return code == "trip_weather_projection_unavailable"
-    }
-}
-
 /// PAGE-TRIP-WEATHER 页面非组件：路线 + 完整年月日区间，双胶囊芯片。
 private struct TripWeatherContextLine: View {
     let routeName: String
@@ -349,10 +294,10 @@ private struct TripWeatherContextLine: View {
 }
 
 struct TripWeatherView: View {
-    @StateObject private var viewModel: TripWeatherViewModel
+    @State private var viewModel: TripWeatherViewModel
 
     init(tripID: String, service: any PersonalTripServicing) {
-        _viewModel = StateObject(wrappedValue: TripWeatherViewModel(tripID: tripID, service: service))
+        _viewModel = State(initialValue: TripWeatherViewModel(tripID: tripID, service: service))
     }
 
     var body: some View {

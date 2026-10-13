@@ -129,10 +129,109 @@ extension SharedBusinessComponents {
 }
 
 #if DEBUG
+extension TransportOptionSelectionProjection {
+    static let unselected = TransportOptionSelectionProjection(
+        selectionID: "selection-1",
+        options: [
+            TransportOptionProjection(
+                transportOptionID: "transport-1",
+                transferCount: .available("换乘 2 次"),
+                estimatedArrivalAt: .available("当日 18:20"),
+                estimatedDuration: .available("约 8.5 小时"),
+                verificationItems: ["康定客运站换乘时刻", "高原段接驳车辆需提前预约"]
+            ),
+            TransportOptionProjection(
+                transportOptionID: "transport-2",
+                transferCount: .available("换乘 1 次"),
+                estimatedArrivalAt: .available("次日 09:10"),
+                estimatedDuration: .available("约 15 小时"),
+                verificationItems: ["夜宿康定的住宿确认", "次日早班客运班次需复核"]
+            ),
+            TransportOptionProjection(
+                transportOptionID: "transport-3",
+                transferCount: .available("换乘 0 次"),
+                estimatedArrivalAt: .available("当日 16:40"),
+                estimatedDuration: .available("约 7 小时"),
+                verificationItems: ["包车同行人数与费用分摊"]
+            ),
+        ],
+        selectedTransportOptionID: nil
+    )
+
+    static let selected = TransportOptionSelectionProjection(
+        selectionID: "selection-1",
+        options: [
+            TransportOptionProjection(
+                transportOptionID: "transport-1",
+                transferCount: .available("换乘 2 次"),
+                estimatedArrivalAt: .available("当日 18:20"),
+                estimatedDuration: .available("约 8.5 小时"),
+                verificationItems: ["康定客运站换乘时刻", "高原段接驳车辆需提前预约"]
+            ),
+            TransportOptionProjection(
+                transportOptionID: "transport-2",
+                transferCount: .available("换乘 1 次"),
+                estimatedArrivalAt: .available("次日 09:10"),
+                estimatedDuration: .available("约 15 小时"),
+                verificationItems: ["夜宿康定的住宿确认"]
+            ),
+        ],
+        selectedTransportOptionID: "transport-2"
+    )
+
+    static let partial = TransportOptionSelectionProjection(
+        selectionID: "selection-1",
+        options: [
+            TransportOptionProjection(
+                transportOptionID: "transport-1",
+                transferCount: .available("换乘 2 次"),
+                estimatedArrivalAt: .unavailable("到达时间待核验"),
+                estimatedDuration: .available("约 8.5 小时"),
+                verificationItems: ["康定客运站换乘时刻"]
+            ),
+            TransportOptionProjection(
+                transportOptionID: "transport-2",
+                transferCount: .unavailable("换乘次数未知"),
+                estimatedArrivalAt: .available("次日 09:10"),
+                estimatedDuration: .unavailable("用时不可用"),
+                verificationItems: ["夜宿康定的住宿确认", "次日早班客运班次需复核"]
+            ),
+        ],
+        selectedTransportOptionID: nil
+    )
+
+    static let long = TransportOptionSelectionProjection(
+        selectionID: "selection-1",
+        options: [
+            TransportOptionProjection(
+                transportOptionID: "transport-1",
+                transferCount: .available("换乘 3 次"),
+                estimatedArrivalAt: .available("次日 11:40，含中途休整"),
+                estimatedDuration: .available("约 17.5 小时"),
+                verificationItems: [
+                    "首段高铁班次需在出发当日复核",
+                    "中转城市客运站换乘间隔预留 50 分钟",
+                    "高原段夜间禁行，需在康定过夜",
+                    "末段接驳车辆需提前一日确认司机与车牌",
+                    "备选返程班次在雨季可能取消"
+                ]
+            ),
+            TransportOptionProjection(
+                transportOptionID: "transport-2",
+                transferCount: .available("换乘 1 次"),
+                estimatedArrivalAt: .available("次日 09:10"),
+                estimatedDuration: .available("约 15 小时"),
+                verificationItems: ["夜宿康定的住宿确认", "次日早班客运班次需复核"]
+            ),
+        ],
+        selectedTransportOptionID: nil
+    )
+}
+
 #Preview("TransportOptionSelection.unselected") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.TransportOptionSelection(
-            projection: BusinessComponentPreviewFixtures.transportSelectionUnselected,
+            projection: TransportOptionSelectionProjection.unselected,
             onSelectTransportOption: { _ in }
         )
     }
@@ -141,7 +240,7 @@ extension SharedBusinessComponents {
 #Preview("TransportOptionSelection.selected") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.TransportOptionSelection(
-            projection: BusinessComponentPreviewFixtures.transportSelectionSelected,
+            projection: TransportOptionSelectionProjection.selected,
             onSelectTransportOption: { _ in }
         )
     }
@@ -150,7 +249,7 @@ extension SharedBusinessComponents {
 #Preview("TransportOptionSelection.partial") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.TransportOptionSelection(
-            projection: BusinessComponentPreviewFixtures.transportSelectionPartial,
+            projection: TransportOptionSelectionProjection.partial,
             onSelectTransportOption: { _ in }
         )
     }
@@ -159,7 +258,7 @@ extension SharedBusinessComponents {
 #Preview("TransportOptionSelection.longContent") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.TransportOptionSelection(
-            projection: BusinessComponentPreviewFixtures.transportSelectionLong,
+            projection: TransportOptionSelectionProjection.long,
             onSelectTransportOption: { _ in }
         )
     }

@@ -6,7 +6,7 @@ import WalkDesignSystem
 struct HomeView: View {
     let onAuthenticate: (PendingAuthIntent) -> Void
     let onNavigate: (AppDestination) -> Void
-    @StateObject private var viewModel: HomeViewModel
+    @State private var viewModel: HomeViewModel
 
     init(
         onAuthenticate: @escaping (PendingAuthIntent) -> Void,
@@ -16,7 +16,7 @@ struct HomeView: View {
     ) {
         self.onAuthenticate = onAuthenticate
         self.onNavigate = onNavigate
-        _viewModel = StateObject(wrappedValue: HomeViewModel(
+        _viewModel = State(initialValue: HomeViewModel(
             service: service,
             authSession: authSession
         ))
@@ -29,7 +29,7 @@ struct HomeView: View {
     ) {
         self.onAuthenticate = onAuthenticate
         self.onNavigate = onNavigate
-        _viewModel = StateObject(wrappedValue: viewModel)
+        _viewModel = State(initialValue: viewModel)
     }
 
     var body: some View {
@@ -44,25 +44,32 @@ struct HomeView: View {
                 }
             }
         ) {
-            VStack(spacing: 0) {
-                Spacer(minLength: 0)
-                homeContent
-                    .padding(.bottom, Spacing.safeAreaBottom + Spacing.lg)
+            if viewModel.state == .ready, viewModel.focusedTrip != nil {
+                homeContentLayout
+                    .contentShape(Rectangle())
+                    .onTapGesture { openFocusedTripIfNeeded() }
+            } else {
+                homeContentLayout
             }
-            // 整页触控打开焦点行程；子内容（按钮/摘要自身手势）优先，
-            // 非焦点状态此处为空操作。
-            .contentShape(Rectangle())
-            .onTapGesture { openFocusedTripIfNeeded() }
         }
         .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.load() }
+        .onDisappear { viewModel.cancelPendingOperations() }
+    }
+
+    private var homeContentLayout: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            homeContent
+                .padding(.bottom, Spacing.safeAreaBottom + Spacing.lg)
+        }
     }
 
     @ViewBuilder
     private var homeContent: some View {
         switch viewModel.state {
         case .guest:
-            GuestHomeContent { onAuthenticate(.homeStart) }
+            GuestHomeContent { onAuthenticate(.trips) }
         case .loading:
             HomeLoadingContent()
         case .error(let message):
@@ -236,52 +243,137 @@ private struct HomeMountainSilhouette: View {
 }
 
 #if DEBUG
+extension HomeViewModel {
+    static func preview(
+        state: HomeState,
+        trip: PersonalTripSummary? = nil,
+        weather: HomeWeatherSummary? = nil
+    ) -> HomeViewModel {
+        HomeViewModel(
+            staticState: state,
+            focusedTrip: trip,
+            weatherSummary: weather
+        )
+    }
+}
+
+extension HomeWeatherSummary {
+    static let available = HomeWeatherSummary(
+        conclusion: WeatherSummaryModel.available.conclusion,
+        impact: WeatherSummaryModel.available.impact
+    )
+
+    static let longContent = HomeWeatherSummary(
+        conclusion: WeatherSummaryModel.longContent.conclusion,
+        impact: WeatherSummaryModel.longContent.impact
+    )
+}
+
+extension PersonalTripSummary {
+    static let homeComplete = homePreview(
+        routeName: "云岭环线",
+        start: "云栈口",
+        end: "云栈口",
+        distanceMeters: 12_100,
+        ascentMeters: 600
+    )
+
+    static let homeMissingMetrics = homePreview(
+        routeName: "云岭环线",
+        start: "云栈口",
+        end: "云栈口",
+        distanceMeters: nil,
+        ascentMeters: nil
+    )
+
+    static let homeLongContent = homePreview(
+        routeName: "云岭北坡高山草甸与连续山脊全景环线",
+        start: "云栈口游客中心北侧长距离接驳点",
+        end: "云栈口游客中心南侧返程集合点",
+        distanceMeters: 12_100,
+        ascentMeters: 600
+    )
+
+    private static func homePreview(
+        routeName: String,
+        start: String,
+        end: String,
+        distanceMeters: Double?,
+        ascentMeters: Double?
+    ) -> PersonalTripSummary {
+        PersonalTripSummary(
+            tripID: "home-preview-trip",
+            revision: "home-preview-revision",
+            name: routeName,
+            status: .inProgress,
+            routeReference: PersonalTripRouteReference(
+                routeID: "home-preview-route",
+                adoptedRouteVersionID: "home-preview-route-version"
+            ),
+            routeName: routeName,
+            routeType: "loop",
+            start: PublicRoutePlace(name: start),
+            end: PublicRoutePlace(name: end),
+            estimatedDuration: RouteDuration(seconds: 19_200),
+            startDate: LocalDate(year: 2026, month: 9, day: 20),
+            endDate: LocalDate(year: 2026, month: 9, day: 20),
+            totalDayCount: 1,
+            hikingDayCount: 1,
+            versionLabel: "preview-v1",
+            cover: nil,
+            direction: "环线",
+            distance: distanceMeters.map(RouteDistance.init(meters:)),
+            ascent: ascentMeters.map(RouteElevationGain.init(meters:))
+        )
+    }
+}
+
 #Preview("guest") {
-    HomeView(viewModel: HomePreviewFixtures.homeViewModel(state: .guest))
+    HomeView(viewModel: HomeViewModel.preview(state: .guest))
 }
 
 #Preview("noFocus") {
-    HomeView(viewModel: HomePreviewFixtures.homeViewModel(state: .ready, trip: nil))
+    HomeView(viewModel: HomeViewModel.preview(state: .ready, trip: nil))
 }
 
 #Preview("focusComplete") {
-    HomeView(viewModel: HomePreviewFixtures.homeViewModel(
+    HomeView(viewModel: HomeViewModel.preview(
         state: .ready,
-        trip: HomePreviewFixtures.completeTrip,
-        weather: HomePreviewFixtures.homeWeatherAvailable
+        trip: PersonalTripSummary.homeComplete,
+        weather: HomeWeatherSummary.available
     ))
 }
 
 #Preview("focusMissingMetrics") {
-    HomeView(viewModel: HomePreviewFixtures.homeViewModel(
+    HomeView(viewModel: HomeViewModel.preview(
         state: .ready,
-        trip: HomePreviewFixtures.missingMetricsTrip,
-        weather: HomePreviewFixtures.homeWeatherAvailable
+        trip: PersonalTripSummary.homeMissingMetrics,
+        weather: HomeWeatherSummary.available
     ))
 }
 
 #Preview("focusWeatherOmitted") {
-    HomeView(viewModel: HomePreviewFixtures.homeViewModel(
+    HomeView(viewModel: HomeViewModel.preview(
         state: .ready,
-        trip: HomePreviewFixtures.completeTrip
+        trip: PersonalTripSummary.homeComplete
     ))
 }
 
 #Preview("loading") {
-    HomeView(viewModel: HomePreviewFixtures.homeViewModel(state: .loading))
+    HomeView(viewModel: HomeViewModel.preview(state: .loading))
 }
 
 #Preview("error") {
-    HomeView(viewModel: HomePreviewFixtures.homeViewModel(
+    HomeView(viewModel: HomeViewModel.preview(
         state: .error("当前行程加载失败")
     ))
 }
 
 #Preview("longContent") {
-    HomeView(viewModel: HomePreviewFixtures.homeViewModel(
+    HomeView(viewModel: HomeViewModel.preview(
         state: .ready,
-        trip: HomePreviewFixtures.longContentTrip,
-        weather: HomePreviewFixtures.homeWeatherLongContent
+        trip: PersonalTripSummary.homeLongContent,
+        weather: HomeWeatherSummary.longContent
     ))
     .environment(\.dynamicTypeSize, .accessibility2)
 }

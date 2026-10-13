@@ -7,6 +7,7 @@ public protocol PersonalTripServicing {
     func detail(tripID: String) async throws -> PersonalTripDetail
     func days(tripID: String) async throws -> PersonalTripDays
     func weather(tripID: String) async throws -> PersonalTripWeather
+    func scenes(tripID: String) async throws -> PersonalTripScenes
     func routeVersionStatus(tripID: String) async throws -> PersonalTripRouteVersionStatus
     func cancel(
         tripID: String,
@@ -25,6 +26,12 @@ public protocol PersonalTripServicing {
         _ input: PersonalTripCreateRequest,
         idempotencyKey: String
     ) async throws -> PersonalTripGenerationResult
+}
+
+public extension PersonalTripServicing {
+    func scenes(tripID: String) async throws -> PersonalTripScenes {
+        throw APIClientError.http(statusCode: 404)
+    }
 }
 
 public struct PersonalTripService: PersonalTripServicing {
@@ -52,6 +59,10 @@ public struct PersonalTripService: PersonalTripServicing {
 
      public func weather(tripID: String) async throws -> PersonalTripWeather {
         try await apiClient.execute(PersonalTripAPI.Weather(tripID: tripID))
+    }
+
+    public func scenes(tripID: String) async throws -> PersonalTripScenes {
+        try await apiClient.execute(PersonalTripAPI.Scenes(tripID: tripID))
     }
 
      public func routeVersionStatus(tripID: String) async throws -> PersonalTripRouteVersionStatus {

@@ -67,7 +67,7 @@ extension TripBusinessComponents {
 #Preview("DailyWeatherCard.default") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.DailyWeatherCard(
-            day: BusinessComponentPreviewFixtures.weatherDayDefault
+            day: TripWeatherDayProjection.default
         )
     }
 }
@@ -75,7 +75,7 @@ extension TripBusinessComponents {
 #Preview("DailyWeatherCard.unavailable") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.DailyWeatherCard(
-            day: BusinessComponentPreviewFixtures.weatherDayUnavailable
+            day: TripWeatherDayProjection.unavailable
         )
     }
 }

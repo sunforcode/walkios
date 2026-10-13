@@ -39,15 +39,12 @@ final class KeyFlowRegressionUITests: XCTestCase {
         XCTAssertTrue(createTitle.waitForExistence(timeout: 10), "登录后未回到创建行程任务")
         capture("03-create-trip-after-login")
 
-        // 首页：焦点行程
-        tab("首页")
-        let focus = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label BEGINSWITH %@", "继续行程：")).firstMatch
-        XCTAssertTrue(focus.waitForExistence(timeout: 10), "首页未展示焦点行程")
-        capture("04-home-focus")
-
-        // 行程：焦点行程 → 详情 → 天气、装备
-        focus.tap()
+        // 行程：原首页焦点场景 → 详情 → 天气、装备
+        tab("行程")
+        let trip = button(labelContaining: "继续行程：贡嘎环线")
+        XCTAssertTrue(trip.waitForExistence(timeout: 10), "行程根页未展示服务端行程")
+        capture("04-trips")
+        trip.tap()
         // 行程天气区的逐日行是进入天气页的按钮（D1 起，含温度范围）。
         let weatherEntry = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS %@", "D1,", "°C")
@@ -64,13 +61,12 @@ final class KeyFlowRegressionUITests: XCTestCase {
         capture("07-trip-equipment")
         back()
 
-        // 装备与我的：我的页 → 我的装备
+        // 我的只保留账户与日历，装备已独立为一级区域。
         tab("我的")
-        let myEquipment = button(labelBeginsWith: "我的装备，")
-        XCTAssertTrue(myEquipment.waitForExistence(timeout: 10), "我的页未展示装备入口（未登录或加载失败）")
+        XCTAssertTrue(button(labelContaining: "行程日历").waitForExistence(timeout: 10))
         capture("08-profile")
-        scrollTo(myEquipment).tap()
-        Thread.sleep(forTimeInterval: 1.5)
+        tab("装备")
+        XCTAssertTrue(app.buttons["新增个人装备"].waitForExistence(timeout: 10))
         capture("09-personal-equipment")
     }
 

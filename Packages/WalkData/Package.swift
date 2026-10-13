@@ -13,7 +13,8 @@ let package = Package(
     targets: [
         .target(
             name: "WalkData",
-            dependencies: [.product(name: "Alamofire", package: "Alamofire")]
+            dependencies: [.product(name: "Alamofire", package: "Alamofire")],
+            resources: [.process("Sources/Resources")]
         ),
         .testTarget(
             name: "WalkDataTests",

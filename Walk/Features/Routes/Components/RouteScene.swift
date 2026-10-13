@@ -104,9 +104,80 @@ extension RouteBusinessComponents {
 }
 
 #if DEBUG
+extension RouteSceneProjection {
+    private static let sampleMetrics = [
+        MetricItemModel(id: "distance", value: "42.8", unit: "km", label: "距离"),
+        MetricItemModel(id: "ascent", value: "2,340", unit: "m", label: "累计爬升"),
+        MetricItemModel(id: "duration", value: "4", unit: "天", label: "预计用时"),
+    ]
+
+    static let `default` = RouteSceneProjection(
+        routeID: "route-001",
+        coverAvailable: true,
+        name: "贡嘎西南坡环线",
+        region: "四川 · 甘孜",
+        difficulty: "进阶",
+        metrics: RouteSceneProjection.sampleMetrics
+    )
+
+    static let neutral = RouteSceneProjection(
+        routeID: "route-002",
+        coverAvailable: false,
+        name: "河谷森林线",
+        region: "云南 · 怒江",
+        difficulty: "中等",
+        metrics: RouteSceneProjection.sampleMetrics
+    )
+
+    static let nameMissing = RouteSceneProjection(
+        routeID: "route-003",
+        coverAvailable: true,
+        name: nil,
+        region: "青海 · 海西",
+        difficulty: "困难",
+        metrics: RouteSceneProjection.sampleMetrics
+    )
+
+    static let tagsOmitted = RouteSceneProjection(
+        routeID: "route-004",
+        coverAvailable: true,
+        name: "高山草甸环线",
+        region: nil,
+        difficulty: nil,
+        metrics: RouteSceneProjection.sampleMetrics
+    )
+
+    static let partialMetrics = RouteSceneProjection(
+        routeID: "route-005",
+        coverAvailable: true,
+        name: "山谷观景线",
+        region: "北京 · 延庆",
+        difficulty: "中等",
+        metrics: [RouteSceneProjection.sampleMetrics[0]]
+    )
+
+    static let metricsOmitted = RouteSceneProjection(
+        routeID: "route-006",
+        coverAvailable: true,
+        name: "林线短程路线",
+        region: "四川 · 阿坝",
+        difficulty: "简单",
+        metrics: []
+    )
+
+    static let long = RouteSceneProjection(
+        routeID: "route-007",
+        coverAvailable: true,
+        name: "穿越原始森林、高山草甸与连续垭口的长距离环形徒步路线",
+        region: "四川省甘孜藏族自治州",
+        difficulty: "高海拔进阶路线",
+        metrics: RouteSceneProjection.sampleMetrics
+    )
+}
+
 #Preview("RouteScene.default") {
     RouteBusinessComponents.RouteScene(
-        projection: BusinessComponentPreviewFixtures.routeScene,
+        projection: RouteSceneProjection.default,
         onSelect: { _ in }
     ) {
         RouteDeterministicImageSurface(style: .ridge)
@@ -116,7 +187,7 @@ extension RouteBusinessComponents {
 
 #Preview("RouteScene.neutralTerrain") {
     RouteBusinessComponents.RouteScene(
-        projection: BusinessComponentPreviewFixtures.routeSceneNeutral,
+        projection: RouteSceneProjection.neutral,
         onSelect: { _ in }
     ) {
         RouteDeterministicImageSurface(style: .forest)
@@ -126,7 +197,7 @@ extension RouteBusinessComponents {
 
 #Preview("RouteScene.nameMissing") {
     RouteBusinessComponents.RouteScene(
-        projection: BusinessComponentPreviewFixtures.routeSceneNameMissing,
+        projection: RouteSceneProjection.nameMissing,
         onSelect: { _ in }
     ) {
         RouteDeterministicImageSurface(style: .water)
@@ -136,7 +207,7 @@ extension RouteBusinessComponents {
 
 #Preview("RouteScene.tagsOmitted") {
     RouteBusinessComponents.RouteScene(
-        projection: BusinessComponentPreviewFixtures.routeSceneTagsOmitted,
+        projection: RouteSceneProjection.tagsOmitted,
         onSelect: { _ in }
     ) {
         RouteDeterministicImageSurface(style: .ridge)
@@ -146,7 +217,7 @@ extension RouteBusinessComponents {
 
 #Preview("RouteScene.partialMetrics") {
     RouteBusinessComponents.RouteScene(
-        projection: BusinessComponentPreviewFixtures.routeScenePartialMetrics,
+        projection: RouteSceneProjection.partialMetrics,
         onSelect: { _ in }
     ) {
         RouteDeterministicImageSurface(style: .forest)
@@ -156,7 +227,7 @@ extension RouteBusinessComponents {
 
 #Preview("RouteScene.metricsOmitted") {
     RouteBusinessComponents.RouteScene(
-        projection: BusinessComponentPreviewFixtures.routeSceneMetricsOmitted,
+        projection: RouteSceneProjection.metricsOmitted,
         onSelect: { _ in }
     ) {
         RouteDeterministicImageSurface(style: .ridge)
@@ -166,7 +237,7 @@ extension RouteBusinessComponents {
 
 #Preview("RouteScene.longContent") {
     RouteBusinessComponents.RouteScene(
-        projection: BusinessComponentPreviewFixtures.routeSceneLong,
+        projection: RouteSceneProjection.long,
         onSelect: { _ in }
     ) {
         RouteDeterministicImageSurface(style: .water)

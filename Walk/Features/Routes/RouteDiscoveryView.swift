@@ -11,8 +11,9 @@ enum RouteDiscoveryLayout {
     }
 }
 
+@MainActor
 struct RouteDiscoveryView: View {
-    @StateObject private var viewModel: RouteDiscoveryViewModel
+    @State private var viewModel: RouteDiscoveryViewModel
     private let onNavigate: (AppDestination) -> Void
     /// 固定窗口安全区常量：与 PageShell 同源（PinnedWindowSafeAreaInsets），
     /// 转场期间动态安全区尖峰不再顶跳页头与场景。
@@ -27,7 +28,7 @@ struct RouteDiscoveryView: View {
         onNavigate: @escaping (AppDestination) -> Void = { _ in }
     ) {
         self.onNavigate = onNavigate
-        _viewModel = StateObject(wrappedValue: RouteDiscoveryViewModel(service: routeService))
+        _viewModel = State(initialValue: RouteDiscoveryViewModel(service: routeService))
     }
 
     var body: some View {
@@ -109,7 +110,7 @@ struct RouteDiscoveryView: View {
             EmptyStateView(
                 title: "暂无路线",
                 message: "当前暂无可发现路线",
-                icon: "route",
+                icon: "map",
                 variant: .default
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -163,7 +164,7 @@ struct RouteDiscoveryView: View {
         RouteBusinessComponents.RouteScene(
             projection: RouteSceneProjection(
                 routeID: route.routeId,
-                coverAvailable: false,
+                coverAvailable: RouteArtworkSource.resolve(route.cover) != nil,
                 name: route.name,
                 region: route.region,
                 difficulty: route.difficulty,
@@ -195,7 +196,7 @@ struct RouteDiscoveryView: View {
                 onNavigate(.routeDetail(route.routeId))
             }
         ) {
-            RouteDeterministicImageSurface(style: .forest)
+            RouteArtworkView(cover: route.cover, placeholder: .forest)
         }
     }
 
@@ -205,7 +206,7 @@ struct RouteDiscoveryView: View {
     }
 
     /// 只有已定位当前页时，才把非当前页移出焦点顺序。
-    static func hidesFromAccessibility(index: Int, activeIndex: Int?) -> Bool {
+    nonisolated static func hidesFromAccessibility(index: Int, activeIndex: Int?) -> Bool {
         guard let activeIndex else { return false }
         return index != activeIndex
     }
@@ -259,8 +260,9 @@ private struct RoutePagerAccessibilityActions: ViewModifier {
     }
 }
 
+@MainActor
 struct RouteCollectionView: View {
-    @StateObject private var viewModel: RouteCollectionViewModel
+    @State private var viewModel: RouteCollectionViewModel
     private let showsBackButton: Bool
     private let onNavigate: (AppDestination) -> Void
 
@@ -271,7 +273,7 @@ struct RouteCollectionView: View {
     ) {
         self.showsBackButton = showsBackButton
         self.onNavigate = onNavigate
-        _viewModel = StateObject(wrappedValue: RouteCollectionViewModel(service: routeService))
+        _viewModel = State(initialValue: RouteCollectionViewModel(service: routeService))
     }
 
     var body: some View {
@@ -317,7 +319,7 @@ struct RouteCollectionView: View {
             EmptyStateView(
                 title: "当前暂无可选择路线",
                 message: "路线准备完成后会出现在这里。",
-                icon: "route",
+                icon: "map",
                 variant: .default
             )
             .frame(maxWidth: .infinity, minHeight: 360, alignment: .center)
@@ -328,7 +330,7 @@ struct RouteCollectionView: View {
                         projection: .browse(
                             RouteBrowseRowProjection(
                                 routeID: route.routeId,
-                                coverAvailable: false,
+                                coverAvailable: RouteArtworkSource.resolve(route.cover) != nil,
                                 name: route.name,
                                 region: route.region,
                                 difficulty: route.difficulty,
@@ -341,7 +343,7 @@ struct RouteCollectionView: View {
                             onNavigate(.routeDetail(routeID))
                         }
                     ) {
-                        RouteDeterministicImageSurface(style: .forest)
+                        RouteArtworkView(cover: route.cover, placeholder: .forest)
                     }
                 }
             }
@@ -349,12 +351,12 @@ struct RouteCollectionView: View {
     }
 }
 
+@MainActor
 struct RouteSearchView: View {
-    /// S5：会话状态由 App 层持有，返回后再进恢复 query 与结果；预览/独立使用时用 convenience init 自建。
-    @ObservedObject private var viewModel: RouteDiscoveryViewModel
+    /// S5：App 拥有注入会话；独立入口交给下层 @State 拥有者，复用同一页面实现。
+    private let viewModel: RouteDiscoveryViewModel?
+    private let routeService: (any RouteDiscoveryServicing)?
     @Binding private var query: String
-    private let ownsModel: Bool
-    @State private var localQuery = ""
     private let onNavigate: (AppDestination) -> Void
 
     init(
@@ -362,9 +364,9 @@ struct RouteSearchView: View {
         query: Binding<String>,
         onNavigate: @escaping (AppDestination) -> Void
     ) {
-        _viewModel = ObservedObject(wrappedValue: model)
+        viewModel = model
+        routeService = nil
         _query = query
-        ownsModel = false
         self.onNavigate = onNavigate
     }
 
@@ -372,15 +374,45 @@ struct RouteSearchView: View {
         routeService: RouteDiscoveryServicing,
         onNavigate: @escaping (AppDestination) -> Void = { _ in }
     ) {
-        _viewModel = ObservedObject(wrappedValue: RouteDiscoveryViewModel(service: routeService))
+        viewModel = nil
+        self.routeService = routeService
         _query = .constant("")
-        ownsModel = true
         self.onNavigate = onNavigate
     }
 
-    private var boundQuery: Binding<String> {
-        ownsModel ? $localQuery : $query
+    var body: some View {
+        if let viewModel {
+            RouteSearchContent(viewModel: viewModel, query: $query, onNavigate: onNavigate)
+        } else if let routeService {
+            RouteSearchOwner(routeService: routeService, onNavigate: onNavigate)
+        }
     }
+}
+
+@MainActor
+private struct RouteSearchOwner: View {
+    @State private var viewModel: RouteDiscoveryViewModel
+    @State private var query = ""
+    let onNavigate: (AppDestination) -> Void
+
+    init(routeService: any RouteDiscoveryServicing, onNavigate: @escaping (AppDestination) -> Void) {
+        _viewModel = State(initialValue: RouteDiscoveryViewModel(service: routeService))
+        self.onNavigate = onNavigate
+    }
+
+    var body: some View {
+        RouteSearchContent(viewModel: viewModel, query: $query, onNavigate: onNavigate)
+    }
+}
+
+@MainActor
+private struct RouteSearchContent: View {
+    let viewModel: RouteDiscoveryViewModel
+    @Binding var query: String
+    let onNavigate: (AppDestination) -> Void
+    @State private var manualSearchTask: Task<Void, Never>?
+
+    private var boundQuery: Binding<String> { $query }
 
     var body: some View {
         UtilityPage(
@@ -402,8 +434,12 @@ struct RouteSearchView: View {
         }
         .navigationBarBackButtonHidden(true)
         .task(id: boundQuery.wrappedValue) {
-            await viewModel.search(query: normalizedQueryIsEmpty(boundQuery.wrappedValue) ? nil : boundQuery.wrappedValue)
+            await viewModel.search(query: boundQuery.wrappedValue)
         }
+        .onChange(of: boundQuery.wrappedValue) { _, _ in
+            cancelManualSearch()
+        }
+        .onDisappear(perform: cancelManualSearch)
     }
 
     private var searchInputRegion: some View {
@@ -428,9 +464,9 @@ struct RouteSearchView: View {
 
     @ViewBuilder
     private var searchState: some View {
-        if viewModel.isLoading {
+        if viewModel.isSearching {
             RouteRowSkeletonList()
-        } else if let message = viewModel.errorMessage {
+        } else if let message = viewModel.searchErrorMessage {
             ErrorView(
                 message: "已保留关键词，不会用猜测结果替代。",
                 title: "暂时无法搜索路线",
@@ -461,7 +497,7 @@ struct RouteSearchView: View {
                     RouteBusinessComponents.SearchRouteResultRow(
                         projection: SearchRouteResultRowProjection(
                             routeID: route.routeId,
-                            coverAvailable: nonEmpty(route.cover) != nil,
+                            coverAvailable: RouteArtworkSource.resolve(route.cover) != nil,
                             name: route.name,
                             region: route.region,
                             difficulty: route.difficulty,
@@ -481,16 +517,16 @@ struct RouteSearchView: View {
 
     /// S4：submit 立即提交同一 query，不经防抖。
     private func submitSearch() {
-        Task { await viewModel.search(query: boundQuery.wrappedValue, immediate: true) }
+        cancelManualSearch()
+        let query = boundQuery.wrappedValue
+        manualSearchTask = Task {
+            await viewModel.search(query: query, immediate: true)
+        }
     }
 
-    private func normalizedQueryIsEmpty(_ value: String) -> Bool {
-        value.unicodeScalars.allSatisfy { scalar in
-            switch scalar.value {
-            case 0x20, 0x09, 0x0A, 0x0D, 0x3000: true
-            default: false
-            }
-        }
+    private func cancelManualSearch() {
+        manualSearchTask?.cancel()
+        manualSearchTask = nil
     }
 }
 
@@ -602,48 +638,6 @@ private struct RouteRowSkeletonList: View {
     }
 }
 
-private struct RouteArtworkView: View {
-    let cover: String?
-
-    var body: some View {
-        Group {
-            if let value = cover, let url = URL(string: value) {
-                AsyncImage(url: url) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFill()
-                    } else {
-                        neutralTerrain
-                    }
-                }
-            } else {
-                neutralTerrain
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipped()
-    }
-
-    private var neutralTerrain: some View {
-        ZStack {
-            LinearGradient(
-                colors: [AppColors.surfacePrimary, AppColors.pageMiddle, AppColors.pageBase],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Image(systemName: "mountain.2.fill")
-                .font(.ornament(64))
-                .foregroundStyle(AppColors.surfaceGlass)
-        }
-    }
-}
-
-private func nonEmpty(_ value: String?) -> String? {
-    guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
-        return nil
-    }
-    return value
-}
-
 private func distanceText(_ meters: Double) -> String {
     if meters >= 1_000 {
         return "\((meters / 1_000).formatted(.number.precision(.fractionLength(0...1)))) km"
@@ -665,6 +659,6 @@ private func durationText(_ seconds: Double) -> String {
 
 #if DEBUG
 #Preview("Route Discovery") {
-    NavigationStack { RouteDiscoveryView(routeService: PreviewHelpers.routeService) }
+    NavigationStack { RouteDiscoveryView(routeService: RouteService(apiClient: MockAPIClient(fixtures: DefaultMockFixtures.all()))) }
 }
 #endif

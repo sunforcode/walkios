@@ -65,21 +65,40 @@ struct InlineListNameEditor: View {
 }
 
 #if DEBUG
+extension InlineListNameEditorProjection {
+    static let `default` = InlineListNameEditorProjection(
+        mode: .create,
+        name: "周末轻装清单"
+    )
+
+    static let validationError = InlineListNameEditorProjection(
+        mode: .rename,
+        name: " ",
+        fieldError: "请输入清单名称"
+    )
+
+    static let saveFailed = InlineListNameEditorProjection(
+        mode: .rename,
+        name: "高海拔过夜清单",
+        saveError: "网络连接中断，当前操作没有完成，请稍后重试。"
+    )
+}
+
 #Preview("InlineListNameEditor.default") {
     BusinessComponentPreviewHost {
-        InlineListNameEditor.preview(BusinessComponentPreviewFixtures.inlineListDefault)
+        InlineListNameEditor.preview(InlineListNameEditorProjection.default)
     }
 }
 
 #Preview("InlineListNameEditor.validationError") {
     BusinessComponentPreviewHost {
-        InlineListNameEditor.preview(BusinessComponentPreviewFixtures.inlineListValidationError)
+        InlineListNameEditor.preview(InlineListNameEditorProjection.validationError)
     }
 }
 
 #Preview("InlineListNameEditor.saveFailed") {
     BusinessComponentPreviewHost {
-        InlineListNameEditor.preview(BusinessComponentPreviewFixtures.inlineListSaveFailed)
+        InlineListNameEditor.preview(InlineListNameEditorProjection.saveFailed)
     }
 }
 

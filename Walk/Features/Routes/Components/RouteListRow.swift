@@ -133,10 +133,90 @@ extension RouteBusinessComponents {
 }
 
 #if DEBUG
+extension RouteListRowProjection {
+    static let `default` = RouteListRowProjection.browse(
+        RouteBrowseRowProjection(
+            routeID: "route-001",
+            coverAvailable: true,
+            name: "贡嘎西南坡环线",
+            region: "四川 · 甘孜",
+            difficulty: "进阶",
+            distance: "42.8 km",
+            ascent: "爬升 2,340 m",
+            estimatedDuration: "约 4 天"
+        )
+    )
+
+    static let nameMissing = RouteListRowProjection.browse(
+        RouteBrowseRowProjection(
+            routeID: "route-003",
+            coverAvailable: true,
+            name: nil,
+            region: "云南 · 怒江",
+            difficulty: "困难",
+            distance: "31.2 km",
+            ascent: "爬升 1,980 m",
+            estimatedDuration: "约 3 天"
+        )
+    )
+
+    static let coverMissing = RouteListRowProjection.browse(
+        RouteBrowseRowProjection(
+            routeID: "route-004",
+            coverAvailable: false,
+            name: "峡谷森林线",
+            region: "云南 · 怒江",
+            difficulty: "中等",
+            distance: "21.4 km",
+            ascent: "爬升 1,120 m",
+            estimatedDuration: "约 2 天"
+        )
+    )
+
+    static let partial = RouteListRowProjection.browse(
+        RouteBrowseRowProjection(
+            routeID: "route-005",
+            coverAvailable: true,
+            name: "白河峡谷",
+            region: nil,
+            difficulty: nil,
+            distance: "9.8 km",
+            ascent: nil,
+            estimatedDuration: nil
+        )
+    )
+
+    static let minimal = RouteListRowProjection.browse(
+        RouteBrowseRowProjection(
+            routeID: "route-006",
+            coverAvailable: false,
+            name: "河谷短线",
+            region: nil,
+            difficulty: nil,
+            distance: nil,
+            ascent: nil,
+            estimatedDuration: nil
+        )
+    )
+
+    static let long = RouteListRowProjection.browse(
+        RouteBrowseRowProjection(
+            routeID: "route-007",
+            coverAvailable: true,
+            name: "穿越原始森林、高山草甸与连续垭口的长距离环形徒步路线",
+            region: "四川省甘孜藏族自治州康定市与泸定县交界区域",
+            difficulty: "高海拔进阶路线",
+            distance: "68.5 km",
+            ascent: "爬升 3,920 m",
+            estimatedDuration: "约 6 天"
+        )
+    )
+}
+
 #Preview("RouteListRow.default") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RouteListRow(
-            projection: BusinessComponentPreviewFixtures.routeRowDefault,
+            projection: RouteListRowProjection.default,
             onSelect: { _ in }
         ) { RouteDeterministicImageSurface(style: .ridge) }
     }
@@ -145,7 +225,7 @@ extension RouteBusinessComponents {
 #Preview("RouteListRow.nameMissing") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RouteListRow(
-            projection: BusinessComponentPreviewFixtures.routeRowNameMissing,
+            projection: RouteListRowProjection.nameMissing,
             onSelect: { _ in }
         ) { RouteDeterministicImageSurface(style: .forest) }
     }
@@ -154,7 +234,7 @@ extension RouteBusinessComponents {
 #Preview("RouteListRow.coverMissing") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RouteListRow(
-            projection: BusinessComponentPreviewFixtures.routeRowCoverMissing,
+            projection: RouteListRowProjection.coverMissing,
             onSelect: { _ in }
         ) { RouteDeterministicImageSurface(style: .forest) }
     }
@@ -163,7 +243,7 @@ extension RouteBusinessComponents {
 #Preview("RouteListRow.partialFacts") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RouteListRow(
-            projection: BusinessComponentPreviewFixtures.routeRowPartial,
+            projection: RouteListRowProjection.partial,
             onSelect: { _ in }
         ) { RouteDeterministicImageSurface(style: .ridge) }
     }
@@ -172,7 +252,7 @@ extension RouteBusinessComponents {
 #Preview("RouteListRow.minimal") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RouteListRow(
-            projection: BusinessComponentPreviewFixtures.routeRowMinimal,
+            projection: RouteListRowProjection.minimal,
             onSelect: { _ in }
         ) { RouteDeterministicImageSurface(style: .forest) }
     }
@@ -181,7 +261,7 @@ extension RouteBusinessComponents {
 #Preview("RouteListRow.longContent") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RouteListRow(
-            projection: BusinessComponentPreviewFixtures.routeRowLong,
+            projection: RouteListRowProjection.long,
             onSelect: { _ in }
         ) { RouteDeterministicImageSurface(style: .ridge) }
     }

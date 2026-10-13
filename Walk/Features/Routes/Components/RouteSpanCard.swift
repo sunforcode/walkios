@@ -148,10 +148,50 @@ extension Color {
 }
 
 #if DEBUG
+extension RouteSpanCardProjection {
+    static let day = RouteSpanCardProjection(
+        spanID: "day-1",
+        kind: .day(number: 1),
+        colorHex: "2F6FED",
+        headerTitle: "D1 · 下日乌且营地",
+        metrics: [
+            RouteSpanMetricProjection(label: "里程", value: "10.6 km"),
+            RouteSpanMetricProjection(label: "累计爬升", value: "+420 m", isEmphasized: true),
+            RouteSpanMetricProjection(label: "累计下降", value: "-180 m", isEmphasized: true),
+            RouteSpanMetricProjection(label: "最高海拔", value: "3520 m"),
+            RouteSpanMetricProjection(label: "最低海拔", value: "2720 m"),
+        ],
+        endpoints: "康定老榆林 → 下日乌且营地",
+        position: "全程 0 – 10.6 km",
+        duration: "参考用时 5 小时",
+        lifecycle: "住宿：下日乌且营地",
+        trait: nil,
+        caution: "垭口段午后天气多变，注意保暖。"
+    )
+
+    static let segment = RouteSpanCardProjection(
+        spanID: "segment-1",
+        kind: .segment(order: 1),
+        colorHex: "2F6FED",
+        headerTitle: "S1 · 进山段",
+        metrics: [
+            RouteSpanMetricProjection(label: "里程", value: "8.4 km"),
+            RouteSpanMetricProjection(label: "累计爬升", value: "+980 m", isEmphasized: true),
+            RouteSpanMetricProjection(label: "累计下降", value: "-60 m", isEmphasized: true),
+        ],
+        endpoints: "康定老榆林 → 下日乌且营地",
+        position: "距起点 0 km · 距终点 32.9 km",
+        duration: "徒步参考时长 4 小时",
+        lifecycle: nil,
+        trait: "难度：进阶 · 地形：碎石坡",
+        caution: nil
+    )
+}
+
 #Preview("RouteSpanCard.day") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RouteSpanCard(
-            projection: BusinessComponentPreviewFixtures.routeSpanCardDay
+            projection: RouteSpanCardProjection.day
         )
         .padding()
     }
@@ -160,7 +200,7 @@ extension Color {
 #Preview("RouteSpanCard.segment") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RouteSpanCard(
-            projection: BusinessComponentPreviewFixtures.routeSpanCardSegment
+            projection: RouteSpanCardProjection.segment
         )
         .padding()
     }

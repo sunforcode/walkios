@@ -68,10 +68,17 @@ extension SharedBusinessComponents {
 }
 
 #if DEBUG
+extension GenerationWaitingProjection {
+    static let `default` = GenerationWaitingProjection(
+        title: "正在整理贡嘎西南坡环线",
+        description: "请稍候，个人行程结果形成后会在当前流程中继续展示。"
+    )
+}
+
 #Preview("GenerationWaitingView.default") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.GenerationWaitingView(
-            projection: BusinessComponentPreviewFixtures.generationWaiting
+            projection: GenerationWaitingProjection.default
         )
         .frame(minHeight: 560)
     }
@@ -80,7 +87,7 @@ extension SharedBusinessComponents {
 #Preview("GenerationWaitingView.reduceMotion") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.GenerationWaitingView(
-            projection: BusinessComponentPreviewFixtures.generationWaiting,
+            projection: GenerationWaitingProjection.default,
             reduceMotionOverride: true
         )
         .frame(minHeight: 560)

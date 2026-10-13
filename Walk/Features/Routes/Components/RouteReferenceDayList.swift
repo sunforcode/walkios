@@ -60,10 +60,17 @@ extension RouteBusinessComponents {
 }
 
 #if DEBUG
+extension RouteReferenceDayProjection {
+    static let samples = [
+        RouteReferenceDayProjection(id: "reference-day-1", dayNumber: 1, title: "上木居至河谷营地", metrics: ["14.8 km", "爬升 920 m"], description: "沿森林缓慢爬升，下午抵达河谷营地。"),
+        RouteReferenceDayProjection(id: "reference-day-3", dayNumber: 3, title: "翻越北侧垭口", metrics: ["11.6 km", "约 8 小时"], description: "尽早出发，午后天气变化前通过垭口。"),
+    ]
+}
+
 #Preview("RouteReferenceDayList.default") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RouteReferenceDayList(
-            days: BusinessComponentPreviewFixtures.referenceDays
+            days: RouteReferenceDayProjection.samples
         )
     }
 }

@@ -93,10 +93,38 @@ extension RouteBusinessComponents {
 }
 
 #if DEBUG
+extension ElevationProfileProjection {
+    static let `default` = ElevationProfileProjection(
+        minimumLabel: "1,240 m",
+        maximumLabel: "2,860 m",
+        minimumElevation: 1_240,
+        maximumElevation: 2_860,
+        samples: [
+            RouteElevationSampleProjection(id: "elevation-1", distance: 0, elevation: 1_240),
+            RouteElevationSampleProjection(id: "elevation-2", distance: 3_200, elevation: 1_780),
+            RouteElevationSampleProjection(id: "elevation-3", distance: 7_400, elevation: 2_420),
+            RouteElevationSampleProjection(id: "elevation-4", distance: 11_800, elevation: 2_860),
+            RouteElevationSampleProjection(id: "elevation-5", distance: 16_300, elevation: 2_110),
+        ]
+    )
+
+    static let compact = ElevationProfileProjection(
+        minimumLabel: "820 m",
+        maximumLabel: "1,320 m",
+        minimumElevation: 820,
+        maximumElevation: 1_320,
+        samples: [
+            RouteElevationSampleProjection(id: "compact-1", distance: 0, elevation: 820),
+            RouteElevationSampleProjection(id: "compact-2", distance: 2_400, elevation: 1_320),
+            RouteElevationSampleProjection(id: "compact-3", distance: 5_600, elevation: 980),
+        ]
+    )
+}
+
 #Preview("ElevationProfile.default") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.ElevationProfile(
-            projection: BusinessComponentPreviewFixtures.elevationProfile
+            projection: ElevationProfileProjection.default
         )
     }
 }
@@ -104,7 +132,7 @@ extension RouteBusinessComponents {
 #Preview("ElevationProfile.compact") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.ElevationProfile(
-            projection: BusinessComponentPreviewFixtures.elevationProfileCompact,
+            projection: ElevationProfileProjection.compact,
             isCompact: true
         )
     }

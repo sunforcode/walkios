@@ -552,13 +552,14 @@ public struct PersonalTripAction: Codable, Equatable, Identifiable {
      public let end: QualifiedPlace?
      public let distance: QualifiedDistance?
      public let ascent: QualifiedElevationGain?
+     public let routeSectionConfidence: InformationConfidence?
 
      public var id: Int { sequence }
 
     public enum CodingKeys: String, CodingKey {
         case sequence, actionType, origin, destination, mode, keyTimes
         case estimatedDuration, transferNotes, routeSectionSnapshot
-        case start, end, distance, ascent
+        case start, end, distance, ascent, routeSectionConfidence
     }
 
     public init(
@@ -574,7 +575,8 @@ public struct PersonalTripAction: Codable, Equatable, Identifiable {
         start: QualifiedPlace?,
         end: QualifiedPlace?,
         distance: QualifiedDistance?,
-        ascent: QualifiedElevationGain?
+        ascent: QualifiedElevationGain?,
+        routeSectionConfidence: InformationConfidence? = nil
     ) {
         self.sequence = sequence
         self.actionType = actionType
@@ -589,6 +591,7 @@ public struct PersonalTripAction: Codable, Equatable, Identifiable {
         self.end = end
         self.distance = distance
         self.ascent = ascent
+        self.routeSectionConfidence = routeSectionConfidence
     }
 }
 
@@ -675,11 +678,12 @@ public struct PersonalTripDay: Codable, Equatable, Identifiable {
      public let actions: [PersonalTripAction]
      public let weather: PersonalTripDayWeather
      public let points: [PersonalTripPoint]?
+     public let routeGuide: PersonalTripRouteGuide?
 
      public var id: String { identity }
 
     public enum CodingKeys: String, CodingKey {
-        case identity, dayNumber, date, primaryStage, hikingDayNumber, actions, weather, points
+        case identity, dayNumber, date, primaryStage, hikingDayNumber, actions, weather, points, routeGuide
     }
 
     public init(
@@ -690,7 +694,8 @@ public struct PersonalTripDay: Codable, Equatable, Identifiable {
         hikingDayNumber: Int?,
         actions: [PersonalTripAction],
         weather: PersonalTripDayWeather,
-        points: [PersonalTripPoint]?
+        points: [PersonalTripPoint]?,
+        routeGuide: PersonalTripRouteGuide? = nil
     ) {
         self.identity = identity
         self.dayNumber = dayNumber
@@ -700,6 +705,7 @@ public struct PersonalTripDay: Codable, Equatable, Identifiable {
         self.actions = actions
         self.weather = weather
         self.points = points
+        self.routeGuide = routeGuide
     }
 }
 

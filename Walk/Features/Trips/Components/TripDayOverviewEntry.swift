@@ -71,6 +71,17 @@ extension TripBusinessComponents {
 }
 
 #if DEBUG
+extension TripDayOverviewEntryProjection {
+    static let `default` = TripDayOverviewEntryProjection(
+        tripDayID: "trip-day-2",
+        dayNumber: 2,
+        date: "9月8日",
+        hikingDayNumber: 1,
+        totalTrekDays: 2,
+        subtitle: "老榆林 → 下日乌且营地"
+    )
+}
+
 #Preview("TripDayOverviewEntry.trekDay") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripDayOverviewEntry(

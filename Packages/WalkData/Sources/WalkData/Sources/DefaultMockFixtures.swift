@@ -2,11 +2,12 @@ import Foundation
 
 public enum DefaultMockFixtures {
      public static func all(bundle: Bundle = .main) -> [String: Data] {
-        accountFixtures()
+        let fixtures = accountFixtures()
             .merging(personalTripFixtures()) { _, personalTrip in personalTrip }
             .merging(tripEquipmentFixtures()) { _, tripEquipment in tripEquipment }
             .merging(routeFixtures()) { _, route in route }
             .merging(equipmentFixtures()) { _, equipment in equipment }
+        return YadingMockFixtures.adding(to: fixtures)
     }
 
      public static func accountFixtures() -> [String: Data] {

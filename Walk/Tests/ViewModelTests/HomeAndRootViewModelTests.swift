@@ -5,96 +5,6 @@ import WalkDesignSystem
 
 @MainActor
 final class HomeAndRootViewModelTests: XCTestCase {
-    func testHomeStartsLoadingAndUsesServerFocusWithoutListOrRouteResolution() async {
-        var focusCallCount = 0
-        let focusedTrip = PersonalTripTestFixtures.summary(id: "focus", status: .inProgress)
-        let sut = HomeViewModel(loadFocus: {
-            focusCallCount += 1
-            return PersonalTripFocus(trip: focusedTrip)
-        })
-
-        XCTAssertEqual(sut.state, .loading)
-
-        await sut.load()
-
-        XCTAssertEqual(focusCallCount, 1)
-        XCTAssertEqual(sut.focusedTrip?.tripID, "focus")
-        XCTAssertEqual(sut.state, .ready)
-    }
-
-    func testHomeOmitsWeatherUntilIndependentTripWeatherAssociationExists() async {
-        let focusedTrip = PersonalTripTestFixtures.summary(id: "focus", status: .inProgress)
-        let sut = HomeViewModel(
-            loadFocus: { PersonalTripFocus(trip: focusedTrip) }
-        )
-
-        await sut.load()
-
-        XCTAssertNil(sut.weatherSummary)
-        XCTAssertEqual(sut.state, .ready)
-    }
-
-    func testHomeShowsNoFocusEmptyStateWhenServerReturnsNilFocus() async {
-        let sut = HomeViewModel(
-            loadFocus: { PersonalTripFocus(trip: nil) }
-        )
-
-        await sut.load()
-
-        XCTAssertNil(sut.focusedTrip)
-        XCTAssertEqual(sut.state, .ready, "无焦点行程停留在首页空态，不自动进入全部路线")
-    }
-
-    func testRefreshFailureKeepsExistingFocusVisible() async {
-        let focusedTrip = PersonalTripTestFixtures.summary(id: "focus", status: .planned)
-        var shouldFail = false
-        let sut = HomeViewModel(loadFocus: {
-            if shouldFail { throw APIClientError.invalidResponse }
-            return PersonalTripFocus(trip: focusedTrip)
-        })
-        await sut.load()
-        shouldFail = true
-
-        await sut.load()
-
-        XCTAssertEqual(sut.focusedTrip?.tripID, "focus")
-        XCTAssertEqual(sut.state, .ready)
-        XCTAssertEqual(sut.refreshError, "当前行程刷新失败")
-        XCTAssertNil(sut.weatherSummary)
-    }
-
-    func testGuestHomeDoesNotRequestPersonalFocus() async {
-        var focusCallCount = 0
-        let sut = HomeViewModel(
-            isLoggedIn: { false },
-            loadFocus: {
-                focusCallCount += 1
-                return PersonalTripFocus(trip: nil)
-            }
-        )
-
-        await sut.load()
-
-        XCTAssertEqual(sut.state, .guest)
-        XCTAssertEqual(focusCallCount, 0)
-    }
-
-    func testStaticHomeViewModelKeepsPreviewStateWhenTaskLoads() async {
-        let trip = PersonalTripTestFixtures.summary(id: "preview-focus", status: .inProgress)
-        let weather = HomeWeatherSummary(conclusion: "16°·多云", impact: "山脊4级风")
-        let sut = HomeViewModel(
-            staticState: .ready,
-            focusedTrip: trip,
-            weatherSummary: weather
-        )
-
-        await sut.load()
-
-        XCTAssertEqual(sut.state, .ready)
-        XCTAssertEqual(sut.focusedTrip, trip)
-        XCTAssertEqual(sut.weatherSummary, weather)
-    }
-
     func testLoginSendCodeStoresVerificationIdentity() async {
         let expires = Date(timeIntervalSince1970: 1_800_000_000)
         let sut = LoginViewModel(
@@ -109,7 +19,7 @@ final class HomeAndRootViewModelTests: XCTestCase {
             createSession: { _, _ in XCTFail("session must not be created yet") },
             loadAccount: { throw APIClientError.invalidResponse }
         )
-        sut.phone = "+8613800138000"
+        sut.updatePhone("+8613800138000")
 
         await sut.sendVerificationCode()
 
@@ -145,7 +55,7 @@ final class HomeAndRootViewModelTests: XCTestCase {
             createSession: { _, _ in },
             loadAccount: { throw APIClientError.invalidResponse }
         )
-        sut.phone = "+8613800138000"
+        sut.updatePhone("+8613800138000")
         XCTAssertTrue(sut.canSendCode)
 
         await sut.sendVerificationCode()
@@ -165,7 +75,7 @@ final class HomeAndRootViewModelTests: XCTestCase {
             createSession: { _, _ in },
             loadAccount: { throw APIClientError.invalidResponse }
         )
-        sut.phone = "12345"
+        sut.updatePhone("12345")
 
         await sut.sendVerificationCode()
 
@@ -190,7 +100,7 @@ final class HomeAndRootViewModelTests: XCTestCase {
             createSession: { _, _ in },
             loadAccount: { throw APIClientError.invalidResponse }
         )
-        sut.phone = "+8613800138000"
+        sut.updatePhone("+8613800138000")
 
         await sut.sendVerificationCode()
         await sut.sendVerificationCode()
@@ -207,7 +117,7 @@ final class HomeAndRootViewModelTests: XCTestCase {
             profile: ProfileProjection(identity: "profile-1", maskedPhone: "+86 138****8000", nickname: nil, avatar: nil)
         )
         let sut = LoginViewModel(
-            sendCode: { _ in throw APIClientError.invalidResponse },
+            sendCode: { _ in Self.verification() },
             createSession: { verificationID, code in
                 calls.append("session:\(verificationID):\(code)")
             },
@@ -216,9 +126,9 @@ final class HomeAndRootViewModelTests: XCTestCase {
                 return account
             }
         )
-        sut.verificationID = "verification-1"
-        sut.phase = .verificationCode
-        sut.code = "012345"
+        sut.updatePhone("+8613800138000")
+        await sut.sendVerificationCode()
+        sut.updateCode("012345")
 
         await sut.login()
 
@@ -229,22 +139,23 @@ final class HomeAndRootViewModelTests: XCTestCase {
 
     // account-api：code 是 NonEmptyText，保留前导零按文本校验；PAGE-LOGIN：不固定验证码长度。
     // canLogin 只要求已取得 verificationID 且验证码非空，不固定位数。
-    func testLoginRequiresVerificationIDAndNonEmptyCode() {
+    func testLoginRequiresVerificationIDAndNonEmptyCode() async {
         let sut = LoginViewModel(
-            sendCode: { _ in throw APIClientError.invalidResponse },
+            sendCode: { _ in Self.verification() },
             createSession: { _, _ in },
             loadAccount: { throw APIClientError.invalidResponse }
         )
-        sut.code = "012345"
+        sut.updateCode("012345")
         XCTAssertFalse(sut.canLogin, "无 verificationID 不可登录")
 
-        sut.verificationID = "verification-1"
-        sut.code = ""
+        sut.updatePhone("+8613800138000")
+        await sut.sendVerificationCode()
+        sut.updateCode("")
         XCTAssertFalse(sut.canLogin, "空验证码不可登录")
 
         // 不固定验证码长度：任意非空数字验证码均可提交。
         for validCode in ["1", "12345", "1234567", "012345"] {
-            sut.code = validCode
+            sut.updateCode(validCode)
             XCTAssertTrue(sut.canLogin, "\(validCode) 应允许登录")
         }
     }
@@ -252,7 +163,7 @@ final class HomeAndRootViewModelTests: XCTestCase {
     func testSessionSuccessAuthenticatesEvenWhenAccountProjectionFails() async {
         var calls: [String] = []
         let sut = LoginViewModel(
-            sendCode: { _ in throw APIClientError.invalidResponse },
+            sendCode: { _ in Self.verification() },
             createSession: { _, _ in calls.append("session") },
             loadAccount: {
                 calls.append("account")
@@ -263,9 +174,9 @@ final class HomeAndRootViewModelTests: XCTestCase {
                 )
             }
         )
-        sut.verificationID = "verification-1"
-        sut.phase = .verificationCode
-        sut.code = "012345"
+        sut.updatePhone("+8613800138000")
+        await sut.sendVerificationCode()
+        sut.updateCode("012345")
 
         await sut.login()
 
@@ -279,7 +190,7 @@ final class HomeAndRootViewModelTests: XCTestCase {
         let accountReadStarted = expectation(description: "account read started")
         let gate = AsyncGate()
         let sut = LoginViewModel(
-            sendCode: { _ in throw APIClientError.invalidResponse },
+            sendCode: { _ in Self.verification() },
             createSession: { _, _ in },
             loadAccount: {
                 accountReadStarted.fulfill()
@@ -287,9 +198,9 @@ final class HomeAndRootViewModelTests: XCTestCase {
                 throw APIClientError.invalidResponse
             }
         )
-        sut.verificationID = "verification-1"
-        sut.phase = .verificationCode
-        sut.code = "012345"
+        sut.updatePhone("+8613800138000")
+        await sut.sendVerificationCode()
+        sut.updateCode("012345")
 
         let loginTask = Task { await sut.login() }
         await fulfillment(of: [accountReadStarted], timeout: 1)
@@ -305,142 +216,11 @@ final class HomeAndRootViewModelTests: XCTestCase {
 
         XCTAssertTrue(rootSource.contains("intent: authFlow.pending?.intent"))
         XCTAssertTrue(loginSource.contains("let intent: PendingAuthIntent?"))
-        XCTAssertTrue(loginSource.contains("case .homeStart"))
+        XCTAssertFalse(loginSource.contains("case .homeStart"))
+        XCTAssertTrue(loginSource.contains("case .trips"))
+        XCTAssertTrue(loginSource.contains("case .equipment"))
         XCTAssertTrue(loginSource.contains("case .createTrip"))
         XCTAssertTrue(loginSource.contains("case .profile"))
-    }
-
-    // account-access「认证成功承接原任务」：homeStart 登录后先确认焦点行程，
-    // 确认成功才发布 didAuthenticate；失败进入 focusError 且不发布认证完成。
-    func testLoginConfirmsFocusTripAfterSessionBeforeAuthenticating() async {
-        var order: [String] = []
-        let sut = LoginViewModel(
-            sendCode: { _ in throw APIClientError.invalidResponse },
-            createSession: { _, _ in order.append("session") },
-            loadAccount: {
-                order.append("account")
-                throw APIClientError.invalidResponse
-            },
-            confirmFocusTrip: {
-                order.append("focus")
-                return true
-            }
-        )
-        sut.verificationID = "verification-1"
-        sut.phase = .verificationCode
-        sut.code = "123456"
-
-        await sut.login()
-
-        XCTAssertEqual(order, ["session", "focus", "account"])
-        XCTAssertTrue(sut.didAuthenticate)
-        XCTAssertEqual(sut.phase, .confirmingFocus, "确认成功后阶段停留 confirmingFocus，面板随认证完成关闭")
-    }
-
-    func testLoginFocusTripConfirmationFailureEntersFocusErrorWithoutAuthenticating() async {
-        let sut = LoginViewModel(
-            sendCode: { _ in throw APIClientError.invalidResponse },
-            createSession: { _, _ in },
-            loadAccount: { throw APIClientError.invalidResponse },
-            confirmFocusTrip: { throw APIClientError.api(code: "focus_unavailable", message: "无法确认", retryable: true) }
-        )
-        sut.verificationID = "verification-1"
-        sut.phase = .verificationCode
-        sut.code = "123456"
-
-        await sut.login()
-
-        XCTAssertFalse(sut.didAuthenticate, "无法确认焦点行程时不得发布认证完成")
-        XCTAssertEqual(sut.phase, .focusError)
-        XCTAssertNotNil(sut.focusErrorMessage)
-    }
-
-    func testLoginFocusTripConfirmationRetrySucceedsAndAuthenticates() async {
-        var attempts = 0
-        let sut = LoginViewModel(
-            sendCode: { _ in throw APIClientError.invalidResponse },
-            createSession: { _, _ in },
-            loadAccount: { throw APIClientError.invalidResponse },
-            confirmFocusTrip: {
-                attempts += 1
-                if attempts == 1 { throw APIClientError.invalidResponse }
-                return false
-            }
-        )
-        sut.verificationID = "verification-1"
-        sut.phase = .verificationCode
-        sut.code = "123456"
-
-        await sut.login()
-        XCTAssertEqual(sut.phase, .focusError)
-        XCTAssertFalse(sut.didAuthenticate)
-
-        await sut.retryFocusTripConfirmation()
-        XCTAssertTrue(sut.didAuthenticate, "重试确认成功后发布认证完成")
-        XCTAssertNil(sut.focusErrorMessage)
-    }
-
-    func testLoginFocusTripConfirmationRejectsConcurrentRetries() async {
-        let retryStarted = expectation(description: "first retry started")
-        let gate = AsyncGate()
-        var attempts = 0
-        let sut = LoginViewModel(
-            sendCode: { _ in throw APIClientError.invalidResponse },
-            createSession: { _, _ in },
-            loadAccount: { throw APIClientError.invalidResponse },
-            confirmFocusTrip: {
-                attempts += 1
-                if attempts == 1 { throw APIClientError.invalidResponse }
-                if attempts == 2 {
-                    retryStarted.fulfill()
-                    await gate.wait()
-                }
-                return true
-            }
-        )
-        sut.verificationID = "verification-1"
-        sut.phase = .verificationCode
-        sut.code = "123456"
-        await sut.login()
-
-        let firstRetry = Task { await sut.retryFocusTripConfirmation() }
-        await fulfillment(of: [retryStarted], timeout: 1)
-        let duplicateRetry = Task { await sut.retryFocusTripConfirmation() }
-        await duplicateRetry.value
-
-        XCTAssertEqual(attempts, 2, "确认请求进行中时不得启动第二个重试")
-        await gate.open()
-        await firstRetry.value
-    }
-
-    func testCancelledFocusTripConfirmationDoesNotAuthenticate() async {
-        let retryStarted = expectation(description: "retry started")
-        let gate = AsyncGate()
-        var attempts = 0
-        let sut = LoginViewModel(
-            sendCode: { _ in throw APIClientError.invalidResponse },
-            createSession: { _, _ in },
-            loadAccount: { throw APIClientError.invalidResponse },
-            confirmFocusTrip: {
-                attempts += 1
-                if attempts == 1 { throw APIClientError.invalidResponse }
-                retryStarted.fulfill()
-                await gate.wait()
-                return true
-            }
-        )
-        sut.verificationID = "verification-1"
-        sut.phase = .verificationCode
-        sut.code = "123456"
-        await sut.login()
-
-        let retry = Task { await sut.retryFocusTripConfirmation() }
-        await fulfillment(of: [retryStarted], timeout: 1)
-        sut.cancelPendingOperations()
-        await gate.open()
-        await retry.value
-
-        XCTAssertFalse(sut.didAuthenticate, "页面退出后迟到的焦点确认不得发布认证完成")
     }
 
     func testDefaultMockFixturesSupportTypedLoginAndLogout() async throws {
@@ -458,17 +238,12 @@ final class HomeAndRootViewModelTests: XCTestCase {
         XCTAssertFalse(session.accessToken.isEmpty)
         XCTAssertTrue(logout.loggedOut)
     }
-
-func testHomeLayoutUsesApprovedSpacingTokens() {
-    XCTAssertEqual(Spacing.pageHorizontal, 16)
-    XCTAssertEqual(Spacing.navBarHeight, 44)
-}
-
     func testSystemTabBarVisibilityTracksTheSelectedNavigationPath() {
         var sut = AppShellState()
         XCTAssertTrue(sut.showsGlobalNavigation)
 
-        sut.setPath([.tripDetail("trip-1")], for: .home)
+        sut.selectTab(.trips)
+        sut.setPath([.tripDetail("trip-1")], for: .trips)
         XCTAssertFalse(sut.showsGlobalNavigation)
 
         sut.selectTab(.routes)
@@ -487,54 +262,133 @@ func testHomeLayoutUsesApprovedSpacingTokens() {
         XCTAssertTrue(rootSource.contains(".toolbar(.hidden, for: .tabBar)"))
     }
 
-    func testGuestHomeExposesOnlyApprovedStartAction() throws {
-        let source = try productionSource(at: "Features/Home/HomeView.swift")
-        let guestStart = try XCTUnwrap(source.range(of: "private struct GuestHomeContent"))
-        let loadingStart = try XCTUnwrap(source.range(of: "private struct HomeLoadingContent"))
-        let guestSource = String(source[guestStart.lowerBound..<loadingStart.lowerBound])
-
-        XCTAssertTrue(guestSource.contains("开启一次新的徒步行程"))
-        XCTAssertFalse(guestSource.contains("登录并开始"))
-        XCTAssertFalse(guestSource.contains("探索路线"))
+    func testCancelledSendCodeCannotPublishLateVerification() async {
+        let started = expectation(description: "send started")
+        let gate = AsyncGate()
+        let sut = LoginViewModel(
+            sendCode: { _ in
+                started.fulfill()
+                await gate.wait()
+                return Self.verification()
+            },
+            createSession: { _, _ in XCTFail("must not authenticate") },
+            loadAccount: { throw APIClientError.invalidResponse }
+        )
+        sut.updatePhone("+8613800138000")
+        let task = Task { await sut.sendVerificationCode() }
+        await fulfillment(of: [started], timeout: 1)
+        sut.cancelPendingOperations()
+        await gate.open()
+        await task.value
+        XCTAssertNil(sut.verificationID)
+        XCTAssertEqual(sut.phase, .phone)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isSubmitting)
     }
 
-    func testHomeFailureOnlyOffersRetry() throws {
-        let source = try productionSource(at: "Features/Home/HomeView.swift")
-        let errorStart = try XCTUnwrap(source.range(of: "case .error(let message):"))
-        let readyStart = try XCTUnwrap(source.range(
-            of: "case .ready:",
-            range: errorStart.upperBound..<source.endIndex
-        ))
-        let errorSource = String(source[errorStart.lowerBound..<readyStart.lowerBound])
-
-        XCTAssertTrue(errorSource.contains("ErrorView"))
-        XCTAssertTrue(errorSource.contains("viewModel.retry()"))
-        XCTAssertFalse(errorSource.contains("onNavigate"))
+    func testSendCodeTaskCancellationRejectsSuccessfulLateResponse() async {
+        let started = expectation(description: "send started")
+        let gate = AsyncGate()
+        let sut = LoginViewModel(
+            sendCode: { _ in
+                started.fulfill()
+                await gate.wait()
+                return Self.verification()
+            },
+            createSession: { _, _ in },
+            loadAccount: { throw APIClientError.invalidResponse }
+        )
+        sut.updatePhone("+8613800138000")
+        let task = Task { await sut.sendVerificationCode() }
+        await fulfillment(of: [started], timeout: 1)
+        task.cancel()
+        await gate.open()
+        await task.value
+        XCTAssertNil(sut.verificationID)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isSubmitting)
     }
 
-    func testHomeProductionSourceDoesNotAttachWeatherBeforeAssociationIsDefined() throws {
-        let viewSource = try productionSource(at: "Features/Home/HomeView.swift")
-        let viewModelSource = try productionSource(at: "Features/Home/HomeViewModel.swift")
-
-        XCTAssertFalse(viewSource.contains("refreshError"))
-        XCTAssertFalse(viewModelSource.contains("loadWeather"))
-        XCTAssertFalse(viewModelSource.contains("weatherImpact"))
-        XCTAssertFalse(viewModelSource.contains("TEMP(FIELD-HOME-001)"))
-        XCTAssertFalse(viewModelSource.contains("16° · 多云"))
-        XCTAssertFalse(viewModelSource.contains("山脊 4 级风"))
+    func testSendCodeCancellationErrorsAreNotPresentedAsFailures() async {
+        let cancellationErrors: [Error] = [CancellationError(), APIClientError.transport(.cancelled)]
+        for error in cancellationErrors {
+            let sut = LoginViewModel(
+                sendCode: { _ in throw error },
+                createSession: { _, _ in },
+                loadAccount: { throw APIClientError.invalidResponse }
+            )
+            sut.updatePhone("+8613800138000")
+            await sut.sendVerificationCode()
+            XCTAssertNil(sut.errorMessage)
+            XCTAssertNil(sut.verificationID)
+            XCTAssertFalse(sut.isSubmitting)
+        }
     }
 
-    /// 6.2 修订（H1）：weather 整体省略时 FocusTripSummary 仍渲染 WeatherSummary
-    /// 两个中性槽位（「本次未提供天气摘要」/「行程其他内容仍可查看」），
-    /// 不得把字段省略解释为 unavailable。
-    func testFocusTripSummaryRendersNeutralWeatherSlotsWhenModelHasNoWeather() throws {
-        let source = try productionSource(at: "Features/Home/Components/FocusTripSummary.swift")
+    func testLoginDoesNotFillAccountAfterPageCancellation() async {
+        let started = expectation(description: "account started")
+        let gate = AsyncGate()
+        let sut = LoginViewModel(
+            sendCode: { _ in Self.verification() },
+            createSession: { _, _ in },
+            loadAccount: {
+                started.fulfill()
+                await gate.wait()
+                return AccountResponse(
+                    account: AccountProjection(identity: "old"),
+                    profile: ProfileProjection(identity: "profile", maskedPhone: "***", nickname: nil, avatar: nil)
+                )
+            }
+        )
+        sut.updatePhone("+8613800138000")
+        await sut.sendVerificationCode()
+        sut.updateCode("012345")
+        let task = Task { await sut.login() }
+        await fulfillment(of: [started], timeout: 1)
+        XCTAssertTrue(sut.didAuthenticate, "认证完成仍先于可选账号回填")
+        sut.cancelPendingOperations()
+        await gate.open()
+        await task.value
+        XCTAssertNil(sut.account)
+        XCTAssertFalse(sut.isSubmitting)
+    }
 
-        XCTAssertFalse(source.contains("if let weather = model.weather"), "省略不再整体跳过 WeatherSummary")
-        XCTAssertTrue(source.contains("WeatherSummary(model: resolvedWeather)"))
-        XCTAssertTrue(source.contains("本次未提供天气摘要"))
-        XCTAssertTrue(source.contains("行程其他内容仍可查看"))
-        XCTAssertTrue(source.contains("state: .omitted"), "省略是独立中性态，不是 unavailable")
+    func testLoginStateOwnsPhoneValidationAndCooldownCapabilities() {
+        var state = LoginState()
+        state.phone = "12345"
+        XCTAssertNotNil(state.phoneValidationError)
+        state.phone = "+8613800138000"
+        XCTAssertNil(state.phoneValidationError)
+        let now = Date(timeIntervalSince1970: 1_000)
+        state.resendAvailableAt = now.addingTimeInterval(60)
+        XCTAssertFalse(state.canSendCode(at: now))
+        XCTAssertFalse(state.canResend(at: now))
+        XCTAssertTrue(state.canSendCode(at: now.addingTimeInterval(60)))
+        state.retryAvailableAt = now.addingTimeInterval(120)
+        XCTAssertFalse(state.canResend(at: now.addingTimeInterval(60)))
+    }
+
+    func testTransportCancelledSessionDoesNotAuthenticateOrShowFailure() async {
+        let sut = LoginViewModel(
+            sendCode: { _ in Self.verification() },
+            createSession: { _, _ in throw APIClientError.transport(.cancelled) },
+            loadAccount: { XCTFail("cancelled session must not load account"); throw APIClientError.invalidResponse }
+        )
+        sut.updatePhone("+8613800138000")
+        await sut.sendVerificationCode()
+        sut.updateCode("012345")
+        await sut.login()
+        XCTAssertFalse(sut.didAuthenticate)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isSubmitting)
+    }
+
+    private static func verification() -> VerificationCodeResponse {
+        VerificationCodeResponse(
+            verificationId: "verification-1",
+            expiresAt: .distantFuture,
+            resendAvailableAt: .distantPast
+        )
     }
 
     private func productionSource(at relativePath: String) throws -> String {

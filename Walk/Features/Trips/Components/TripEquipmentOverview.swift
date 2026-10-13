@@ -50,10 +50,44 @@ extension TripBusinessComponents {
 }
 
 #if DEBUG
+extension TripEquipmentOverviewProjection {
+    static let `default` = TripEquipmentOverviewProjection(
+        itemCount: 12,
+        knownTotalWeightGrams: 8420,
+        missingWeightItemCount: 0,
+        ownedItemCount: 10,
+        unconfirmedOwnedItemCount: 2
+    )
+
+    static let partialWeight = TripEquipmentOverviewProjection(
+        itemCount: 12,
+        knownTotalWeightGrams: 7960,
+        missingWeightItemCount: 2,
+        ownedItemCount: 9,
+        unconfirmedOwnedItemCount: 3
+    )
+
+    static let empty = TripEquipmentOverviewProjection(
+        itemCount: 0,
+        knownTotalWeightGrams: 0,
+        missingWeightItemCount: 0,
+        ownedItemCount: 0,
+        unconfirmedOwnedItemCount: 0
+    )
+
+    static let long = TripEquipmentOverviewProjection(
+        itemCount: 38,
+        knownTotalWeightGrams: 126_400,
+        missingWeightItemCount: 4,
+        ownedItemCount: 31,
+        unconfirmedOwnedItemCount: 7
+    )
+}
+
 #Preview("TripEquipmentOverview.default") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripEquipmentOverview(
-            projection: BusinessComponentPreviewFixtures.tripEquipmentOverviewDefault
+            projection: TripEquipmentOverviewProjection.default
         )
     }
 }
@@ -61,7 +95,7 @@ extension TripBusinessComponents {
 #Preview("TripEquipmentOverview.partialWeight") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripEquipmentOverview(
-            projection: BusinessComponentPreviewFixtures.tripEquipmentOverviewPartialWeight
+            projection: TripEquipmentOverviewProjection.partialWeight
         )
     }
 }
@@ -69,7 +103,7 @@ extension TripBusinessComponents {
 #Preview("TripEquipmentOverview.empty") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripEquipmentOverview(
-            projection: BusinessComponentPreviewFixtures.tripEquipmentOverviewEmpty
+            projection: TripEquipmentOverviewProjection.empty
         )
     }
 }
@@ -77,7 +111,7 @@ extension TripBusinessComponents {
 #Preview("TripEquipmentOverview.longValues") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripEquipmentOverview(
-            projection: BusinessComponentPreviewFixtures.tripEquipmentOverviewLong
+            projection: TripEquipmentOverviewProjection.long
         )
     }
 }

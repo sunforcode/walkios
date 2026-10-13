@@ -28,7 +28,7 @@ final class FeatureBoundaryTests: XCTestCase {
     }
 
     func testFeaturesDoNotReferenceAppTypes() throws {
-        let appTypes = try Self.topLevelTypes(under: "Walk/App", excluding: ["Baseline", "Debug"])
+        let appTypes = try Self.topLevelTypes(under: "Walk/App", excluding: ["Debug"])
         let index = try Self.buildIndex()
         var violations: [String] = []
         for file in index.files {

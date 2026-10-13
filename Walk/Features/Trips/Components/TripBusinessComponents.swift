@@ -80,6 +80,8 @@ struct TripTimelineItemProjection: Identifiable, Equatable {
     let title: String
     var details: [String]
     var notices: [String] = []
+    /// 不能因普通摘要的行数限制而隐藏的已有关键时间。
+    var additionalTimes: [String] = []
 }
 
 struct TripPointProjection: Identifiable, Equatable {
@@ -262,3 +264,65 @@ func tripNonEmpty(_ value: String?) -> String? {
     }
     return value
 }
+
+#if DEBUG
+extension TripWeatherProjection {
+    static let known = TripWeatherProjection(
+        condition: TripWeatherValueProjection(value: "多云", state: nil),
+        temperature: TripWeatherValueProjection(value: "8–16 ℃", state: nil),
+        precipitation: TripWeatherValueProjection(value: "降水概率 20%", state: nil),
+        wind: TripWeatherValueProjection(value: "3 级", state: nil)
+    )
+
+    static let pendingVerification = TripWeatherProjection(
+        condition: TripWeatherValueProjection(value: "多云", state: .pendingVerification),
+        temperature: TripWeatherValueProjection(value: "8–16 ℃", state: .pendingVerification),
+        precipitation: TripWeatherValueProjection(value: "降水概率 20%", state: .pendingVerification),
+        wind: TripWeatherValueProjection(value: "3 级", state: .pendingVerification)
+    )
+
+    static let partial = TripWeatherProjection(
+        condition: TripWeatherValueProjection(value: "阵雨", state: .pendingVerification),
+        temperature: TripWeatherValueProjection(value: "6–13 ℃", state: nil),
+        precipitation: TripWeatherValueProjection(value: nil, state: .unavailable),
+        wind: TripWeatherValueProjection(value: "4 级", state: .stale)
+    )
+
+    static let unavailable = TripWeatherProjection(
+        condition: TripWeatherValueProjection(value: nil, state: .unavailable),
+        temperature: TripWeatherValueProjection(value: nil, state: .unavailable),
+        precipitation: TripWeatherValueProjection(value: nil, state: .unavailable),
+        wind: TripWeatherValueProjection(value: nil, state: .unavailable)
+    )
+}
+
+extension TripWeatherDayProjection {
+    static let `default` = TripWeatherDayProjection(
+        id: "trip-day-weather-1",
+        dayNumber: 1,
+        date: "2026-09-07",
+        primaryStage: "抵达与适应",
+        hikingDayNumber: nil,
+        weather: TripWeatherProjection.pendingVerification
+    )
+
+    static let unavailable = TripWeatherDayProjection(
+        id: "trip-day-weather-3",
+        dayNumber: 3,
+        date: "2026-09-09",
+        primaryStage: "河谷下降",
+        hikingDayNumber: 2,
+        weather: TripWeatherProjection.unavailable
+    )
+
+    static let knownWithPlace = TripWeatherDayProjection(
+        id: "trip-day-weather-row-known",
+        dayNumber: 2,
+        date: "2026-09-08",
+        primaryStage: "翻越北侧垭口",
+        hikingDayNumber: 1,
+        placeContext: "老榆林村",
+        weather: TripWeatherProjection.known
+    )
+}
+#endif

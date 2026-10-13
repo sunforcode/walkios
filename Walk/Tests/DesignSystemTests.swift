@@ -208,7 +208,7 @@ final class DesignSystemTests: XCTestCase {
 
         XCTAssertTrue(
             titleBlockSource.contains(".frame(minHeight: 44"),
-            "标题行必须自带 44pt 最小高度：trailing 触控目标不得反向决定一级页头高度（首页/路线/我的三页页头高度保持一致）"
+            "标题行必须自带 44pt 最小高度：trailing 触控目标不得反向决定一级页头高度（路线/行程/装备/我的四页页头高度保持一致）"
         )
     }
 
@@ -273,6 +273,14 @@ final class DesignSystemTests: XCTestCase {
             discovery.contains("let pinnedInsets: EdgeInsets = PinnedWindowSafeAreaInsets.current"),
             "路线页不得在属性初始化器中读取窗口安全区"
         )
+    }
+
+    func testRootPageShellReservesActualTabBarSafeAreaForFixedActions() throws {
+        let source = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift")
+        let shell = try pageShellRegion(in: source)
+        XCTAssertTrue(shell.contains("GeometryReader { proxy in"))
+        XCTAssertTrue(shell.contains("max(pinnedSafeAreaInsets.bottom, proxy.safeAreaInsets.bottom)"))
+        XCTAssertTrue(shell.contains(".padding(.top, pinnedSafeAreaInsets.top)"))
     }
 
     /// 切取 `PageShell` 的源码区域，避免断言命中文件内其他容器写法。
@@ -498,6 +506,72 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertFalse(source.contains("var prefix:"))
     }
 
+    func testHomePilotFixtureCarriesApprovedDefaultBaselineValues() throws {
+        let fixtures = try productionSource(at: "Features/Home/Components/FocusTripSummary.swift")
+            + productionSource(at: "Features/Home/Components/WeatherSummary.swift")
+        let metricFixtures = try productionSource(
+            at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/MetricPreviewFixtures.swift"
+        )
+        let combined = fixtures + metricFixtures
+
+        XCTAssertTrue(combined.contains("routeName: \"云岭环线\""))
+        XCTAssertTrue(combined.contains("start: \"云栈口\""))
+        XCTAssertTrue(combined.contains("end: \"云栈口\""))
+        XCTAssertTrue(combined.contains("value: \"12.1\", unit: \"km\""))
+        XCTAssertTrue(combined.contains("value: \"600\", unit: \"m\""))
+        XCTAssertTrue(combined.contains("value: \"约 5 h 20 min\""))
+        XCTAssertTrue(combined.contains("conclusion: \"16°·多云\""))
+        XCTAssertTrue(combined.contains("impact: \"山脊4级风\""))
+    }
+
+    func testFocusTripSummaryAppliesSpecifiedHorizontalPadding() throws {
+        let focus = try productionSource(at: "Features/Home/Components/FocusTripSummary.swift")
+        XCTAssertTrue(
+            focus.contains(".padding(.horizontal, horizontalPadding)"),
+            "content 槽位必须应用调用方传入的水平边距，不得接收后丢弃"
+        )
+    }
+
+    func testHomePageOffersWholePageTapToOpenFocusedTrip() throws {
+        let home = try productionSource(at: "Features/Home/HomeView.swift")
+        XCTAssertTrue(home.contains("openFocusedTripIfNeeded"), "整页触控复用焦点行程守卫入口")
+        XCTAssertTrue(home.contains(".contentShape(Rectangle())"), "触控域覆盖整页而非仅摘要块")
+        XCTAssertTrue(
+            home.contains("guard case .ready = viewModel.state"),
+            "非焦点状态（guest/loading/error）点击为空操作"
+        )
+    }
+
+    func testHomePageShowsNoFocusEmptyStateWithoutAutoJump() throws {
+        let home = try productionSource(at: "Features/Home/HomeView.swift")
+        let homeViewModel = try productionSource(at: "Features/Home/HomeViewModel.swift")
+        let root = try productionSource(at: "App/RootView.swift")
+        XCTAssertTrue(home.contains("NoFocusContent"), "无焦点空态由 NoFocusContent 非组件承载")
+        XCTAssertTrue(home.contains("onBrowseRoutes"), "空态主动入口承载 browseRoutes UI 事件")
+        XCTAssertFalse(home.contains("onNoFocus"), "首页不再持有无焦点自动跳转回调")
+        XCTAssertFalse(homeViewModel.contains("onNoFocus"), "HomeViewModel 不再触发无焦点自动跳转")
+        XCTAssertFalse(root.contains("onNoFocus:"), "RootView 不再把无焦点结果接到 showRouteList")
+    }
+
+    func testFocusTripSummaryUsesSingleLeftInfoBlockAndNeutralWeatherSlots() throws {
+        let focus = try productionSource(at: "Features/Home/Components/FocusTripSummary.swift")
+        XCTAssertTrue(focus.contains("VStack(alignment: .leading, spacing: Spacing.lg)"), "左侧单一信息块纵向排列")
+        XCTAssertTrue(focus.contains("alignment: .bottomLeading"), "信息块沉底左下")
+        XCTAssertTrue(focus.contains("contentBottomPadding"), "信息块不贴底，位于全局一级导航之上")
+        XCTAssertTrue(focus.contains("label: \"累计爬升\""), "保留累计爬升指标")
+        XCTAssertTrue(focus.contains("label: \"预计用时\""), "保留预计用时指标")
+        XCTAssertTrue(focus.contains("routeIdentityMaxWidth: CGFloat = 290"), "RouteName 最大宽 290")
+        XCTAssertTrue(focus.contains(".font(.displayTitle)"), "RouteName 用 displayTitle 档")
+        XCTAssertFalse(focus.contains(".font(.sceneTitle)"), "不再使用 sceneTitle")
+        XCTAssertTrue(focus.contains("本次未提供天气摘要"), "省略时中性槽位一")
+        XCTAssertTrue(focus.contains("行程其他内容仍可查看"), "省略时中性槽位二")
+        XCTAssertFalse(focus.contains("if let weather = model.weather {"), "weather 省略仍渲染 WeatherSummary")
+
+        let weather = try productionSource(at: "Features/Home/Components/WeatherSummary.swift")
+        XCTAssertTrue(weather.contains("case omitted"), "字段省略不得解释为 unavailable")
+        XCTAssertFalse(weather.contains("case omitted =>"), "omitted 是独立状态")
+    }
+
     func testHomePilotComponentsHaveSingleProductionOwners() throws {
         let home = try productionSource(at: "Features/Home/HomeView.swift")
         XCTAssertFalse(home.contains("struct MetricItem:"))
@@ -525,24 +599,7 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(focus.contains("WeatherSummary("))
     }
 
-    func testHomePilotFixtureCarriesApprovedDefaultBaselineValues() throws {
-        let fixtures = try productionSource(at: "Preview Content/HomePreviewFixtures.swift")
-        let metricFixtures = try productionSource(
-            at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/MetricPreviewFixtures.swift"
-        )
-        let combined = fixtures + metricFixtures
-
-        XCTAssertTrue(combined.contains("routeName: \"云岭环线\""))
-        XCTAssertTrue(combined.contains("start: \"云栈口\""))
-        XCTAssertTrue(combined.contains("end: \"云栈口\""))
-        XCTAssertTrue(combined.contains("value: \"12.1\", unit: \"km\""))
-        XCTAssertTrue(combined.contains("value: \"600\", unit: \"m\""))
-        XCTAssertTrue(combined.contains("value: \"约 5 h 20 min\""))
-        XCTAssertTrue(combined.contains("conclusion: \"16°·多云\""))
-        XCTAssertTrue(combined.contains("impact: \"山脊4级风\""))
-    }
-
-    func testHomePilotUsesRegisteredVisualTokens() throws {
+    func testSceneAndMetricComponentsUseRegisteredVisualTokens() throws {
         let colors = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Theme/Color+App.swift")
         let typography = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Theme/Font+App.swift")
         let shadows = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Theme/Shadow.swift")
@@ -584,39 +641,7 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(home.contains("HomeView("))
     }
 
-    /// 焦点行程摘要左边距：PAGE-HOME 摘要与页面 18pt 水平边距对齐，content 槽位必须真正应用传入参数。
-    func testFocusTripSummaryAppliesSpecifiedHorizontalPadding() throws {
-        let focus = try productionSource(at: "Features/Home/Components/FocusTripSummary.swift")
-        XCTAssertTrue(
-            focus.contains(".padding(.horizontal, horizontalPadding)"),
-            "content 槽位必须应用调用方传入的水平边距，不得接收后丢弃"
-        )
-    }
-
-    /// 首页触控域：ready 且有焦点行程时整页可点开行程详情；子内容自身手势与守卫保证非焦点态为空操作。
-    func testHomePageOffersWholePageTapToOpenFocusedTrip() throws {
-        let home = try productionSource(at: "Features/Home/HomeView.swift")
-        XCTAssertTrue(home.contains("openFocusedTripIfNeeded"), "整页触控复用焦点行程守卫入口")
-        XCTAssertTrue(home.contains(".contentShape(Rectangle())"), "触控域覆盖整页而非仅摘要块")
-        XCTAssertTrue(
-            home.contains("guard case .ready = viewModel.state"),
-            "非焦点状态（guest/loading/error）点击为空操作"
-        )
-    }
-
-    /// 首页无焦点空态：已登录无焦点行程停留在首页呈现空态与主动入口，不再自动跳转全部路线。
-    func testHomePageShowsNoFocusEmptyStateWithoutAutoJump() throws {
-        let home = try productionSource(at: "Features/Home/HomeView.swift")
-        let homeViewModel = try productionSource(at: "Features/Home/HomeViewModel.swift")
-        let root = try productionSource(at: "App/RootView.swift")
-        XCTAssertTrue(home.contains("NoFocusContent"), "无焦点空态由 NoFocusContent 非组件承载")
-        XCTAssertTrue(home.contains("onBrowseRoutes"), "空态主动入口承载 browseRoutes UI 事件")
-        XCTAssertFalse(home.contains("onNoFocus"), "首页不再持有无焦点自动跳转回调")
-        XCTAssertFalse(homeViewModel.contains("onNoFocus"), "HomeViewModel 不再触发无焦点自动跳转")
-        XCTAssertFalse(root.contains("onNoFocus:"), "RootView 不再把无焦点结果接到 showRouteList")
-    }
-
-    /// PAGE-ROUTE-LIST 返回入口：经任意页推入（首页空态、发现流）统一显示返回入口；
+    /// PAGE-ROUTE-LIST 返回入口：经任意页推入（行程空态、发现流）统一显示返回入口；
     /// 特判只在 navigate 内拥有一次，来源页不得各自设置。
     func testRouteListPushedFromAnyTabShowsBackEntry() throws {
         let root = try productionSource(at: "App/RootView.swift")
@@ -883,7 +908,7 @@ final class DesignSystemTests: XCTestCase {
     func testRootViewIsTheSingleShellImplementation() throws {
         let root = try productionSource(at: "App/RootView.swift")
         XCTAssertTrue(root.contains("TabView(selection:"))
-        XCTAssertEqual(occurrences(of: "NavigationStack(", in: root), 1, "NavigationStack 只允许一个实现点（tabStack 封装，三个 tab 复用）")
+        XCTAssertEqual(occurrences(of: "NavigationStack(", in: root), 1, "NavigationStack 只允许一个实现点（tabStack 封装，四个 tab 复用）")
         XCTAssertTrue(root.contains("NavigationStack(path: pathBinding(for: tab))"))
         XCTAssertFalse(
             regexMatches(#"struct\s+\w+Shell\s*:\s*View"#, in: root),
@@ -914,7 +939,7 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(discovery.contains("输入路线名称或地区"), "搜索输入占位（6.3 钉入 spec）")
     }
 
-    func testRouteBrowsePagesUseProductionComponentsWithoutResolvingMediaReferences() throws {
+    func testRouteBrowsePagesUseProductionComponentsWithResolvedArtwork() throws {
         let source = try productionSource(at: "Features/Routes/RouteDiscoveryView.swift")
         let collectionStart = try XCTUnwrap(source.range(of: "struct RouteCollectionView: View"))
         let searchStart = try XCTUnwrap(source.range(of: "struct RouteSearchView: View"))
@@ -931,7 +956,7 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(discoverySource.contains("route.distance"))
         XCTAssertTrue(discoverySource.contains("route.ascent"))
         XCTAssertTrue(discoverySource.contains("route.estimatedDuration"))
-        XCTAssertTrue(discoverySource.contains("RouteDeterministicImageSurface(style: .forest)"))
+        XCTAssertTrue(discoverySource.contains("RouteArtworkView(cover: route.cover, placeholder: .forest)"))
         XCTAssertFalse(discoverySource.contains("RouteScenePage"))
         XCTAssertFalse(discoverySource.contains("RouteSceneButtonStyle"))
         XCTAssertFalse(discoverySource.contains("Button {"), "RouteScene 自身拥有唯一选择入口")
@@ -946,12 +971,12 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(collectionSource.contains("distance: route.distance.map"))
         XCTAssertTrue(collectionSource.contains("ascent: route.ascent.map"))
         XCTAssertTrue(collectionSource.contains("estimatedDuration: route.estimatedDuration.map"))
-        XCTAssertTrue(collectionSource.contains("RouteDeterministicImageSurface(style: .forest)"))
+        XCTAssertTrue(collectionSource.contains("RouteArtworkView(cover: route.cover, placeholder: .forest)"))
         XCTAssertFalse(collectionSource.contains("RouteListCompactRow"))
-        XCTAssertFalse(collectionSource.contains("route.cover"), "MediaReference 未解析时不得进入 browse 视觉")
+        XCTAssertTrue(collectionSource.contains("RouteArtworkSource.resolve(route.cover)"), "图片引用先经过明确的本地资源或 HTTP URL 解析")
         XCTAssertFalse(collectionSource.contains("Button {"), "RouteListRow 自身拥有唯一选择入口")
 
-        XCTAssertEqual(occurrences(of: "coverAvailable: false", in: discoverySource + collectionSource), 2)
+        XCTAssertEqual(occurrences(of: "coverAvailable: RouteArtworkSource.resolve(route.cover) != nil", in: discoverySource + collectionSource), 2)
         XCTAssertTrue(searchSource.contains("RouteBusinessComponents.SearchRouteResultRow("), "搜索页使用生产 SearchRouteResultRow")
         XCTAssertTrue(searchSource.contains("SearchRouteResultRowProjection("), "搜索页构造 SearchRouteResultRowProjection")
         XCTAssertTrue(searchSource.contains("routeID: route.routeId"), "搜索行绑定路线 ID")
@@ -978,7 +1003,7 @@ final class DesignSystemTests: XCTestCase {
 
         XCTAssertTrue(collectionSource.contains("当前暂无可选择路线"), "全部路线空态标题（原型 h3）")
         XCTAssertTrue(collectionSource.contains("路线准备完成后会出现在这里。"), "全部路线空态说明（原型 p）")
-        XCTAssertTrue(collectionSource.contains("icon: \"route\""), "全部路线空态 icon route 口径")
+        XCTAssertTrue(collectionSource.contains("icon: \"map\""), "全部路线空态的路线语义在 iOS 映射为有效 SF Symbol map")
         XCTAssertTrue(collectionSource.contains("暂时无法加载全部路线"), "全部路线失败态标题")
         XCTAssertTrue(collectionSource.contains("不会使用缓存或猜测路线替代。"), "全部路线失败态说明")
 
@@ -1002,9 +1027,17 @@ final class DesignSystemTests: XCTestCase {
 
         let search = try productionSource(at: "Features/Routes/RouteDiscoveryView.swift")
         let searchStart = try XCTUnwrap(search.range(of: "struct RouteSearchView: View"))
-        let searchSource = String(search[searchStart.lowerBound...])
-        XCTAssertTrue(searchSource.contains("@ObservedObject"), "搜索页接受外部持有的会话状态")
+        let ownerStart = try XCTUnwrap(search.range(of: "private struct RouteSearchOwner: View"))
+        let contentStart = try XCTUnwrap(search.range(of: "private struct RouteSearchContent: View"))
+        let contentEnd = try XCTUnwrap(search.range(of: "private struct SearchFocusActivator:"))
+        let searchSource = String(search[searchStart.lowerBound..<ownerStart.lowerBound])
+        let contentSource = String(search[contentStart.lowerBound..<contentEnd.lowerBound])
+        XCTAssertTrue(root.contains("@State private var routeSearchModel: RouteDiscoveryViewModel"), "App 持有 Observation 搜索会话生命周期")
+        XCTAssertTrue(searchSource.contains("let viewModel: RouteDiscoveryViewModel"), "搜索页接受外部注入的会话模型")
+        XCTAssertFalse(searchSource.contains("@State private var viewModel"), "注入入口不另行拥有会话模型")
+        XCTAssertFalse(contentSource.contains("@State private var viewModel"), "页面内容只消费拥有者注入的模型")
         XCTAssertTrue(searchSource.contains("@Binding"), "搜索页接受外部持有的 query")
+        XCTAssertTrue(contentSource.contains("@Binding"), "共享页面内容消费拥有者持有的 query")
     }
 
     /// 6.3 修订（D1）：RouteImageGallery 只读去事件化，页面不建私有图片网格，无图片查看器。
@@ -1020,7 +1053,7 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertFalse(detail.contains("RouteImageViewer"), "不建立图片查看器覆盖层")
         XCTAssertFalse(detail.contains("selectedImage"), "不持有图片覆盖层状态")
 
-        let catalog = try productionSource(at: "App/Baseline/ComponentCatalog.swift")
+        let catalog = try productionSource(at: "App/Debug/ComponentCatalog.swift")
         XCTAssertFalse(catalog.contains("RouteImageViewer"), "RouteImageViewer 退役后从目录移除")
     }
 
@@ -1048,15 +1081,57 @@ final class DesignSystemTests: XCTestCase {
         )
     }
 
-    func testTripDetailContainsRouteVersionAndMetricsInBody() throws {
+    func testTripDetailKeepsSceneMetricsAndRouteNavigationWithoutRepeatedBodyCard() throws {
         let detail = try productionSource(at: "Features/Trips/TripDetailView.swift")
         let routeCard = try productionSource(at: "Features/Trips/Components/TripRouteSummaryCard.swift")
 
-        // PAGE-TRIP-DETAIL 正文承载路线入口卡；指标摘要并入走向卡、置于海拔图上方；版本卡已退役。
+        // 场景承载指标与海拔；公共路线入口归更多菜单，正文不重复路线卡。
         XCTAssertFalse(detail.contains("TripBusinessComponents.TripRouteVersionCard("), "版本卡不再承载于 DETAIL 正文")
         XCTAssertTrue(routeCard.contains("TripBusinessComponents.TripRouteMetricsSummary("), "指标摘要并入走向卡置于海拔图上方")
-        XCTAssertTrue(detail.contains("TripBusinessComponents.TripRouteSummaryCard("), "DETAIL 正文承载路线入口卡")
-        XCTAssertTrue(detail.contains("routeEntryProjection("), "DETAIL 构造路线入口投影")
+        XCTAssertTrue(detail.contains("TripBusinessComponents.TripExpeditionScene("))
+        XCTAssertFalse(detail.contains("TripBusinessComponents.TripRouteMetricsSummary("))
+        XCTAssertTrue(detail.contains("onOpenRoute("), "真实路线入口不得随场景更换而丢失")
+    }
+
+    func testTripDetailUsesApprovedCompactTimelineWithoutSceneChrome() throws {
+        let page = try productionSource(at: "Features/Trips/TripDetailView.swift")
+        let scene = try productionSource(at: "Features/Trips/Components/TripExpeditionScene.swift")
+        let shared = try productionSource(at: "../Packages/WalkDesignSystem/Sources/WalkDesignSystem/Components/SharedPrimitives.swift")
+        XCTAssertFalse(scene.contains("Text(\"AIGC 场景示意\")"))
+        XCTAssertFalse(scene.contains("Text(\"行程提醒\")"))
+        XCTAssertFalse(scene.contains(".accessibilityIdentifier(\"trip-scene-notices\")"))
+        XCTAssertTrue(scene.contains("AIGC 场景示意"), "移除可见角标不把艺术图变成真实地图")
+        XCTAssertTrue(page.contains("TimelineSummaryContent("), "页面复用通用主副标题，不复制字体与长文堆叠")
+        XCTAssertTrue(shared.contains("public struct TimelineSummaryContent"))
+        XCTAssertTrue(page.contains("availableWidth * 0.66"))
+        XCTAssertTrue(page.contains(".frame(height: 200"))
+        XCTAssertFalse(page.contains("item.details.joined"))
+        XCTAssertFalse(page.contains("item.notices.joined"))
+    }
+
+    func testTripDetailUsesOneFullScreenArtworkAndKeepsForegroundSafe() throws {
+        let page = try productionSource(at: "Features/Trips/TripDetailView.swift")
+        let component = try productionSource(at: "Features/Trips/Components/TripExpeditionScene.swift")
+        XCTAssertFalse(page.contains("TripAtmosphere"))
+        XCTAssertFalse(component.contains("TripAtmosphere"))
+        XCTAssertEqual(page.components(separatedBy: "TripBusinessComponents.TripExpeditionScene.Artwork(").count - 1, 1)
+        XCTAssertEqual(page.components(separatedBy: ".ignoresSafeArea()").count - 1, 1)
+        XCTAssertTrue(page.contains(".frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)"))
+        XCTAssertTrue(page.contains(".clipped()\n            .accessibilityElement(children: .contain)\n            .accessibilityIdentifier(\"trip-detail-safe-content\")"))
+        let backgroundStart = try XCTUnwrap(page.range(of: "private func background"))
+        let backgroundEnd = try XCTUnwrap(page.range(of: "private var navOverlay: some View"))
+        let background = String(page[backgroundStart.lowerBound..<backgroundEnd.lowerBound])
+        XCTAssertTrue(background.contains(".ignoresSafeArea()"))
+        XCTAssertTrue(background.contains(".allowsHitTesting(false)"))
+        XCTAssertTrue(background.contains(".accessibilityHidden(true)"))
+        XCTAssertTrue(background.contains("sceneViewport.intersection(contentViewport)"))
+        XCTAssertFalse(background.contains(".scale("))
+        let foregroundStart = try XCTUnwrap(component.range(of: "private func sceneButton"))
+        let foregroundEnd = try XCTUnwrap(component.range(of: "private func information"))
+        let foreground = String(component[foregroundStart.lowerBound..<foregroundEnd.lowerBound])
+        XCTAssertFalse(foreground.contains("terrain("))
+        XCTAssertFalse(foreground.contains("Artwork("))
+        XCTAssertTrue(foreground.contains("Color.clear"))
     }
 
     func testTripListEmptyStatePointsToRouteDiscovery() throws {
@@ -1066,7 +1141,7 @@ final class DesignSystemTests: XCTestCase {
 
     func testTripListUsesApprovedPageStatesAndSpacing() throws {
         let list = try productionSource(at: "Features/Trips/TripListView.swift")
-        XCTAssertTrue(list.contains("UtilityPage(title:"), "二级页滚动与顶部间距由统一壳承载，页面不自写固定导航头间距")
+        XCTAssertTrue(list.contains("UtilityPage(title:"), "全部行程为二级任务页，滚动与顶部间距由统一壳承载")
         XCTAssertTrue(list.contains("variant: .default"), "全局空态使用 EmptyState.default")
         XCTAssertTrue(list.contains("variant: .page"), "加载失败使用 ErrorView.page")
         XCTAssertFalse(list.contains("variant: .section"), "PAGE-TRIPS 全局状态不得使用 Section 变体")
@@ -1092,27 +1167,6 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(row.contains("· "), "DetailLine 以「路线名 · 日期区间」组合")
     }
 
-    /// FocusTripSummary 沉底左下修订：
-    /// 信息块锚定左下、全局一级导航之上；路线名、起终点一句话描述、
-    /// 距离/爬升/用时三指标、天气自上而下排列；weather 省略时仍渲染两个中性槽位。
-    func testFocusTripSummaryUsesSingleLeftInfoBlockAndNeutralWeatherSlots() throws {
-        let focus = try productionSource(at: "Features/Home/Components/FocusTripSummary.swift")
-        XCTAssertTrue(focus.contains("VStack(alignment: .leading, spacing: Spacing.lg)"), "左侧单一信息块纵向排列")
-        XCTAssertTrue(focus.contains("alignment: .bottomLeading"), "信息块沉底左下")
-        XCTAssertTrue(focus.contains("contentBottomPadding"), "信息块不贴底，位于全局一级导航之上")
-        XCTAssertTrue(focus.contains("label: \"累计爬升\""), "保留累计爬升指标")
-        XCTAssertTrue(focus.contains("label: \"预计用时\""), "保留预计用时指标")
-        XCTAssertTrue(focus.contains("routeIdentityMaxWidth: CGFloat = 290"), "RouteName 最大宽 290")
-        XCTAssertTrue(focus.contains(".font(.displayTitle)"), "RouteName 用 displayTitle 档")
-        XCTAssertFalse(focus.contains(".font(.sceneTitle)"), "不再使用 sceneTitle")
-        XCTAssertTrue(focus.contains("本次未提供天气摘要"), "省略时中性槽位一")
-        XCTAssertTrue(focus.contains("行程其他内容仍可查看"), "省略时中性槽位二")
-        XCTAssertFalse(focus.contains("if let weather = model.weather {"), "weather 省略仍渲染 WeatherSummary")
-
-        let weather = try productionSource(at: "Features/Home/Components/WeatherSummary.swift")
-        XCTAssertTrue(weather.contains("case omitted"), "字段省略不得解释为 unavailable")
-        XCTAssertFalse(weather.contains("case omitted =>"), "omitted 是独立状态")
-    }
 
     func testTripDayKeepsServerActionAndPointOrderAndEdgeHint() throws {
         let browse = try productionSource(at: "Features/Trips/TripBrowseView.swift")
@@ -1134,10 +1188,11 @@ final class DesignSystemTests: XCTestCase {
     /// 概况与重要影响来自 weatherOverview 合同；不从预报时段或天气关联聚合派生。
     func testTripWeatherBuildsDailyCardsFromFrozenDayWeather() throws {
         let source = try productionSource(at: "Features/Trips/TripDayWeatherViews.swift")
+        let model = try productionSource(at: "Features/Trips/TripWeatherViewModel.swift")
         XCTAssertTrue(source.contains("TripBusinessComponents.DailyWeatherCard("), "逐日卡消费冻结自然日天气")
         XCTAssertTrue(source.contains("detail.days"), "逐日数据源为行程详情冻结自然日")
         XCTAssertTrue(source.contains("importantImpacts"), "重要影响来自概况合同")
-        XCTAssertTrue(source.contains("trip_weather_projection_unavailable"), "后端暂不可用错误使用稳定错误码判断")
+        XCTAssertTrue(model.contains("trip_weather_projection_unavailable"), "模型使用稳定错误码判断后端暂不可用")
         XCTAssertFalse(source.contains("forecast"), "不从预报时段聚合派生逐日字段")
         XCTAssertFalse(source.contains("weatherAssociations"), "不从天气关联聚合派生")
         XCTAssertFalse(source.contains("private struct DailyTripWeatherCard"), "不建立页面私有逐日天气卡")
@@ -1173,7 +1228,7 @@ final class DesignSystemTests: XCTestCase {
     func testProfileUsesApprovedPageTitleGuestCopyAndAvatarStates() throws {
         let profile = try productionSource(at: "Features/Profile/ProfileView.swift")
         XCTAssertFalse(profile.contains(".ornament(31"), "登录态页头标题使用 font-pageTitle，不再自定 ornament 档")
-        XCTAssertTrue(profile.contains("登录后查看个人行程、行程日历、个人装备和装备清单。"), "游客态说明 copy 钉入 spec")
+        XCTAssertTrue(profile.contains("登录后可以查看行程日历并管理个人资料。"), "游客态说明 copy 钉入 spec")
         XCTAssertTrue(profile.contains("minHeight: 440"), "游客态最小高 440 逻辑点")
         XCTAssertTrue(profile.contains("打开个人与设置"), "AvatarButton 可访问名为「打开个人与设置」")
         XCTAssertTrue(profile.contains("state: .unavailable"), "profileError 回退进入 AvatarButton unavailable 重试")
@@ -1196,16 +1251,15 @@ final class DesignSystemTests: XCTestCase {
     }
 
     /// PAGE-LOGIN 6.4 修订（A1/A2/A3）：消费生产 AuthPanel、焦点确认双态、品牌行；RootView 修复误判。
-    func testLoginConsumesProductionAuthPanelWithFocusConfirmation() throws {
+    func testLoginConsumesAuthPanelWithoutFocusDependency() throws {
         let login = try productionSource(at: "Features/Profile/LoginView.swift")
         XCTAssertTrue(login.contains("AuthPanel("), "登录页消费生产 AuthPanel 组件")
         XCTAssertFalse(login.contains("WalkPanel(surface: .glass)"), "不再私有重建认证面板玻璃面")
         XCTAssertTrue(login.contains("AuthPanelProjection("), "登录页构造 AuthPanel 投影")
-        XCTAssertTrue(login.contains(".confirmingFocus"), "提供 confirmingFocus 校准态映射")
-        XCTAssertTrue(login.contains(".focusError"), "提供 focusError 校准态映射")
-        XCTAssertTrue(login.contains("onRetryFocusTrip"), "焦点确认失败提供重试事件")
-        XCTAssertTrue(login.contains("retryAvailableAt: activeRetryAvailableAt"), "发送限流时间投影给 AuthPanel")
-        XCTAssertTrue(login.contains("viewModel.focusErrorMessage"), "焦点确认失败原因投影给 AuthPanel")
+        XCTAssertTrue(login.contains("retryAvailableAt: viewModel.state.activeRetryAvailableAt(at: now)"), "模型状态决定发送限流时间并投影给 AuthPanel")
+        XCTAssertTrue(login.contains("viewModel.state.phoneValidationError"), "手机号校验由模型状态提供")
+        XCTAssertTrue(login.contains("onChangePhone: viewModel.updatePhone"), "手机号写入经过模型入口")
+        XCTAssertTrue(login.contains("onChangeCode: viewModel.updateCode"), "验证码写入经过模型入口")
         XCTAssertFalse(login.contains("首次验证通过后直接建立 Walk 账号"), "legal note 由 AuthPanel 组件拥有")
         XCTAssertTrue(login.contains("ROUTE 01 · PERSONAL JOURNEY"), "品牌行补齐「Walk / ROUTE 01 · PERSONAL JOURNEY」")
 
@@ -1214,15 +1268,14 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(authPanel.contains("ViewThatFits"), "AuthPanel 内容自高贴底，内容超出最大高时才内部滚动（PAGE-LOGIN：最大高只是上限，不是目标高度）")
 
         let root = try productionSource(at: "App/RootView.swift")
-        XCTAssertTrue(root.contains("onConfirmFocusTrip"), "RootView 提供焦点确认处理器")
-        // W4：确认结果由 AuthenticationFlow 持有，行为由 AuthenticationFlowTests 覆盖。
-        XCTAssertTrue(root.contains("authFlow.consumeFocusConfirmation()"), "execute(.homeStart) 消费认证链路确认结果，不再自行 catch 落回首页")
+        XCTAssertFalse(root.contains("onConfirmFocusTrip"))
+        XCTAssertFalse(login.contains(".confirmingFocus"))
     }
 
-    /// PAGE-EQUIPMENT-EDIT 6.4 修订（E1）：页题说明钉入原型 copy。
+    /// PAGE-EQUIPMENT-EDIT：页题说明承接分类、类型选择。
     func testEquipmentEditPageTitleMatchesPinnedCopy() throws {
         let source = try productionSource(at: "Features/Equipment/AddEquipmentView.swift")
-        XCTAssertTrue(source.contains("本页只维护装备名称、实际拥有数量和可选的单件重量。"), "页题说明钉入 spec")
+        XCTAssertTrue(source.contains("填写装备名称、分类、类型、拥有数量和可选的单件重量。"), "页题说明钉入 spec")
     }
 
     /// PAGE-MY-EQUIPMENT 6.4 修订（L1/L2/L4）：空态 copy 钉入原型；页面不提供下拉刷新。
@@ -1231,7 +1284,7 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(source.contains("还没有个人装备"), "装备空态标题钉入 spec")
         XCTAssertTrue(source.contains("没有个人装备也不会阻断行程生成。"), "装备空态说明钉入 spec")
         XCTAssertTrue(source.contains("还没有用户装备清单"), "清单空态标题钉入 spec")
-        XCTAssertTrue(source.contains("可以按自己的习惯创建一日、三日或五日清单。"), "清单空态说明钉入 spec")
+        XCTAssertTrue(source.contains("可以按自己的习惯组织常用清单。"), "清单空态说明钉入 spec")
         XCTAssertFalse(source.contains(".refreshable"), "页面不提供下拉刷新")
     }
 
@@ -1260,13 +1313,16 @@ final class DesignSystemTests: XCTestCase {
     /// PAGE-TRIP-CREATE 6.4 修订（C1/C2/C3/C4）：版本冲突区、日期模板与城市错误 copy、去除多余 SectionHeader。
     func testTripCreateShowsVersionConflictRegionAndPinnedCopy() throws {
         let source = try productionSource(at: "Features/Trips/CreateTripView.swift")
-        XCTAssertTrue(source.contains("route_version_conflict"), "识别 409 route_version_conflict 进入 versionConflict 态")
+        let model = try productionSource(at: "Features/Trips/CreateTripViewModel.swift")
+        let state = try productionSource(at: "Features/Trips/CreateTripState.swift")
+        XCTAssertTrue(model.contains("route_version_conflict"), "模型识别 409 route_version_conflict 进入 versionConflict 态")
         XCTAssertTrue(source.contains("refreshRouteVersion"), "VersionConflictRegion 承载重读上下文动作")
         XCTAssertTrue(source.contains("viewCurrentRoute"), "VersionConflictRegion 承载返回路线详情动作")
         XCTAssertTrue(source.contains("一日路线固定只生成"), "一日日期模板 copy 钉入 spec")
         XCTAssertTrue(source.contains("去程、徒步和返程都在 D1 内完成。"), "一日日期模板原型 copy 完整钉入 spec")
         XCTAssertTrue(source.contains("多日路线的实际自然日和结束日期由生成结果返回，生成前不根据建议天数或参考分日推算。"), "多日日期模板 copy 钉入 spec")
-        XCTAssertTrue(source.contains("请先填写城市，再生成个人行程。"), "出发城市错误文案钉入 spec")
+        XCTAssertTrue((state + model).contains("请先填写城市，再生成个人行程。"), "表单状态保留出发城市错误文案")
+        XCTAssertTrue(source.contains("departureCityError"), "页面消费模型给出的出发城市校验结果")
         XCTAssertFalse(source.contains("SectionHeader(title: \"必要信息\")"), "RequiredInputSection 只排列必要输入，无 SectionHeader")
     }
 
@@ -1274,13 +1330,13 @@ final class DesignSystemTests: XCTestCase {
 
     func testProfileFollowsPageStructureSpec() throws {
         let profile = try productionSource(at: "Features/Profile/ProfileView.swift")
-        XCTAssertTrue(profile.contains("登录后管理行程与徒步装备"), "游客态页面头 caption 摘要")
-        XCTAssertTrue(profile.contains("你的徒步记录，都在这里"), "游客态 EmptyState 主文案")
+        XCTAssertTrue(profile.contains("登录后查看行程日历与账户"), "游客态页面头 caption 摘要")
+        XCTAssertTrue(profile.contains("登录后查看行程日历与账户"), "游客态 EmptyState 主文案")
         XCTAssertEqual(occurrences(of: "onNavigate(.tripList)", in: profile), 1, "行程日历是唯一 tripList 入口")
         XCTAssertTrue(profile.contains("AvatarButton"), "登录态页面头使用 AvatarButton 通用组件")
         XCTAssertTrue(profile.contains("ErrorView"), "登录态分节失败使用 ErrorView.section")
         XCTAssertTrue(profile.contains("viewModel.retryCalendar()"), "行程日历 Section 提供独立重试")
-        XCTAssertTrue(profile.contains("viewModel.retryEquipment()"), "装备 Section 提供独立重试")
+        XCTAssertFalse(profile.contains("PersonalEquipmentSummaryCard("), "装备概况已迁到装备一级区域")
         // 按 PAGE-ME / PAGE-ACCOUNT-MENU 权威，查看入口、脱敏账号与关于行由 TripCalendarCard / AccountMenuView 承载，不在我的页。
         let calendarCard = try productionSource(at: "Features/Shared/Components/TripCalendarCard.swift")
         XCTAssertTrue(calendarCard.contains("查看全部"), "行程日历查看入口在 TripCalendarCard 组件内")
@@ -1323,8 +1379,8 @@ final class DesignSystemTests: XCTestCase {
     func testEquipmentListFollowsPageStructureSpec() throws {
         let list = try productionSource(at: "Features/Equipment/EquipmentListView.swift")
         XCTAssertFalse(list.contains("长期个人资产"), "二级页页题不含宣传性 kicker")
-        XCTAssertTrue(list.contains("装备与清单"), "页题区标题")
-        XCTAssertTrue(list.contains("个人装备记录实际拥有数量和可选单件重量；清单按清单内数量汇总预计总重量。"), "页题区说明")
+        XCTAssertTrue(list.contains("title: \"装备\""), "装备一级根页标题")
+        XCTAssertTrue(list.contains("管理个人装备与常用清单"), "页题区说明")
         // PAGE-MY-EQUIPMENT 权威页签为 SegmentedControl 通用组件，非原生 .pickerStyle(.segmented)；
         // 装备行未填写重量文案属 EquipmentListRow 组件，重命名文案属 InlineListNameEditor 组件。
         XCTAssertTrue(list.contains("SegmentedControl("), "装备/清单页签使用 SegmentedControl 组件")
@@ -1344,14 +1400,18 @@ final class DesignSystemTests: XCTestCase {
 
     func testEquipmentEditFollowsPageStructureSpec() throws {
         let edit = try productionSource(at: "Features/Equipment/AddEquipmentView.swift")
+        let state = try productionSource(at: "Features/Equipment/EquipmentEditState.swift")
         XCTAssertFalse(edit.contains("写入长期个人资产"), "二级页页题不含宣传性 kicker")
         XCTAssertTrue(edit.contains("新增一件装备"))
         XCTAssertTrue(edit.contains("更新装备"))
-        XCTAssertTrue(edit.contains("只维护装备名称、实际拥有数量和可选的单件重量。"))
-        XCTAssertTrue(edit.contains("请输入装备名称"))
-        XCTAssertTrue(edit.contains("请输入大于零的克重"))
+        XCTAssertTrue(edit.contains("填写装备名称、分类、类型、拥有数量和可选的单件重量。"))
+        XCTAssertTrue(state.contains("请输入装备名称"))
+        XCTAssertTrue(state.contains("请输入大于零的克重"))
         XCTAssertFalse(edit.contains("if #available(iOS 17.0"), "iOS 16 也必须展示装备名称输入")
-        XCTAssertTrue(edit.contains("删除后会从用户装备清单移除，但不会修改已经生成的行程装备。"))
+        XCTAssertTrue(state.contains("删除后会从用户装备清单移除，但不会修改已经生成的行程装备。"))
+        XCTAssertTrue(edit.contains("nameFieldError"), "表单消费模型状态给出的名称校验")
+        XCTAssertTrue(edit.contains("weightFieldError"), "表单消费模型状态给出的重量校验")
+        XCTAssertTrue(edit.contains("deletionMessage"), "删除确认消费状态给出的影响说明")
         XCTAssertTrue(edit.contains("\"保存\""), "底部固定主按钮保存")
         XCTAssertTrue(edit.contains("bottomFixed:"), "固定底部动作交由壳的 bottomFixed 插槽（safeAreaInset 由壳统一）")
     }

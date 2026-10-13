@@ -123,10 +123,52 @@ extension RouteBusinessComponents {
 }
 
 #if DEBUG
+extension SearchRouteResultRowProjection {
+    static let `default` = SearchRouteResultRowProjection(
+        routeID: "route-search-001",
+        coverAvailable: true,
+        name: "海坨山谷穿越",
+        region: "北京 · 延庆",
+        difficulty: "中等",
+        distance: "18.6 km",
+        estimatedDuration: "约 8 小时"
+    )
+
+    static let nameMissing = SearchRouteResultRowProjection(
+        routeID: "route-search-002",
+        coverAvailable: true,
+        name: nil,
+        region: "云南 · 香格里拉",
+        difficulty: "进阶",
+        distance: "32.0 km",
+        estimatedDuration: "约 3 天"
+    )
+
+    static let coverMissing = SearchRouteResultRowProjection(
+        routeID: "route-search-003",
+        coverAvailable: false,
+        name: "五台山逆穿",
+        region: "山西 · 忻州",
+        difficulty: "中等",
+        distance: "52.0 km",
+        estimatedDuration: "约 3 天"
+    )
+
+    static let partial = SearchRouteResultRowProjection(
+        routeID: "route-search-004",
+        coverAvailable: true,
+        name: "武功山穿越",
+        region: nil,
+        difficulty: nil,
+        distance: "24.0 km",
+        estimatedDuration: nil
+    )
+}
+
 #Preview("SearchRouteResultRow.default") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.SearchRouteResultRow(
-            projection: BusinessComponentPreviewFixtures.searchResultRowDefault,
+            projection: SearchRouteResultRowProjection.default,
             onSelect: { _ in }
         ) { RouteDeterministicImageSurface(style: .ridge) }
     }
@@ -135,7 +177,7 @@ extension RouteBusinessComponents {
 #Preview("SearchRouteResultRow.nameMissing") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.SearchRouteResultRow(
-            projection: BusinessComponentPreviewFixtures.searchResultRowNameMissing,
+            projection: SearchRouteResultRowProjection.nameMissing,
             onSelect: { _ in }
         ) { RouteDeterministicImageSurface(style: .forest) }
     }
@@ -144,7 +186,7 @@ extension RouteBusinessComponents {
 #Preview("SearchRouteResultRow.coverMissing") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.SearchRouteResultRow(
-            projection: BusinessComponentPreviewFixtures.searchResultRowCoverMissing,
+            projection: SearchRouteResultRowProjection.coverMissing,
             onSelect: { _ in }
         ) { RouteDeterministicImageSurface(style: .forest) }
     }
@@ -153,7 +195,7 @@ extension RouteBusinessComponents {
 #Preview("SearchRouteResultRow.partialFacts") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.SearchRouteResultRow(
-            projection: BusinessComponentPreviewFixtures.searchResultRowPartial,
+            projection: SearchRouteResultRowProjection.partial,
             onSelect: { _ in }
         ) { RouteDeterministicImageSurface(style: .water) }
     }

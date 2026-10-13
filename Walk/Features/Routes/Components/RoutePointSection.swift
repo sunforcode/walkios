@@ -98,10 +98,37 @@ extension RouteBusinessComponents {
 }
 
 #if DEBUG
+extension RoutePointSectionProjection {
+    static let keyPoints = RoutePointSectionProjection(
+        title: "关键点",
+        points: [
+            RoutePointRowProjection(id: "point-key-1", bookmark: "关", name: "北侧垭口", elevation: "3,860 m", type: "关键点", location: "路线第 12.4 km", description: "通过后进入暴露山脊。"),
+            RoutePointRowProjection(id: "point-camp-1", bookmark: "营", name: "林线营地", elevation: "3,260 m", type: "营地", location: "路线第 18.6 km", description: "平缓台地，靠近季节性水源。"),
+        ],
+        activePointID: "point-camp-1"
+    )
+
+    static let water = RoutePointSectionProjection(
+        title: "水源",
+        points: [
+            RoutePointRowProjection(id: "point-water-1", bookmark: "水", name: "石壁溪流", elevation: "2,940 m", type: "季节性水源", location: "路线第 21.3 km", description: "枯水季可能断流。"),
+        ]
+    )
+
+    static let disabled = RoutePointSectionProjection(
+        title: "补给点",
+        points: [
+            RoutePointRowProjection(id: "point-supply-1", bookmark: "补", name: "河谷补给站", elevation: nil, type: "补给", location: "路线终点", description: nil),
+        ],
+        activePointID: nil,
+        isDisabled: true
+    )
+}
+
 #Preview("RoutePointSection.default") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RoutePointSection(
-            projection: BusinessComponentPreviewFixtures.routePointSection,
+            projection: RoutePointSectionProjection.keyPoints,
             onFocusPoint: { _ in }
         )
     }
@@ -110,7 +137,7 @@ extension RouteBusinessComponents {
 #Preview("RoutePointSection.water") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RoutePointSection(
-            projection: BusinessComponentPreviewFixtures.routeWaterSection,
+            projection: RoutePointSectionProjection.water,
             onFocusPoint: { _ in }
         )
     }
@@ -119,7 +146,7 @@ extension RouteBusinessComponents {
 #Preview("RoutePointSection.disabled") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RoutePointSection(
-            projection: BusinessComponentPreviewFixtures.routePointSectionDisabled,
+            projection: RoutePointSectionProjection.disabled,
             onFocusPoint: { _ in }
         )
     }

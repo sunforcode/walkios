@@ -6,7 +6,7 @@ import WalkDesignSystem
 /// PAGE-ACCOUNT-MENU：账户菜单，以底部模态 Sheet（ModalBottomSheet）承载，不进入任务栈。
 /// 只承载设置主页；选择设置项时关闭菜单，由我的页任务栈推入对应设置内容页。
 struct AccountMenuView: View {
-    @ObservedObject private var viewModel: ProfileViewModel
+    private let viewModel: ProfileViewModel
     private let onClose: () -> Void
     private let onNavigate: (AppDestination) -> Void
     private let onLoggedOut: () -> Void
@@ -35,19 +35,23 @@ struct AccountMenuView: View {
                 await viewModel.loadProfile()
             }
         }
-        .onChange(of: viewModel.isLoggedIn) { isLoggedIn in
-            guard !isLoggedIn else { return }
-            onLoggedOut()
-        }
-        .onChange(of: selectedPhoto) { item in
+        .task(id: selectedPhoto) {
             // 只选择图片；取消选择不关闭菜单，也不改变头像。
-            guard let item else { return }
-            Task {
-                guard let data = try? await item.loadTransferable(type: Data.self) else {
+            guard let item = selectedPhoto else { return }
+            do {
+                let data = try await item.loadTransferable(type: Data.self)
+                guard !Task.isCancelled else { return }
+                guard let data else {
                     viewModel.reportAvatarReadFailure()
                     return
                 }
                 await viewModel.updateAvatar(data: data, contentType: "image/jpeg")
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                if let apiError = error as? APIClientError, case .transport(.cancelled) = apiError { return }
+                viewModel.reportAvatarReadFailure()
             }
         }
         .photosPicker(
@@ -90,7 +94,11 @@ struct AccountMenuView: View {
                     isLoading: viewModel.isLoggingOut,
                     fillsWidth: true,
                     action: {
-                        Task { await viewModel.logout() }
+                        Task {
+                            if await viewModel.logout() {
+                                onLoggedOut()
+                            }
+                        }
                     }
                 )
                 .padding(.top, Spacing.md)
@@ -180,12 +188,17 @@ extension AccountMenuView {
 
 #if DEBUG
 #Preview("AccountMenuView.modalSheet") {
+    let apiClient = MockAPIClient(fixtures: DefaultMockFixtures.all())
+    // 预览专用认证实例，使用独立 Keychain 服务，不读写 App 的真实凭据。
+    let authManager = AuthManager(
+        persistenceNamespace: "auth|preview",
+        keychainService: "com.walk.app.preview"
+    )
     AccountMenuView(
         viewModel: ProfileViewModel(
-            accountService: PreviewHelpers.accountService,
-            tripService: PreviewHelpers.personalTripService,
-            equipmentService: PreviewHelpers.equipmentService,
-            authSession: PreviewHelpers.authManager
+            accountService: AccountService(apiClient: apiClient, authManager: authManager),
+            tripService: PersonalTripService(apiClient: apiClient),
+            authSession: authManager
         ),
         onClose: {},
         onNavigate: { _ in },

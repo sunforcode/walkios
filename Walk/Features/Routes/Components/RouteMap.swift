@@ -280,9 +280,54 @@ private struct RouteMapRoadShape: Shape {
 }
 
 #if DEBUG
+extension RouteMapProjection {
+    static let `default` = RouteMapProjection(
+        track: RouteMapTrackProjection(positions: [
+            RouteMapPositionProjection(x: 0.12, y: 0.78),
+            RouteMapPositionProjection(x: 0.25, y: 0.64),
+            RouteMapPositionProjection(x: 0.42, y: 0.57),
+            RouteMapPositionProjection(x: 0.54, y: 0.35),
+            RouteMapPositionProjection(x: 0.72, y: 0.42),
+            RouteMapPositionProjection(x: 0.88, y: 0.18),
+        ]),
+        start: RouteMapPositionProjection(x: 0.12, y: 0.78),
+        end: RouteMapPositionProjection(x: 0.88, y: 0.18),
+        points: [
+            RouteMapPointProjection(id: "map-key", name: "北侧垭口", category: .keyPoint, position: RouteMapPositionProjection(x: 0.54, y: 0.35)),
+            RouteMapPointProjection(id: "map-camp", name: "林线营地", category: .camp, position: RouteMapPositionProjection(x: 0.36, y: 0.61)),
+            RouteMapPointProjection(id: "map-water", name: "石壁溪流", category: .water, position: RouteMapPositionProjection(x: 0.70, y: 0.43)),
+        ],
+        placeLabels: [
+            RouteMapPlaceLabelProjection(id: "place-1", title: "上木居", position: RouteMapPositionProjection(x: 0.17, y: 0.87)),
+            RouteMapPlaceLabelProjection(id: "place-2", title: "林线", position: RouteMapPositionProjection(x: 0.31, y: 0.50)),
+            RouteMapPlaceLabelProjection(id: "place-3", title: "北侧垭口", position: RouteMapPositionProjection(x: 0.57, y: 0.25)),
+            RouteMapPlaceLabelProjection(id: "place-4", title: "草科", position: RouteMapPositionProjection(x: 0.84, y: 0.10)),
+        ]
+    )
+
+    static let selected = RouteMapProjection(
+        track: RouteMapProjection.default.track,
+        start: RouteMapProjection.default.start,
+        end: RouteMapProjection.default.end,
+        points: RouteMapProjection.default.points,
+        placeLabels: RouteMapProjection.default.placeLabels,
+        activePointID: "map-camp"
+    )
+
+    static let unavailable = RouteMapProjection(
+        track: nil,
+        start: RouteMapProjection.default.start,
+        end: RouteMapProjection.default.end,
+        points: RouteMapProjection.default.points,
+        placeLabels: RouteMapProjection.default.placeLabels,
+        activePointID: nil,
+        trackUnavailableMessage: "当前没有可用主轨迹，其他可验证点位仍可查看。"
+    )
+}
+
 #Preview("RouteMap.default") {
     RouteBusinessComponents.RouteMap(
-        projection: BusinessComponentPreviewFixtures.routeMap,
+        projection: RouteMapProjection.default,
         onSelectPoint: { _ in }
     )
     .frame(width: 390, height: 700)
@@ -290,7 +335,7 @@ private struct RouteMapRoadShape: Shape {
 
 #Preview("RouteMap.selected") {
     RouteBusinessComponents.RouteMap(
-        projection: BusinessComponentPreviewFixtures.routeMapSelected,
+        projection: RouteMapProjection.selected,
         onSelectPoint: { _ in }
     )
     .frame(width: 390, height: 700)
@@ -298,7 +343,7 @@ private struct RouteMapRoadShape: Shape {
 
 #Preview("RouteMap.trackUnavailable") {
     RouteBusinessComponents.RouteMap(
-        projection: BusinessComponentPreviewFixtures.routeMapUnavailable,
+        projection: RouteMapProjection.unavailable,
         onSelectPoint: { _ in }
     )
     .frame(width: 390, height: 700)

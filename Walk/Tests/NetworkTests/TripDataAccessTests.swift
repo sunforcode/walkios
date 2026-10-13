@@ -164,10 +164,13 @@ final class TripDataAccessTests: XCTestCase {
         let targetModels = try contractFiles
             .map { try String(contentsOf: sourceRoot.appendingPathComponent($0), encoding: .utf8) }
             .joined(separator: "\n")
-        let tripEquipment = try String(
-            contentsOf: sourceRoot.appendingPathComponent("Features/Trips/TripEquipment.swift"),
-            encoding: .utf8
-        )
+        let tripEquipment = try [
+            "Features/Trips/TripEquipment.swift",
+            "Features/Trips/TripEquipmentViewModel.swift",
+            "Features/Trips/TripEquipmentState.swift",
+        ]
+            .map { try String(contentsOf: sourceRoot.appendingPathComponent($0), encoding: .utf8) }
+            .joined(separator: "\n")
 
         for forbiddenKey in [
             "expected_revision", "route_id", "unit_weight", "trip_revision",

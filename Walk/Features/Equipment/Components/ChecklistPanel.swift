@@ -155,12 +155,30 @@ struct ChecklistPanel<CandidateContent: View>: View {
 }
 
 #if DEBUG
+extension EquipmentListSummaryProjection {
+    static let `default` = EquipmentListSummaryProjection(
+        identity: "list-001",
+        name: "周末轻装清单",
+        itemCount: 2,
+        knownTotalWeightGrams: 1_680,
+        missingWeightItemCount: 0
+    )
+
+    static let unknownWeight = EquipmentListSummaryProjection(
+        identity: "list-002",
+        name: "高海拔过夜与连续降雨备用清单",
+        itemCount: 2,
+        knownTotalWeightGrams: 1_680,
+        missingWeightItemCount: 1
+    )
+}
+
 #Preview("ChecklistPanel.default") {
     BusinessComponentPreviewHost {
         ChecklistPanel<SecondaryAction>.preview(
-            summary: BusinessComponentPreviewFixtures.checklistSummary,
+            summary: EquipmentListSummaryProjection.default,
             isExpanded: false,
-            members: BusinessComponentPreviewFixtures.checklistMembers
+            members: ChecklistItemRowProjection.samples
         )
     }
 }
@@ -168,9 +186,9 @@ struct ChecklistPanel<CandidateContent: View>: View {
 #Preview("ChecklistPanel.expanded") {
     BusinessComponentPreviewHost {
         ChecklistPanel<SecondaryAction>.preview(
-            summary: BusinessComponentPreviewFixtures.checklistSummary,
+            summary: EquipmentListSummaryProjection.default,
             isExpanded: true,
-            members: BusinessComponentPreviewFixtures.checklistMembers
+            members: ChecklistItemRowProjection.samples
         )
     }
 }
@@ -178,9 +196,9 @@ struct ChecklistPanel<CandidateContent: View>: View {
 #Preview("ChecklistPanel.unknownWeight") {
     BusinessComponentPreviewHost {
         ChecklistPanel<SecondaryAction>.preview(
-            summary: BusinessComponentPreviewFixtures.checklistUnknownWeightSummary,
+            summary: EquipmentListSummaryProjection.unknownWeight,
             isExpanded: true,
-            members: BusinessComponentPreviewFixtures.checklistMembers
+            members: ChecklistItemRowProjection.samples
         )
     }
 }

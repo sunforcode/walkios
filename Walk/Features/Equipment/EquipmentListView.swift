@@ -7,108 +7,41 @@ private enum EquipmentTab: Hashable {
     case lists
 }
 
-private enum EquipmentListMutationIntent: Equatable {
-    case saveName
-    case deleteList(id: String)
-    case updateMember(listID: String)
+enum EquipmentListPresentation: Equatable {
+    case root
+    case stack
 }
 
 struct EquipmentListView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var viewModel: EquipmentListViewModel
+    @State private var viewModel: EquipmentListViewModel
     @State private var selectedTab: EquipmentTab = .equipment
     @State private var equipmentScrollAnchorID: String?
     @State private var listScrollAnchorID: String?
-    @State private var newListName = ""
-    @State private var showingCreateList = false
     @State private var expandedListID: String?
-    @State private var renamingListID: String?
-    @State private var renamingListName = ""
-    @State private var deletingList: EquipmentListOverview?
-    @State private var mutationIntent: EquipmentListMutationIntent?
-    @State private var failedListID: String?
+    @State private var isRestoringScrollAnchor = false
 
-    private let scrollCoordinateSpace = "my-equipment-content"
     private let onEditEquipment: (String?) -> Void
+    private let presentation: EquipmentListPresentation
 
     init(
         service: any EquipmentServicing,
+        presentation: EquipmentListPresentation = .stack,
         onEditEquipment: @escaping (String?) -> Void = { _ in }
     ) {
+        self.presentation = presentation
         self.onEditEquipment = onEditEquipment
-        _viewModel = StateObject(wrappedValue: EquipmentListViewModel(service: service))
+        _viewModel = State(initialValue: EquipmentListViewModel(service: service))
     }
 
     var body: some View {
-        UtilityPage(
-            title: "装备与清单",
-            description: "个人装备记录实际拥有数量和可选单件重量；清单按清单内数量汇总预计总重量。",
-            onBack: requestDismissal,
-            bottomFixed: {
-                if showsFixedActionArea {
-                    PrimaryAction(
-                        title: fixedActionTitle,
-                        isLoading: isFixedActionLoading,
-                        isDisabled: isFixedActionDisabled,
-                        fillsWidth: true,
-                        action: performFixedAction
-                    )
-                }
-            }
-        ) {
-            scrollContent
-        }
-        .overlay {
-            if let deletingList {
-                ConfirmationDialog(
-                    title: "删除“\(deletingList.name)”？",
-                    message: listDeletionMessage,
-                    confirmationTitle: "确认删除",
-                    variant: .danger,
-                    isLoading: viewModel.isMutating,
-                    onCancel: {
-                        guard !viewModel.isMutating else { return }
-                        self.deletingList = nil
-                        mutationIntent = nil
-                        viewModel.clearMutationError()
-                    },
-                    onConfirm: { deleteEquipmentList(deletingList) }
-                )
-            }
-        }
-        .interactiveDismissDisabled(isEditingListName || deletingList != nil)
-        .task { await viewModel.load() }
-        .onAppear {
-            guard viewModel.summary != nil else { return }
-            Task { await viewModel.load() }
-        }
-    }
-
-    private var scrollContent: some View {
         ScrollViewReader { scrollProxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: Spacing.lg) {
-                    AppColors.surfacePrimary.opacity(0)
-                        .frame(height: 0)
-                        .id("equipment-page-top")
-
-                    SegmentedControl(
-                        options: [
-                            SegmentedControlOption(value: EquipmentTab.equipment, title: "装备"),
-                            SegmentedControlOption(value: EquipmentTab.lists, title: "清单")
-                        ],
-                        selection: $selectedTab
-                    )
-                    .disabled(isEditingListName || viewModel.isMutating)
-
-                    tabContent
-                }
-                .frame(maxWidth: 600, alignment: .topLeading)
-                .frame(maxWidth: .infinity, alignment: .top)
-            }
-            .coordinateSpace(name: scrollCoordinateSpace)
+            page(scrollProxy: scrollProxy)
+            .allowsHitTesting(viewModel.state.deletingList == nil)
+            .accessibilityHidden(viewModel.state.deletingList != nil)
             .onPreferenceChange(EquipmentScrollAnchorPreferenceKey.self) { offsets in
-                guard let visibleID = closestVisibleAnchor(in: offsets) else { return }
+                guard !isRestoringScrollAnchor,
+                      let visibleID = closestVisibleAnchor(in: offsets) else { return }
                 if selectedTab == .equipment {
                     equipmentScrollAnchorID = visibleID
                 } else {
@@ -116,11 +49,122 @@ struct EquipmentListView: View {
                 }
             }
             .onChange(of: selectedTab) { tab in
+                isRestoringScrollAnchor = true
                 let targetID = tab == .equipment ? equipmentScrollAnchorID : listScrollAnchorID
                 DispatchQueue.main.async {
+                    guard selectedTab == tab else { return }
                     scrollProxy.scrollTo(targetID ?? "equipment-page-top", anchor: .top)
+                    isRestoringScrollAnchor = false
                 }
             }
+        }
+        .overlay {
+            if let deletingList = viewModel.state.deletingList {
+                ConfirmationDialog(
+                    title: "删除“\(deletingList.name)”？",
+                    message: viewModel.state.listDeletionMessage,
+                    confirmationTitle: "确认删除",
+                    variant: .danger,
+                    isLoading: viewModel.isMutating,
+                    onCancel: viewModel.cancelEditing,
+                    onConfirm: { deleteEquipmentList(deletingList) }
+                )
+            }
+        }
+        .interactiveDismissDisabled(isEditingListName || viewModel.state.deletingList != nil)
+        .task { await viewModel.load() }
+        .onDisappear { viewModel.invalidatePendingOperations() }
+    }
+
+    @ViewBuilder
+    private func page(scrollProxy: ScrollViewProxy) -> some View {
+        switch presentation {
+        case .root:
+            PageShell(
+                title: "装备",
+                description: "管理个人装备与常用清单",
+                background: { AppColors.pageBase }
+            ) {
+                ScrollView(showsIndicators: false) {
+                    scrollContent(scrollProxy: scrollProxy)
+                        .padding(.horizontal, Spacing.pageHorizontal)
+                        .padding(.bottom, Spacing.lg)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if showsFixedActionArea {
+                        FixedActionArea { fixedAction }
+                    }
+                }
+            }
+            .toolbar(.hidden, for: .navigationBar)
+        case .stack:
+            UtilityPage(
+                title: "装备",
+                description: "管理个人装备与常用清单",
+                onBack: requestDismissal,
+                bottomFixed: { fixedAction }
+            ) {
+                scrollContent(scrollProxy: scrollProxy)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var fixedAction: some View {
+        if showsFixedActionArea {
+            PrimaryAction(
+                title: fixedActionTitle,
+                isLoading: viewModel.state.operation == .running(.saveName),
+                isDisabled: isFixedActionDisabled,
+                fillsWidth: true,
+                action: performFixedAction
+            )
+        }
+    }
+
+    private func activateEquipmentLibrary(using scrollProxy: ScrollViewProxy) {
+        guard !isEditingListName, !viewModel.isMutating else { return }
+        equipmentScrollAnchorID = "equipment-library-top"
+        isRestoringScrollAnchor = true
+        selectedTab = .equipment
+        DispatchQueue.main.async {
+            scrollProxy.scrollTo("equipment-library-top", anchor: .top)
+            isRestoringScrollAnchor = false
+        }
+    }
+
+    private func scrollContent(scrollProxy: ScrollViewProxy) -> some View {
+        LazyVStack(alignment: .leading, spacing: Spacing.lg) {
+            AppColors.surfacePrimary.opacity(0)
+                .frame(height: 0)
+                .id("equipment-page-top")
+
+            if presentation == .root, let summary = viewModel.summary {
+                PersonalEquipmentSummaryCard(summary: summary) {
+                    activateEquipmentLibrary(using: scrollProxy)
+                }
+                .disabled(isEditingListName || viewModel.isMutating)
+            }
+
+            SegmentedControl(
+                options: [
+                    SegmentedControlOption(value: EquipmentTab.equipment, title: "装备"),
+                    SegmentedControlOption(value: EquipmentTab.lists, title: "清单")
+                ],
+                selection: Binding(
+                    get: { selectedTab },
+                    set: { tab in
+                        guard selectedTab != tab else { return }
+                        isRestoringScrollAnchor = true
+                        selectedTab = tab
+                    }
+                )
+            )
+            .disabled(isEditingListName || viewModel.isMutating)
+            .id("equipment-library-top")
+
+            tabContent
         }
     }
 
@@ -189,21 +233,21 @@ struct EquipmentListView: View {
             if isEditingListName {
                 InlineListNameEditor(
                     projection: InlineListNameEditorProjection(
-                        mode: renamingListID == nil ? .create : .rename,
-                        name: activeListName,
-                        fieldError: listNameFieldError,
-                        saveError: listNameSaveError,
-                        isLoading: mutationIntent == .saveName && viewModel.isMutating
+                        mode: viewModel.state.isRenamingList ? .rename : .create,
+                        name: viewModel.state.activeListName,
+                        fieldError: viewModel.state.listNameFieldError,
+                        saveError: viewModel.state.listNameSaveError,
+                        isLoading: viewModel.state.operation == .running(.saveName)
                     ),
-                    onChangeName: updateActiveListName,
-                    onCancel: cancelListNameEditor
+                    onChangeName: viewModel.updateListName,
+                    onCancel: viewModel.cancelEditing
                 )
             }
 
             if viewModel.equipmentLists.isEmpty {
                 EmptyStateView(
                     title: "还没有用户装备清单",
-                    message: "可以按自己的习惯创建一日、三日或五日清单。",
+                    message: "可以按自己的习惯组织常用清单。",
                     icon: "list.bullet",
                     variant: .section
                 )
@@ -221,11 +265,11 @@ struct EquipmentListView: View {
                             onToggle: { _ in
                                 setExpanded(expandedListID != list.identity, list: list)
                             },
-                            onRename: { _ in startRename(list) },
-                            onRequestDelete: { _ in requestDelete(list) },
+                            onRename: { _ in viewModel.startRenamingList(list) },
+                            onRequestDelete: { _ in viewModel.requestDeletion(list) },
                             onChangeQuantity: { memberID, quantity in
                                 Task {
-                                    _ = await updateMember(
+                                    _ = await viewModel.putMember(
                                         equipmentListID: list.identity,
                                         personalEquipmentID: memberID,
                                         quantity: quantity
@@ -233,10 +277,12 @@ struct EquipmentListView: View {
                                 }
                             },
                             onRemoveMember: { memberID in
-                                removeMember(
-                                    equipmentListID: list.identity,
-                                    personalEquipmentID: memberID
-                                )
+                                Task {
+                                    _ = await viewModel.removeMember(
+                                        equipmentListID: list.identity,
+                                        personalEquipmentID: memberID
+                                    )
+                                }
                             }
                         ) {
                             checklistCandidateContent(for: list)
@@ -244,8 +290,8 @@ struct EquipmentListView: View {
                         .id("list-\(list.identity)")
                         .background(scrollAnchorReader(id: "list-\(list.identity)"))
 
-                        if failedListID == list.identity,
-                           let errorMessage = viewModel.errorMessage {
+                        if viewModel.state.failedListID == list.identity,
+                           let errorMessage = viewModel.state.errorMessage {
                             ErrorView(message: errorMessage, title: "清单更新失败", variant: .form)
                         }
                     }
@@ -254,14 +300,10 @@ struct EquipmentListView: View {
         }
     }
 
-    private var isEditingListName: Bool {
-        showingCreateList || renamingListID != nil
-    }
+    private var isEditingListName: Bool { viewModel.state.isEditingListName }
 
     private var showsFixedActionArea: Bool {
-        let hasNoLoadedContent = viewModel.items.isEmpty && viewModel.equipmentLists.isEmpty
-        return !(viewModel.isLoading && hasNoLoadedContent)
-            && !(viewModel.loadErrorMessage != nil && hasNoLoadedContent)
+        viewModel.state.showsPrimaryAction(isEquipmentSection: selectedTab == .equipment)
     }
 
     private var fixedActionTitle: String {
@@ -269,70 +311,26 @@ struct EquipmentListView: View {
         return selectedTab == .equipment ? "新增个人装备" : "创建装备清单"
     }
 
-    private var isFixedActionLoading: Bool {
-        isEditingListName && mutationIntent == .saveName && viewModel.isMutating
-    }
-
     private var isFixedActionDisabled: Bool {
-        if isEditingListName {
-            return activeListName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                || viewModel.isMutating
-        }
-        return viewModel.isMutating
-    }
-
-    private var activeListName: String {
-        renamingListID == nil ? newListName : renamingListName
+        isEditingListName ? !viewModel.state.canSaveListName : viewModel.isMutating
     }
 
     private func performFixedAction() {
         if isEditingListName {
-            saveListName()
-            return
-        }
-
-        switch selectedTab {
-        case .equipment:
+            Task { _ = await viewModel.saveListName() }
+        } else if selectedTab == .equipment {
             onEditEquipment(nil)
-        case .lists:
-            showingCreateList = true
-            newListName = ""
-            mutationIntent = nil
-            failedListID = nil
-            viewModel.clearMutationError()
+        } else {
+            viewModel.startCreatingList()
         }
     }
 
     private func requestDismissal() {
+        guard !viewModel.isMutating else { return }
         if isEditingListName {
-            cancelListNameEditor()
+            viewModel.cancelEditing()
         } else {
             dismiss()
-        }
-    }
-
-    private var listNameFieldError: String? {
-        guard !activeListName.isEmpty,
-              activeListName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
-        }
-        return "请输入清单名称"
-    }
-
-    private var listNameSaveError: String? {
-        guard mutationIntent == .saveName else { return nil }
-        return viewModel.errorMessage
-    }
-
-    private func updateActiveListName(_ value: String) {
-        if renamingListID == nil {
-            newListName = value
-        } else {
-            renamingListName = value
-        }
-        if !viewModel.isMutating {
-            mutationIntent = nil
-            viewModel.clearMutationError()
         }
     }
 
@@ -348,9 +346,7 @@ struct EquipmentListView: View {
 
     private func checklistMembers(for list: EquipmentListOverview) -> [ChecklistItemRowProjection] {
         guard let detail = viewModel.selectedEquipmentList,
-              detail.identity == list.identity else {
-            return []
-        }
+              detail.identity == list.identity else { return [] }
         return detail.members.map { member in
             ChecklistItemRowProjection(
                 identity: member.identity,
@@ -370,7 +366,7 @@ struct EquipmentListView: View {
            viewModel.isLoadingEquipmentList {
             LoadingView(message: "正在加载清单", variant: .section)
         } else if viewModel.selectedEquipmentListID == list.identity,
-                  let error = viewModel.errorMessage,
+                  let error = viewModel.state.listLoadErrorMessage,
                   viewModel.selectedEquipmentList == nil {
             ErrorView(message: error, title: "清单加载失败", variant: .section) {
                 Task { await viewModel.loadEquipmentList(id: list.identity) }
@@ -391,13 +387,6 @@ struct EquipmentListView: View {
         }
     }
 
-    private func requestDelete(_ list: EquipmentListOverview) {
-        viewModel.clearMutationError()
-        mutationIntent = nil
-        failedListID = nil
-        deletingList = list
-    }
-
     private func addMemberEntry(_ detail: EquipmentListDetail) -> some View {
         let memberIDs = Set(detail.members.map(\.identity))
         let candidates = viewModel.items.filter { !memberIDs.contains($0.identity) }
@@ -411,7 +400,7 @@ struct EquipmentListView: View {
                     ForEach(candidates) { item in
                         Button(item.name) {
                             Task {
-                                _ = await updateMember(
+                                _ = await viewModel.putMember(
                                     equipmentListID: detail.identity,
                                     personalEquipmentID: item.identity,
                                     quantity: 1
@@ -434,125 +423,33 @@ struct EquipmentListView: View {
         GeometryReader { proxy in
             AppColors.surfacePrimary.opacity(0).preference(
                 key: EquipmentScrollAnchorPreferenceKey.self,
-                value: [id: proxy.frame(in: .named(scrollCoordinateSpace)).minY]
+                // 由当前承载的唯一纵向 ScrollView 提供视口坐标，而非随内容移动的坐标。
+                value: [id: proxy.frame(in: .scrollView(axis: .vertical)).minY]
             )
         }
     }
 
     private func closestVisibleAnchor(in offsets: [String: CGFloat]) -> String? {
-        let visibleAnchors = offsets.filter { $0.value >= 0 }
+        let prefix = selectedTab == .equipment ? "equipment-" : "list-"
+        let visibleAnchors = offsets.filter { $0.key.hasPrefix(prefix) && $0.value >= 0 }
         return visibleAnchors.min(by: { $0.value < $1.value })?.key
     }
 
     private func setExpanded(_ isExpanded: Bool, list: EquipmentListOverview) {
-        guard !isEditingListName else { return }
-        failedListID = nil
-        mutationIntent = nil
+        guard !isEditingListName, !viewModel.isMutating else { return }
         if isExpanded {
             expandedListID = list.identity
-            Task {
-                await viewModel.loadEquipmentList(id: list.identity)
-                if viewModel.selectedEquipmentList == nil {
-                    mutationIntent = nil
-                }
-            }
+            Task { await viewModel.loadEquipmentList(id: list.identity) }
         } else if expandedListID == list.identity {
             expandedListID = nil
             viewModel.clearSelectedEquipmentList()
         }
     }
 
-    private func startRename(_ list: EquipmentListOverview) {
-        showingCreateList = false
-        newListName = ""
-        renamingListID = list.identity
-        renamingListName = list.name
-        mutationIntent = nil
-        failedListID = nil
-        viewModel.clearMutationError()
-    }
-
-    private func cancelListNameEditor() {
-        showingCreateList = false
-        newListName = ""
-        renamingListID = nil
-        renamingListName = ""
-        mutationIntent = nil
-        failedListID = nil
-        viewModel.clearMutationError()
-    }
-
-    private func saveListName() {
-        let name = activeListName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, !viewModel.isMutating else { return }
-        mutationIntent = .saveName
-        Task {
-            if let renamingListID {
-                await viewModel.renameEquipmentList(id: renamingListID, name: name)
-            } else {
-                await viewModel.createEquipmentList(name: name)
-            }
-            if viewModel.lastMutationSucceeded {
-                cancelListNameEditor()
-            }
-        }
-    }
-
-    private func updateMember(
-        equipmentListID: String,
-        personalEquipmentID: String,
-        quantity: Int
-    ) async -> Bool {
-        guard !viewModel.isMutating else { return false }
-        mutationIntent = .updateMember(listID: equipmentListID)
-        failedListID = nil
-        await viewModel.putMember(
-            equipmentListID: equipmentListID,
-            personalEquipmentID: personalEquipmentID,
-            quantity: quantity
-        )
-        if !viewModel.lastMutationSucceeded {
-            failedListID = equipmentListID
-        }
-        return viewModel.lastMutationSucceeded
-    }
-
-    private func removeMember(equipmentListID: String, personalEquipmentID: String) {
-        guard !viewModel.isMutating else { return }
-        mutationIntent = .updateMember(listID: equipmentListID)
-        failedListID = nil
-        Task {
-            await viewModel.removeMember(
-                equipmentListID: equipmentListID,
-                personalEquipmentID: personalEquipmentID
-            )
-            if !viewModel.lastMutationSucceeded {
-                failedListID = equipmentListID
-            }
-        }
-    }
-
-    private var listDeletionMessage: String {
-        let impact = "只会删除这份清单和成员关系，不会删除任何个人装备。"
-        if mutationIntent == .deleteList(id: deletingList?.identity ?? ""),
-           let errorMessage = viewModel.errorMessage {
-            return "\(impact) 删除失败：\(errorMessage)"
-        }
-        return impact
-    }
-
     private func deleteEquipmentList(_ list: EquipmentListOverview) {
-        guard !viewModel.isMutating else { return }
-        mutationIntent = .deleteList(id: list.identity)
         Task {
-            await viewModel.deleteEquipmentList(id: list.identity)
-            if viewModel.lastMutationSucceeded {
-                deletingList = nil
-                mutationIntent = nil
-                failedListID = nil
-                if expandedListID == list.identity {
-                    expandedListID = nil
-                }
+            if await viewModel.deleteEquipmentList(id: list.identity), expandedListID == list.identity {
+                expandedListID = nil
             }
         }
     }

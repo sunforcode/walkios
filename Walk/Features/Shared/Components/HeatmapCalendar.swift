@@ -70,10 +70,48 @@ extension SharedBusinessComponents {
 }
 
 #if DEBUG
+extension TripHeatmapDayProjection {
+    static let sampleBusinessDates: [String] = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let start = calendar.date(
+            from: DateComponents(
+                calendar: calendar,
+                timeZone: calendar.timeZone,
+                year: 2025,
+                month: 9,
+                day: 10
+            )
+        )!
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return (0..<365).map { offset in
+            formatter.string(from: calendar.date(byAdding: .day, value: offset, to: start)!)
+        }
+    }()
+
+    static let sampleYear: [TripHeatmapDayProjection] = TripHeatmapDayProjection.sampleBusinessDates.enumerated().map { index, date in
+        let level: TripHeatmapLevel
+        if index.isMultiple(of: 47) {
+            level = TripHeatmapLevel(rawValue: index % 3 + 1) ?? .low
+        } else {
+            level = .empty
+        }
+        return TripHeatmapDayProjection(businessDate: date, level: level)
+    }
+
+    static let emptyYear = TripHeatmapDayProjection.sampleBusinessDates.map {
+        TripHeatmapDayProjection(businessDate: $0, level: .empty)
+    }
+}
+
 #Preview("HeatmapCalendar.default") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.HeatmapCalendar(
-            days: BusinessComponentPreviewFixtures.heatmapDefault
+            days: TripHeatmapDayProjection.sampleYear
         )
     }
 }
@@ -81,7 +119,7 @@ extension SharedBusinessComponents {
 #Preview("HeatmapCalendar.empty") {
     BusinessComponentPreviewHost {
         SharedBusinessComponents.HeatmapCalendar(
-            days: BusinessComponentPreviewFixtures.heatmapEmpty
+            days: TripHeatmapDayProjection.emptyYear
         )
     }
 }

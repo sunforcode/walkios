@@ -83,26 +83,52 @@ struct WeatherSummary: View {
 }
 
 #if DEBUG
+extension WeatherSummaryModel {
+    static let available = WeatherSummaryModel(
+        conclusion: "16°·多云",
+        impact: "山脊4级风",
+        state: .available
+    )
+
+    static let omitted = WeatherSummaryModel(
+        conclusion: "本次未提供天气摘要",
+        impact: "行程其他内容仍可查看",
+        state: .unavailable
+    )
+
+    static let stale = WeatherSummaryModel(
+        conclusion: "天气信息可能已过期",
+        impact: "请在出发前核对最新天气",
+        state: .stale
+    )
+
+    static let longContent = WeatherSummaryModel(
+        conclusion: "午后可能出现持续降雨并伴随明显降温",
+        impact: "山脊风力增强，需预留更长通过时间并持续核对天气变化",
+        state: .available
+    )
+}
+
 #Preview("default") {
-    WeatherSummary(model: HomePreviewFixtures.weatherAvailable)
+    WeatherSummary(model: WeatherSummaryModel.available)
         .padding()
         .background(AppColors.pageBase)
 }
 
 #Preview("omitted") {
-    WeatherSummary(model: HomePreviewFixtures.weatherOmitted)
+    WeatherSummary(model: WeatherSummaryModel.omitted)
         .padding()
         .background(AppColors.pageBase)
 }
 
 #Preview("stale") {
-    WeatherSummary(model: HomePreviewFixtures.weatherStale)
+    WeatherSummary(model: WeatherSummaryModel.stale)
         .padding()
         .background(AppColors.pageBase)
 }
 
 #Preview("longContent") {
-    WeatherSummary(model: HomePreviewFixtures.weatherLongContent)
+    WeatherSummary(model: WeatherSummaryModel.longContent)
         .padding()
         .frame(width: 320)
         .background(AppColors.pageBase)

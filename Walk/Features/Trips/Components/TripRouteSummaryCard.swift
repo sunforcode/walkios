@@ -150,10 +150,55 @@ struct FrozenElevationChartShape: Shape {
 }
 
 #if DEBUG
+extension TripRouteSummaryProjection {
+    static let `default` = TripRouteSummaryProjection(
+        routeName: "贡嘎西南坡环线",
+        versionLabel: "2026 夏季版",
+        routeOrientation: "顺时针环绕贡嘎西坡，自老榆林经上子梅村翻越日乌且垭口至草科结束。",
+        elevationSamples: [
+            FrozenRouteElevationSample(
+                distance: RouteDistance(meters: 0),
+                elevation: RouteElevation(meters: 3_800)
+            ),
+            FrozenRouteElevationSample(
+                distance: RouteDistance(meters: 15_000),
+                elevation: RouteElevation(meters: 4_500)
+            ),
+            FrozenRouteElevationSample(
+                distance: RouteDistance(meters: 32_000),
+                elevation: RouteElevation(meters: 4_980)
+            ),
+            FrozenRouteElevationSample(
+                distance: RouteDistance(meters: 55_000),
+                elevation: RouteElevation(meters: 3_300)
+            ),
+        ]
+    )
+
+    static let partial = TripRouteSummaryProjection(
+        routeName: "河谷森林线",
+        versionLabel: nil,
+        routeOrientation: nil,
+        elevationSamples: nil
+    )
+
+    static let long = TripRouteSummaryProjection(
+        routeName: "四川省甘孜藏族自治州高海拔连续垭口环形路线",
+        versionLabel: "2026 夏季高海拔连续垭口修正版",
+        routeOrientation: "顺时针环绕，连续翻越日乌且垭口、莫溪沟垭口与玉龙西垭口，途中沿河谷与林线交替行进，长距离缓升陡降交替。",
+        elevationSamples: (0...12).map { index in
+            FrozenRouteElevationSample(
+                distance: RouteDistance(meters: Double(index) * 12_500),
+                elevation: RouteElevation(meters: 3_200 + Double(index % 5) * 380)
+            )
+        }
+    )
+}
+
 #Preview("TripRouteSummaryCard.default") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripRouteSummaryCard(
-            projection: BusinessComponentPreviewFixtures.tripRouteEntryDefault,
+            projection: TripRouteSummaryProjection.default,
             onActivate: {}
         )
     }
@@ -162,7 +207,7 @@ struct FrozenElevationChartShape: Shape {
 #Preview("TripRouteSummaryCard.partial") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripRouteSummaryCard(
-            projection: BusinessComponentPreviewFixtures.tripRouteEntryPartial,
+            projection: TripRouteSummaryProjection.partial,
             onActivate: {}
         )
     }
@@ -171,7 +216,7 @@ struct FrozenElevationChartShape: Shape {
 #Preview("TripRouteSummaryCard.longContent") {
     BusinessComponentPreviewHost {
         TripBusinessComponents.TripRouteSummaryCard(
-            projection: BusinessComponentPreviewFixtures.tripRouteEntryLong,
+            projection: TripRouteSummaryProjection.long,
             onActivate: {}
         )
     }

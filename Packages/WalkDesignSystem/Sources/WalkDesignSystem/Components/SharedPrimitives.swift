@@ -229,7 +229,7 @@ public struct PageTitleBlock<Trailing: View>: View {
                     .foregroundStyle(AppColors.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                     // 标题行自带 44pt 触控目标高度：trailing 控件不反向决定页头高度，
-                    // 三个一级根 Page（首页/路线/我的）的标题与副标题起始位置保持一致。
+                    // 四个一级根 Page 的标题与副标题起始位置保持一致。
                     .frame(minHeight: 44, alignment: .leading)
                     .accessibilityAddTraits(.isHeader)
 
@@ -277,7 +277,7 @@ public struct UtilityPageContainer<Background: View, Content: View>: View {
     }
 }
 
-/// 首页 / 路线 / 我的 统一页面骨架：背景固定 + 标题在流内 + 内容自然滚动。
+/// 一级根 Page 统一页面骨架：背景固定 + 标题在流内 + 内容自然滚动。
 /// 背景经 `.background` 垫底，不参与布局：内容始终在安全区内排布，
 /// 背景自身再延伸出安全区；自然尺寸不受控的背景（如位图）不会撑爆容器。
 /// `PageTitleBlock` 在滚动内容顶部左下，跟随内容一起滚动；
@@ -306,21 +306,23 @@ public struct PageShell<Background: View, Content: View, TitleTrailing: View>: V
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            PageTitleBlock(title: title, description: description, trailing: { titleTrailing })
-                .padding(.top, pinnedSafeAreaInsets.top)
-                .padding(.horizontal, Spacing.pageHorizontal)
-                .padding(.bottom, Spacing.lg)
+        // 外层保留系统安全区，取得 Tab 容器实际要求的底部避让。
+        // UIWindow 的 bottom 只含屏幕安全区，不包含系统 Tab 栏高度。
+        GeometryReader { proxy in
+            VStack(alignment: .leading, spacing: 0) {
+                PageTitleBlock(title: title, description: description, trailing: { titleTrailing })
+                    .padding(.top, pinnedSafeAreaInsets.top)
+                    .padding(.horizontal, Spacing.pageHorizontal)
+                    .padding(.bottom, Spacing.lg)
 
-            content
+                content
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.bottom, max(pinnedSafeAreaInsets.bottom, proxy.safeAreaInsets.bottom))
+            // 顶部仍使用固定窗口 inset，避免 push/pop 导航栏造成的安全区尖峰；
+            // 底部跟随当前系统容器，让固定操作区和内容共同避开 Tab 栏。
+            .ignoresSafeArea()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.bottom, pinnedSafeAreaInsets.bottom)
-        // 布局不再消费动态安全区：push/pop 转场期间系统会临时插回导航栏高度，
-        // 顶部 inset 尖峰（实测 62→168→116）会把页头与沉底内容顶跳。根页面的
-        // 窗口安全区在运行期恒定（竖屏 iPhone），固定为常量后布局对转场完全免疫；
-        // 背景仍通过 .background 垫底并延伸出屏幕。
-        .ignoresSafeArea()
         .background {
             background
                 .ignoresSafeArea()
@@ -337,7 +339,7 @@ public struct PageShell<Background: View, Content: View, TitleTrailing: View>: V
         }
     }
 
-    /// 首次布局时的窗口安全区。只取窗口级 inset（状态栏/tab 栏），键盘等
+    /// 首次布局时的窗口安全区。只取窗口级 inset（状态栏/主屏幕指示器），键盘等
     /// SwiftUI 动态 inset 不在此列，不会影响根页面布局。
     /// 实现共享于 `PinnedWindowSafeAreaInsets`。
     private static var windowSafeAreaInsets: EdgeInsets { PinnedWindowSafeAreaInsets.current }
@@ -1278,44 +1280,63 @@ public enum NoticeTone {
     }
 }
 
+public enum NoticePresentation {
+    case standard
+    case inline
+}
+
 public struct NoticeView: View {
      public let message: String
      public var title: String? = nil
      public var icon: String = "info.circle"
      public var tone: NoticeTone = .info
      public var variant: StatePresentationVariant = .section
+     public var presentation: NoticePresentation = .standard
 
      public var body: some View {
         statusContainer {
-            HStack(alignment: .top, spacing: Spacing.sm) {
-                Image(systemName: icon)
-                    .font(.ornament(13, weight: .semibold))
-                    .foregroundStyle(tone.foregroundColor)
-                    .frame(width: 22, height: 22)
-                    .background(AppColors.surfaceSubtle, in: Circle())
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    if let title {
-                        Text(title)
-                            .font(.listTitle)
-                            .foregroundStyle(tone == .info || tone == .readonly ? AppColors.textPrimary : tone.foregroundColor)
-                            .fixedSize(horizontal: false, vertical: true)
+            if presentation == .inline {
+                noticeContent
+                    .accessibilityElement(children: .combine)
+            } else {
+                noticeContent
+                    .padding(Spacing.md)
+                    .background(tone.backgroundColor, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                            .stroke(tone.borderColor, lineWidth: 1)
                     }
-                    Text(message)
-                        .font(.appCaption)
-                        .foregroundStyle(AppColors.textSecondary)
+                    .accessibilityElement(children: .combine)
+            }
+        }
+    }
+
+    private var noticeContent: some View {
+        HStack(alignment: .top, spacing: Spacing.sm) {
+            Image(systemName: icon)
+                .font(.ornament(13, weight: .semibold))
+                .foregroundStyle(tone.foregroundColor)
+                .frame(width: 22, height: 22)
+                .background {
+                    if presentation == .standard {
+                        Circle().fill(AppColors.surfaceSubtle)
+                    }
+                }
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                if let title {
+                    Text(title)
+                        .font(.listTitle)
+                        .foregroundStyle(tone == .info || tone == .readonly ? AppColors.textPrimary : tone.foregroundColor)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(message)
+                    .font(.appCaption)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(Spacing.md)
-            .background(tone.backgroundColor, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-                    .stroke(tone.borderColor, lineWidth: 1)
-            }
-            .accessibilityElement(children: .combine)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -1339,15 +1360,32 @@ public struct NoticeView: View {
         title: String? = nil,
         icon: String = "info.circle",
         tone: NoticeTone = .info,
-        variant: StatePresentationVariant = .section
+        variant: StatePresentationVariant = .section,
+        presentation: NoticePresentation = .standard
     ) {
         self.message = message
         self.title = title
         self.icon = icon
         self.tone = tone
         self.variant = variant
+        self.presentation = presentation
     }
 }
+
+#if DEBUG
+#Preview("Notice.inline") {
+    NoticeView(
+        message: ComponentPreviewFixtures.longSupportingText,
+        title: "出发前核验",
+        icon: "exclamationmark.triangle",
+        tone: .warning,
+        presentation: .inline
+    )
+    .padding(Spacing.lg)
+    .frame(width: 320)
+    .background(AppColors.pageBase)
+}
+#endif
 
 public enum UnavailableStateVariant {
     case inline
@@ -1457,38 +1495,104 @@ public typealias UnavailableState = UnavailableStateView
 
 // MARK: - Timeline and weather
 
+public enum TimelinePresentation {
+    case standard
+    case compact
+}
+
+/// Timeline.compact 的两层内容槽位，不负责业务摘要生成或节点排序。
+public struct TimelineSummaryContent: View {
+    public let title: String
+    public let subtitle: String?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    public init(title: String, subtitle: String? = nil) {
+        self.title = title
+        let trimmed = subtitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.subtitle = trimmed?.isEmpty == false ? trimmed : nil
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text(title)
+                .font(dynamicTypeSize.isAccessibilitySize ? .headline : .listTitle)
+                .foregroundStyle(AppColors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("timeline-item-title")
+            if let subtitle {
+                Text(subtitle)
+                    .font(dynamicTypeSize.isAccessibilitySize ? .caption : .appCaption)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("timeline-item-subtitle")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 public struct Timeline<Data: RandomAccessCollection, ItemContent: View>: View where Data.Element: Identifiable {
      public let items: Data
      public let time: (Data.Element) -> String?
+     public let presentation: TimelinePresentation
+     public let timeColumnWidth: CGFloat
+     public let sectionLabel: (Data.Element) -> String?
      public let content: (Data.Element) -> ItemContent
 
      public init(
         _ items: Data,
         time: @escaping (Data.Element) -> String,
+        presentation: TimelinePresentation = .standard,
+        timeColumnWidth: CGFloat = 52,
+        sectionLabel: @escaping (Data.Element) -> String? = { _ in nil },
         @ViewBuilder content: @escaping (Data.Element) -> ItemContent
     ) {
         self.items = items
         self.time = { time($0) }
+        self.presentation = presentation
+        self.timeColumnWidth = timeColumnWidth
+        self.sectionLabel = sectionLabel
         self.content = content
     }
 
      public init(
         _ items: Data,
         optionalTime: @escaping (Data.Element) -> String?,
+        presentation: TimelinePresentation = .standard,
+        timeColumnWidth: CGFloat = 52,
+        sectionLabel: @escaping (Data.Element) -> String? = { _ in nil },
         @ViewBuilder content: @escaping (Data.Element) -> ItemContent
     ) {
         self.items = items
         self.time = optionalTime
+        self.presentation = presentation
+        self.timeColumnWidth = timeColumnWidth
+        self.sectionLabel = sectionLabel
         self.content = content
     }
 
      public var body: some View {
         let lastID = items.last?.id
-        VStack(alignment: .leading, spacing: Spacing.md) {
+        VStack(alignment: .leading, spacing: presentation == .compact ? Spacing.sm : Spacing.md) {
             ForEach(items) { item in
-                TimelineItem(time: time(item), isLast: item.id == lastID) {
-                    content(item)
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    if let label = sectionLabel(item), !label.isEmpty {
+                        Text(label)
+                            .font(.micro)
+                            .foregroundStyle(AppColors.textWeak)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    TimelineItem(
+                        time: time(item),
+                        isLast: item.id == lastID,
+                        presentation: presentation,
+                        timeColumnWidth: timeColumnWidth
+                    ) {
+                        content(item)
+                    }
                 }
+                    .accessibilityElement(children: .combine)
             }
         }
     }
@@ -1497,37 +1601,41 @@ public struct Timeline<Data: RandomAccessCollection, ItemContent: View>: View wh
 public struct TimelineItem<Content: View>: View {
      public let time: String?
      public var isLast = false
+     public let presentation: TimelinePresentation
+     public let timeColumnWidth: CGFloat
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     private let content: Content
 
-     public init(time: String?, isLast: Bool = false, @ViewBuilder content: () -> Content) {
+     public init(
+        time: String?,
+        isLast: Bool = false,
+        presentation: TimelinePresentation = .standard,
+        timeColumnWidth: CGFloat = 52,
+        @ViewBuilder content: () -> Content
+     ) {
         self.time = time
         self.isLast = isLast
+        self.presentation = presentation
+        self.timeColumnWidth = timeColumnWidth
         self.content = content()
     }
 
      public var body: some View {
-        HStack(alignment: .top, spacing: Spacing.md) {
-            if let time, !time.isEmpty {
-                Text(time)
-                    .font(.timelineTime)
-                    .monospacedDigit()
-                    .foregroundStyle(AppColors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(minWidth: 52, alignment: .leading)
-            }
+        HStack(alignment: .top, spacing: presentation == .compact ? Spacing.sm : Spacing.md) {
+            timeLabel
 
             VStack(spacing: 0) {
                 Circle()
-                    .fill(AppColors.interactionPrimary)
-                    .frame(width: 8, height: 8)
+                    .fill(presentation == .compact ? AppColors.interactionPrimary.opacity(0.50) : AppColors.interactionPrimary)
+                    .frame(width: nodeSize, height: nodeSize)
                 if !isLast {
                     Rectangle()
-                        .fill(AppColors.borderPrimary)
+                        .fill(presentation == .compact ? AppColors.borderSubtle : AppColors.borderPrimary)
                         .frame(width: 1)
                         .frame(maxHeight: .infinity)
                 }
             }
-            .frame(width: 8)
+            .frame(width: nodeSize)
             .accessibilityHidden(true)
 
             content
@@ -1536,10 +1644,114 @@ public struct TimelineItem<Content: View>: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(minHeight: 44, alignment: .top)
+        .fixedSize(horizontal: false, vertical: presentation == .compact)
+        .frame(minHeight: presentation == .compact ? 36 : 44, alignment: .top)
         .accessibilityElement(children: .combine)
     }
+
+    private var nodeSize: CGFloat { presentation == .compact ? 4 : 8 }
+
+    @ViewBuilder
+    private var timeLabel: some View {
+        if presentation == .compact {
+            if timeColumnWidth > 0 || time?.isEmpty == false {
+                if dynamicTypeSize.isAccessibilitySize {
+                    Text(time ?? "")
+                        .font(.timelineTime)
+                        .monospacedDigit()
+                        .foregroundStyle(AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(minWidth: max(timeColumnWidth, 0), alignment: .leading)
+                } else {
+                    Text(time ?? "")
+                        .font(.timelineTime)
+                        .monospacedDigit()
+                        .foregroundStyle(AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(width: max(timeColumnWidth, 0), alignment: .leading)
+                }
+            }
+        } else if let time, !time.isEmpty {
+            Text(time)
+                .font(.timelineTime)
+                .monospacedDigit()
+                .foregroundStyle(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minWidth: 52, alignment: .leading)
+        }
+    }
 }
+
+#if DEBUG
+public extension TimelinePreviewItem {
+    static let compactDays: [TimelinePreviewItem] = [
+        TimelinePreviewItem(id: "aug-30", time: "30", title: "抵达进山口", details: ["乘车抵达后核对进山登记。"], subtitle: "出发城市 → 进山口"),
+        TimelinePreviewItem(id: "aug-31", time: "31", title: "沿河谷上行", details: ["穿过林线，前往高山营地。"], subtitle: "进山口 → 高山营地"),
+        TimelinePreviewItem(id: "sep-1", time: "1", title: "翻越垭口", details: ["尽早通过暴露路段，沿山谷下撤。"], subtitle: "高山营地 → 终点"),
+    ]
+
+    static let titleOnly = [TimelinePreviewItem(id: "start", time: nil, title: "起点", details: [])]
+    static let withoutTime = [
+        TimelinePreviewItem(id: "start", time: nil, title: "进山口", details: []),
+        TimelinePreviewItem(id: "pass", time: nil, title: "一号垭口", details: [], subtitle: "海拔 4700 m · 参考"),
+        TimelinePreviewItem(id: "end", time: nil, title: "湖畔营地", details: [], subtitle: "当日终点"),
+    ]
+    static let longTitle = [
+        TimelinePreviewItem(id: "long", time: nil, title: "需要完整显示的高山垭口与营地连接点名称", details: [], subtitle: "参考资料 · 待核验"),
+    ]
+    static let qualified = [
+        TimelinePreviewItem(id: "pass", time: nil, title: "一号垭口", details: [], subtitle: "6 km处 · 待核验"),
+        TimelinePreviewItem(id: "alternative", time: nil, title: "湖畔营地 · 备选", details: [], subtitle: "营地资料待核验"),
+    ]
+
+    static func compactSectionLabel(for item: TimelinePreviewItem) -> String? {
+        switch item.id {
+        case "aug-30": "8月"
+        case "sep-1": "9月"
+        default: nil
+        }
+    }
+}
+
+#Preview("Timeline.compact") {
+    Timeline(
+        Array(TimelinePreviewItem.compactDays.prefix(2)),
+        optionalTime: { $0.time },
+        presentation: .compact,
+        timeColumnWidth: 28,
+        sectionLabel: TimelinePreviewItem.compactSectionLabel
+    ) { item in
+        TimelineSummaryContent(title: item.title, subtitle: item.subtitle)
+    }
+    .padding(Spacing.lg)
+    .frame(width: 320)
+    .background(AppColors.pageBase)
+}
+
+#Preview("Timeline.compactCrossMonth") {
+    Timeline(
+        TimelinePreviewItem.compactDays,
+        optionalTime: { $0.time },
+        presentation: .compact,
+        timeColumnWidth: 28,
+        sectionLabel: TimelinePreviewItem.compactSectionLabel
+    ) { item in
+        TimelineSummaryContent(title: item.title, subtitle: item.subtitle)
+    }
+    .padding(Spacing.lg)
+    .frame(width: 320)
+    .background(AppColors.pageBase)
+}
+
+#Preview("Timeline.compactTime") {
+    Timeline(ComponentPreviewFixtures.timelineItems, optionalTime: { $0.time }, presentation: .compact) { item in
+        TimelineSummaryContent(title: item.title, subtitle: item.subtitle)
+    }
+    .padding(Spacing.lg)
+    .frame(width: 320)
+    .background(AppColors.pageBase)
+}
+#endif
 
 public struct SourceNote: View {
      public var source: String? = nil

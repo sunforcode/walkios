@@ -7,9 +7,7 @@ import WalkData
 @MainActor
 final class TripDetailPresentationTests: XCTestCase {
     func testWeatherEntryIsPresentedWhenWeatherResultsAreAvailable() throws {
-        let fixture = try BaselineFixtureProvider.tripDetailFixture(
-            for: .pageTripDetailDefaultTop
-        )
+        let fixture = TripDetailTestFixture.make()
 
         // 页面只装配 detail + days；天气摘要从冻结自然日派生。
         let presentation = TripDetailPresentation(
@@ -25,10 +23,8 @@ final class TripDetailPresentationTests: XCTestCase {
         XCTAssertEqual(weatherProjection.samples.count, fixture.days.days.count)
     }
 
-    func testWeatherEntryOmittedOnlyWhenNoDayCarriesASample() throws {
-        let fixture = try BaselineFixtureProvider.tripDetailFixture(
-            for: .pageTripDetailWeatherUnavailable
-        )
+    func testWeatherEntryOmittedOnlyWhenNoDayCarriesASample() {
+        let fixture = TripDetailTestFixture.make(weatherUnavailable: true)
 
         let presentation = TripDetailPresentation(
             detail: fixture.detail,
@@ -47,5 +43,523 @@ final class TripDetailPresentationTests: XCTestCase {
         } else {
             XCTAssertNotNil(presentation.weatherSummaryProjection)
         }
+    }
+
+    func testTripDetailFixtureUsesFrozenYunlingInputs() {
+        let fixture = TripDetailTestFixture.make()
+
+        XCTAssertEqual(fixture.detail.trip.identity, TripDetailTestFixture.tripID)
+        XCTAssertEqual(fixture.detail.trip.name, "云岭环线 · 9月12日")
+        XCTAssertEqual(fixture.detail.trip.departureCity, "上海")
+        XCTAssertEqual(fixture.detail.trip.startDate, LocalDate(year: 2026, month: 9, day: 12))
+        XCTAssertEqual(fixture.detail.trip.endDate, LocalDate(year: 2026, month: 9, day: 15))
+        XCTAssertEqual(fixture.detail.trip.totalDayCount, 4)
+        XCTAssertEqual(fixture.detail.trip.hikingDayCount, 2)
+        XCTAssertEqual(fixture.days.days.map(\.dayNumber), [1, 2, 3, 4])
+        XCTAssertEqual(fixture.weather.days.count, 4)
+        XCTAssertEqual(fixture.detail.trip.frozenRouteBasis.distance?.meters, 12_100)
+        XCTAssertEqual(fixture.detail.trip.frozenRouteBasis.ascent?.meters, 600)
+        XCTAssertEqual(fixture.detail.trip.frozenRouteBasis.versionLabel, "2026.08")
+        XCTAssertEqual(fixture.versionStatus.currentPublicVersion?.versionLabel, "2026.09")
+    }
+
+    func testTripDetailStatusScenariosOnlyChangeStatus() {
+        let statuses: [PersonalTripStatus] = [.inProgress, .completed, .cancelled]
+
+        for status in statuses {
+            let fixture = TripDetailTestFixture.make(status: status)
+            XCTAssertEqual(fixture.detail.trip.status, status)
+            XCTAssertEqual(fixture.days.days.count, 4)
+            XCTAssertEqual(fixture.detail.trip.frozenRouteBasis.routeName, "云岭环线")
+        }
+    }
+
+    func testUnavailableScenariosCarryExplicitConfidenceInsteadOfInventedContent() {
+        let weatherFixture = TripDetailTestFixture.make(weatherUnavailable: true)
+        XCTAssertTrue(weatherFixture.weather.days.allSatisfy { day in
+            day.weather.condition.value == nil
+                && day.weather.condition.confidence?.status == "unavailable"
+        })
+
+        let transportFixture = TripDetailTestFixture.make(transportUnavailable: true)
+        let transportActions = transportFixture.days.days
+            .flatMap(\.actions)
+            .filter { ["long_distance_transport", "route_transfer"].contains($0.actionType) }
+        XCTAssertFalse(transportActions.isEmpty)
+        XCTAssertTrue(transportActions.allSatisfy {
+            $0.mode?.value == nil && $0.mode?.confidence?.status == "unavailable"
+        })
+    }
+}
+
+/// 仅供本文件业务测试使用，不承载页面场景或展示配置。
+private struct TripDetailTestFixture {
+    let detail: PersonalTripDetail
+    let days: PersonalTripDays
+    let weather: LegacyPersonalTripWeather
+    let versionStatus: PersonalTripRouteVersionStatus
+
+    static let tripID = "test-trip-yunling-2026-09-12"
+
+    static func make(
+        status: PersonalTripStatus = .planned,
+        weatherUnavailable: Bool = false,
+        transportUnavailable: Bool = false
+    ) -> TripDetailTestFixture {
+        let revision = "test-v1"
+        let days = makeDays(
+            weatherUnavailable: weatherUnavailable,
+            transportUnavailable: transportUnavailable
+        )
+        let versionStatus = makeVersionStatus(revision: revision, status: status)
+        let trip = PersonalTripProjection(
+            identity: tripID,
+            name: "云岭环线 · 9月12日",
+            firstGeneratedAt: Date(timeIntervalSince1970: 1_788_865_200),
+            status: status,
+            departureCity: "上海",
+            startDate: date(12),
+            endDate: date(15),
+            totalDayCount: 4,
+            hikingDayCount: 2,
+            frozenRouteBasis: routeBasis,
+            weatherOverview: WeatherOverview(
+                summary: QualifiedString(
+                    value: weatherUnavailable ? nil : "4 天内最高 19°C，徒步首日可能有小雨。",
+                    confidence: confidence(weatherUnavailable ? "unavailable" : "available", category: .dynamicExternalInformation)
+                )
+            ),
+            importantNotices: [
+                PersonalTripImportantNotice(
+                    sequence: 1,
+                    type: "verification",
+                    content: QualifiedString(
+                        value: "返程衔接与沿途补给需要出发前核验；1 件装备为“未确认已有”。",
+                        confidence: confidence("pending_verification")
+                    )
+                )
+            ]
+        )
+        let routeReference = PersonalTripRouteReference(
+            routeID: "test-route-yunling",
+            adoptedRouteVersionID: "test-route-yunling-2026.08"
+        )
+        let detail = PersonalTripDetail(
+            revision: revision,
+            trip: trip,
+            routeReference: routeReference,
+            days: days,
+            equipmentSnapshot: PersonalTripEquipmentSnapshotReference(
+                snapshotID: "test-equipment-snapshot",
+                summary: equipmentSummary
+            ),
+            routeVersionStatus: versionStatus
+        )
+        let dayProjection = PersonalTripDays(
+            tripID: tripID,
+            revision: revision,
+            startDate: date(12),
+            endDate: date(15),
+            totalDayCount: 4,
+            hikingDayCount: 2,
+            days: days
+        )
+        let weatherProjection = LegacyPersonalTripWeather(
+            tripID: tripID,
+            revision: revision,
+            routeName: "云岭环线",
+            startDate: date(12),
+            endDate: date(15),
+            days: days.map {
+                PersonalTripWeatherDay(
+                    tripDayID: $0.identity,
+                    dayNumber: $0.dayNumber,
+                    date: $0.date,
+                    primaryStage: $0.primaryStage,
+                    hikingDayNumber: $0.hikingDayNumber,
+                    weather: $0.weather
+                )
+            },
+            weatherOverview: trip.weatherOverview
+        )
+
+        return TripDetailTestFixture(
+            detail: detail,
+            days: dayProjection,
+            weather: weatherProjection,
+            versionStatus: versionStatus
+        )
+    }
+
+    private static let routeBasis = FrozenRouteBasis(
+        routeName: "云岭环线",
+        routeType: "multi_day",
+        region: "云岭北麓 · 松霞县",
+        start: PublicRoutePlace(name: "云栈口"),
+        end: PublicRoutePlace(name: "云栈口"),
+        estimatedDuration: RouteDuration(seconds: 19_200),
+        mainTrackPath: [
+            position(30.100, 102.100),
+            position(30.112, 102.118),
+            position(30.128, 102.141),
+            position(30.146, 102.168),
+            position(30.161, 102.193),
+            position(30.137, 102.174),
+            position(30.118, 102.139),
+            position(30.100, 102.100),
+        ],
+        versionLabel: "2026.08",
+        cover: nil,
+        direction: "云栈口 → 折风垭口 → 星落台营地 → 松雾溪谷 → 云栈口",
+        distance: RouteDistance(meters: 12_100),
+        ascent: RouteElevationGain(meters: 600),
+        descent: RouteElevationLoss(meters: 580),
+        maxElevation: RouteElevation(meters: 1_412),
+        introduction: "云岭环线绕行北麓山脊，串联垭口、营地与溪谷，全程以徒步为主，适合两天以上的慢节奏穿越。",
+        routeOrientation: "自云栈口出发，逆时针经折风垭口、星落台营地与松雾溪谷后回到起点，整体为环线走向。",
+        elevationProfile: FrozenRouteElevationProfile(
+            minElevation: RouteElevation(meters: 980),
+            maxElevation: RouteElevation(meters: 1_412),
+            samples: [
+                FrozenRouteElevationSample(
+                    distance: RouteDistance(meters: 0),
+                    elevation: RouteElevation(meters: 980)
+                ),
+                FrozenRouteElevationSample(
+                    distance: RouteDistance(meters: 3_200),
+                    elevation: RouteElevation(meters: 1_240)
+                ),
+                FrozenRouteElevationSample(
+                    distance: RouteDistance(meters: 6_400),
+                    elevation: RouteElevation(meters: 1_412)
+                ),
+                FrozenRouteElevationSample(
+                    distance: RouteDistance(meters: 9_600),
+                    elevation: RouteElevation(meters: 1_150)
+                ),
+                FrozenRouteElevationSample(
+                    distance: RouteDistance(meters: 12_100),
+                    elevation: RouteElevation(meters: 980)
+                ),
+            ]
+        )
+    )
+
+    private static let equipmentSummary = PersonalTripEquipmentSummary(
+        itemCount: 2,
+        knownTotalWeight: EquipmentWeight(grams: 900),
+        missingWeightItemCount: 0,
+        ownedItemCount: 1,
+        unconfirmedOwnedItemCount: 1
+    )
+
+    private static func makeVersionStatus(
+        revision: String,
+        status: PersonalTripStatus
+    ) -> PersonalTripRouteVersionStatus {
+        PersonalTripRouteVersionStatus(
+            tripID: tripID,
+            tripRevision: revision,
+            adoptedVersion: PersonalTripRouteVersionReference(
+                routeVersionID: "test-route-yunling-2026.08",
+                versionLabel: "2026.08"
+            ),
+            currentPublicVersion: PersonalTripRouteVersionReference(
+                routeVersionID: "test-route-yunling-2026.09",
+                versionLabel: "2026.09"
+            ),
+            versionRelationship: .newerPublicVersionAvailable,
+            migrationEligible: status == .planned,
+            difference: PersonalTripRouteVersionDifference(
+                minimumComparisonStatus: .complete,
+                differences: [
+                    difference(
+                        category: .scaleDifficultyAndTime,
+                        subject: "路线总览",
+                        summary: "12.1 km · 爬升 600 m · 约 5 h 20 min → 12.4 km · 爬升 620 m · 约 5 h"
+                    ),
+                    difference(
+                        category: .trackAndSegments,
+                        subject: "首日区段",
+                        summary: "5.9 km · 爬升 490 m → 6.1 km · 爬升 510 m"
+                    ),
+                    difference(
+                        category: .planningSupportAndSafety,
+                        subject: "沿途点位",
+                        summary: "新增云脊应急补给柜与营地详情"
+                    ),
+                ],
+                unavailableCategories: [],
+                otherRelevantChangeStatus: .none,
+                otherRelevantChanges: []
+            )
+        )
+    }
+
+    private static func difference(
+        category: PersonalTripRouteDifferenceCategory,
+        subject: String,
+        summary: String
+    ) -> PersonalTripRouteVersionDifferenceItem {
+        PersonalTripRouteVersionDifferenceItem(
+            category: category,
+            changeType: .modified,
+            subject: subject,
+            summary: summary,
+            before: nil,
+            after: nil
+        )
+    }
+
+    private static func makeDays(
+        weatherUnavailable: Bool,
+        transportUnavailable: Bool
+    ) -> [PersonalTripDay] {
+        [
+            PersonalTripDay(
+                identity: "test-yunling-d1",
+                dayNumber: 1,
+                date: date(12),
+                primaryStage: "抵达路线",
+                hikingDayNumber: nil,
+                actions: [transportAction(outbound: true, unavailable: transportUnavailable)],
+                weather: weather(0, unavailable: weatherUnavailable),
+                points: []
+            ),
+            PersonalTripDay(
+                identity: "test-yunling-d2",
+                dayNumber: 2,
+                date: date(13),
+                primaryStage: "徒步第 1 天",
+                hikingDayNumber: 1,
+                actions: [
+                    hikeAction(
+                        sequence: 1,
+                        name: "云栈口 → 星落台营地",
+                        start: "云栈口",
+                        end: "星落台营地",
+                        distance: 5_900,
+                        ascent: 490,
+                        duration: 10_800
+                    )
+                ],
+                weather: weather(1, unavailable: weatherUnavailable),
+                points: [
+                    point(1, "水源", "白石涌泉", 2_200),
+                    point(2, "水源", "折风垭口前备用水点", 4_100),
+                    point(3, "补给", "云栈口出发补给点", 300),
+                    point(4, "补给", "云脊应急补给柜", 5_200),
+                    point(5, "营地", "星落台营地", 6_100),
+                    point(6, "营地", "杉影避风营地", 6_800),
+                ]
+            ),
+            PersonalTripDay(
+                identity: "test-yunling-d3",
+                dayNumber: 3,
+                date: date(14),
+                primaryStage: "徒步第 2 天",
+                hikingDayNumber: 2,
+                actions: [
+                    hikeAction(
+                        sequence: 1,
+                        name: "星落台营地 → 云栈口",
+                        start: "星落台营地",
+                        end: "云栈口",
+                        distance: 6_300,
+                        ascent: 110,
+                        duration: 7_200
+                    )
+                ],
+                weather: weather(2, unavailable: weatherUnavailable),
+                points: [
+                    point(1, "水源", "冷杉沟取水点", 4_600),
+                    point(2, "水源", "松雾溪谷备用水点", 2_700),
+                    point(3, "补给", "云岭南门补给屋", 5_600),
+                    point(4, "补给", "云栈口返程补给点", 6_300),
+                ]
+            ),
+            PersonalTripDay(
+                identity: "test-yunling-d4",
+                dayNumber: 4,
+                date: date(15),
+                primaryStage: "返回出发城市",
+                hikingDayNumber: nil,
+                actions: [transportAction(outbound: false, unavailable: transportUnavailable)],
+                weather: weather(3, unavailable: weatherUnavailable),
+                points: []
+            ),
+        ]
+    }
+
+    private static func transportAction(
+        outbound: Bool,
+        unavailable: Bool
+    ) -> PersonalTripAction {
+        let unavailableConfidence = confidence("unavailable", category: .dynamicExternalInformation)
+        let availableConfidence = confidence("pending_verification", category: .dynamicExternalInformation)
+        let fieldConfidence = unavailable ? unavailableConfidence : availableConfidence
+        let origin = outbound ? "上海" : "云栈口"
+        let destination = outbound ? "云栈口" : "上海"
+        return PersonalTripAction(
+            sequence: 1,
+            actionType: "long_distance_transport",
+            origin: QualifiedPlace(
+                value: unavailable ? nil : PublicRoutePlace(name: origin),
+                confidence: fieldConfidence
+            ),
+            destination: QualifiedPlace(
+                value: unavailable ? nil : PublicRoutePlace(name: destination),
+                confidence: fieldConfidence
+            ),
+            mode: QualifiedString(
+                value: unavailable ? nil : (outbound
+                    ? "公共交通 + 铁路 + 当地接驳"
+                    : "当地接驳 + 铁路 + 市内交通"),
+                confidence: fieldConfidence
+            ),
+            keyTimes: QualifiedStringList(
+                value: unavailable ? nil : [outbound ? "07:20—10:10" : "09:10—12:55"],
+                confidence: fieldConfidence
+            ),
+            estimatedDuration: QualifiedDuration(
+                value: unavailable ? nil : RouteDuration(seconds: outbound ? 10_200 : 13_500),
+                confidence: fieldConfidence
+            ),
+            transferNotes: QualifiedStringList(
+                value: unavailable ? nil : [outbound
+                    ? "上海 → 城际交通站 → 路线接驳点 → 云栈口"
+                    : "云栈口 → 路线接驳点 → 上海"],
+                confidence: fieldConfidence
+            ),
+            routeSectionSnapshot: nil,
+            start: nil,
+            end: nil,
+            distance: nil,
+            ascent: nil
+        )
+    }
+
+    private static func hikeAction(
+        sequence: Int,
+        name: String,
+        start: String,
+        end: String,
+        distance: Double,
+        ascent: Double,
+        duration: Double
+    ) -> PersonalTripAction {
+        let verified = confidence("verified")
+        return PersonalTripAction(
+            sequence: sequence,
+            actionType: "hike",
+            origin: nil,
+            destination: nil,
+            mode: nil,
+            keyTimes: nil,
+            estimatedDuration: QualifiedDuration(
+                value: RouteDuration(seconds: duration),
+                confidence: verified
+            ),
+            transferNotes: nil,
+            routeSectionSnapshot: PersonalTripRouteSectionSnapshot(
+                start: PublicRoutePlace(name: start),
+                end: PublicRoutePlace(name: end),
+                name: name,
+                path: nil
+            ),
+            start: QualifiedPlace(value: PublicRoutePlace(name: start), confidence: verified),
+            end: QualifiedPlace(value: PublicRoutePlace(name: end), confidence: verified),
+            distance: QualifiedDistance(value: RouteDistance(meters: distance), confidence: verified),
+            ascent: QualifiedElevationGain(value: RouteElevationGain(meters: ascent), confidence: verified)
+        )
+    }
+
+    private static func point(
+        _ sequence: Int,
+        _ type: String,
+        _ name: String,
+        _ distance: Double
+    ) -> PersonalTripPoint {
+        PersonalTripPoint(
+            sequence: sequence,
+            category: type,
+            type: type,
+            name: name,
+            distance: QualifiedDistance(
+                value: RouteDistance(meters: distance),
+                confidence: confidence("pending_verification")
+            ),
+            location: nil,
+            details: nil,
+            isAlternative: false
+        )
+    }
+
+    private static func weather(
+        _ index: Int,
+        unavailable: Bool
+    ) -> PersonalTripDayWeather {
+        let samples: [(String, Double, Double, String, String)] = [
+            ("多云", 10, 18, "降水 30%", "4 级风"),
+            ("小雨", 9, 15, "降水 60%", "3 级风"),
+            ("阴", 8, 16, "降水 25%", "2 级风"),
+            ("多云转晴", 11, 19, "降水 15%", "2 级风"),
+        ]
+        let sample = samples[index]
+        let status = unavailable ? "unavailable" : "available"
+        let fieldConfidence = confidence(status, category: .dynamicExternalInformation)
+        return PersonalTripDayWeather(
+            condition: QualifiedString(
+                value: unavailable ? nil : sample.0,
+                confidence: fieldConfidence
+            ),
+            temperatureRange: QualifiedTemperatureRange(
+                value: unavailable ? nil : TemperatureRange(low: sample.1, high: sample.2),
+                confidence: fieldConfidence
+            ),
+            precipitation: QualifiedString(
+                value: unavailable ? nil : sample.3,
+                confidence: fieldConfidence
+            ),
+            wind: QualifiedString(
+                value: unavailable ? nil : sample.4,
+                confidence: fieldConfidence
+            ),
+            placeContext: QualifiedString(
+                value: unavailable ? nil : "云岭环线",
+                confidence: fieldConfidence
+            ),
+            routeSectionContext: nil,
+            source: QualifiedString(
+                value: unavailable ? nil : "示例天气服务",
+                confidence: fieldConfidence
+            ),
+            updatedAt: QualifiedInstant(
+                value: unavailable ? nil : Instant(rawValue: "2026-08-29 09:20"),
+                confidence: fieldConfidence
+            )
+        )
+    }
+
+    private static func confidence(
+        _ status: String,
+        category: InformationCategory? = nil
+    ) -> InformationConfidence {
+        InformationConfidence(status: status, category: category)
+    }
+
+    private static func date(_ day: Int) -> LocalDate {
+        LocalDate(year: 2026, month: 9, day: day)
+    }
+
+    private static func position(
+        _ latitude: Double,
+        _ longitude: Double
+    ) -> PublicRouteGeoPosition {
+        PublicRouteGeoPosition(
+            latitude: latitude,
+            longitude: longitude,
+            referenceSystem: "WGS84"
+        )
     }
 }

@@ -67,10 +67,29 @@ extension RouteBusinessComponents {
 }
 
 #if DEBUG
+extension RouteIntroductionProjection {
+    static let `default` = RouteIntroductionProjection(
+        introduction: "路线连接高山草甸、冰川遗迹与河谷森林，适合具备连续多日徒步经验的队伍。",
+        analysisItems: [
+            RouteAnalysisItemProjection(id: "analysis-fitness", mark: "体", title: "体能要求", description: "连续上升路段较长，需要稳定的负重行走能力。"),
+            RouteAnalysisItemProjection(id: "analysis-terrain", mark: "地", title: "主要地形", description: "以山地土路、碎石坡和草甸横切为主。"),
+        ]
+    )
+
+    static let long = RouteIntroductionProjection(
+        introduction: "这条路线穿过连续变化的高山环境，从河谷森林逐步进入高山草甸，再跨越开阔垭口。沿途天气变化快，完整行程需要为长距离爬升、湿滑路面与低温环境留出充分余量。",
+        analysisItems: [
+            RouteAnalysisItemProjection(id: "analysis-experience", mark: "经", title: "经验要求", description: "需要具备在能见度下降时识别主路径、管理队伍节奏并根据实际天气及时折返的经验。"),
+            RouteAnalysisItemProjection(id: "analysis-altitude", mark: "高", title: "高海拔影响", description: "多个连续路段位于高海拔区域，队伍应按实际成员情况安排适应时间，不由路线介绍替代个人风险判断。"),
+            RouteAnalysisItemProjection(id: "analysis-exposure", mark: "露", title: "暴露路段", description: "垭口两侧缺少稳定遮蔽物，雷雨、大风或结冰条件下通过难度明显增加。"),
+        ]
+    )
+}
+
 #Preview("RouteIntroduction.default") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RouteIntroduction(
-            projection: BusinessComponentPreviewFixtures.routeIntroduction
+            projection: RouteIntroductionProjection.default
         )
     }
 }
@@ -78,7 +97,7 @@ extension RouteBusinessComponents {
 #Preview("RouteIntroduction.longContent") {
     BusinessComponentPreviewHost {
         RouteBusinessComponents.RouteIntroduction(
-            projection: BusinessComponentPreviewFixtures.routeIntroductionLong
+            projection: RouteIntroductionProjection.long
         )
     }
 }

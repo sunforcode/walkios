@@ -102,6 +102,7 @@ extension View {
 
 struct RouteDetailScrollOverlay: View {
     let presentation: RouteDetailPresentation
+    let elevationProfile: ElevationProfileProjection?
     let topSpacerHeight: CGFloat
     /// 首屏 section 固定高度：首屏只展示路线概要，不露出后续 section。
     let firstSectionHeight: CGFloat
@@ -249,7 +250,24 @@ struct RouteDetailScrollOverlay: View {
                 }
             }
 
-            if let elevationProfile = presentation.elevationProfileProjection {
+            if !presentation.sceneImages.isEmpty {
+                sectionCard {
+                    RouteBusinessComponents.RouteImageGallery(
+                        images: presentation.sceneImages.map {
+                            RouteImageProjection(id: $0.id, title: $0.contextLabel, description: nil)
+                        },
+                        title: "场景示意"
+                    ) { image in
+                        RouteArtworkView(
+                            cover: presentation.sceneImages.first(where: { $0.id == image.id })?.source,
+                            placeholder: .symbol("photo"),
+                            contentMode: .fit
+                        )
+                    }
+                }
+            }
+
+            if let elevationProfile {
                 sectionCard {
                     RouteBusinessComponents.ElevationProfile(projection: elevationProfile)
                 }
@@ -295,20 +313,9 @@ struct RouteDetailScrollOverlay: View {
         return projection
     }
 
-    /// 只读图片视觉：保留实际 URL 加载与失败占位，不建立任何打开事件。
+    /// 只读图片视觉：解析图片引用并保留失败占位，不建立任何打开事件。
     private func detailImageSurface(source: String, failurePlaceholderSystemImage: String) -> some View {
-        AsyncImage(url: URL(string: source)) { phase in
-            switch phase {
-            case .success(let image):
-                image.resizable().scaledToFill()
-            default:
-                ZStack {
-                    AppColors.surfaceElevated
-                    Image(systemName: failurePlaceholderSystemImage)
-                        .foregroundStyle(AppColors.textWeak)
-                }
-            }
-        }
+        RouteArtworkView(cover: source, placeholder: .symbol(failurePlaceholderSystemImage))
         .frame(maxWidth: .infinity)
         .frame(height: 70)
         .clipped()
