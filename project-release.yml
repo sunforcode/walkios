@@ -1,9 +1,10 @@
 # 生产依赖图：只由 scripts/build.py --mode release 生成到 build/，不提交生成结果。
-# 不声明 WalkDebugTools / DebugSwift；只有 Release 配置。
+# 不声明 WalkDebugTools / DebugSwift；生产与离线演示均为 release 优化配置。
 include: [project-base.yml]
 name: WalkRelease
 configs:
   Release: release
+  OfflineDemo: release
 
 targets:
   Walk:
@@ -16,6 +17,27 @@ targets:
           # 让主可执行文件直接承载全部代码，链接记录与符号检查覆盖实际产物。
           ENABLE_DEBUG_DYLIB: "NO"
           LD_GENERATE_MAP_FILE: YES
+        OfflineDemo:
+          WALK_DISTRIBUTION: offline-demo
+          WALK_DISPLAY_NAME: Walk演示
+          WALK_API_BASE_URL: https://offline.walk.invalid/api/v1
+          WALK_DATA_MODE: mock
+          WALK_ENVIRONMENT: offline-demo
+          ENABLE_DEBUG_DYLIB: "NO"
+          LD_GENERATE_MAP_FILE: YES
+  WalkKeyFlowUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Tests/KeyFlowUITests/YadingMockUITests.swift
+    dependencies:
+      - target: Walk
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.walk.app.key-flow-ui-tests
+        TEST_TARGET_NAME: Walk
+        GENERATE_INFOPLIST_FILE: YES
 
 schemes:
   WalkRelease:
@@ -32,3 +54,19 @@ schemes:
       config: Release
     archive:
       config: Release
+  WalkOfflineDemo:
+    build:
+      targets:
+        Walk: all
+    run:
+      config: OfflineDemo
+    test:
+      config: OfflineDemo
+      targets:
+        - WalkKeyFlowUITests
+    profile:
+      config: OfflineDemo
+    analyze:
+      config: OfflineDemo
+    archive:
+      config: OfflineDemo

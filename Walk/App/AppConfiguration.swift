@@ -13,13 +13,12 @@ enum AppConfigurationError: Error, Equatable {
     case emptyValue(String)
     /// 同一来源内同一键出现不同的值。
     case conflictingValues(String)
-    case invalidBaselineScenario(String)
     case missingBaseURL
     case invalidBaseURL(String)
-    case baselineRequiresMock
-    case baselineUnavailableInProduction
     case productionRequiresRealNetwork
     case releaseRequiresReal
+    case invalidDistribution(String)
+    case invalidOfflineDemoConfiguration
     case placeholderBaseURL(String)
 }
 
@@ -30,7 +29,6 @@ enum AppConfigurationError: Error, Equatable {
 enum ExecutionContext: Equatable {
     case app
     case unitTest
-    case baseline
     case componentPreview
 }
 
@@ -46,22 +44,19 @@ struct AppConfiguration: Equatable {
     /// 断网策略。Debug 可经启动参数、环境变量或 Debug 设置选择；Release 固定 `fail`。
     /// 端点离线资格仍决定是否真正允许离线返回。
     let offlinePolicy: OfflinePolicy
-    let baselineScenario: CurrentBaselineScenario?
 
     init(
         dataMode: WalkDataMode,
         baseURL: URL,
         environmentName: String,
         executionContext: ExecutionContext = .app,
-        offlinePolicy: OfflinePolicy = .default,
-        baselineScenario: CurrentBaselineScenario? = nil
+        offlinePolicy: OfflinePolicy = .default
     ) {
         self.dataMode = dataMode
         self.baseURL = baseURL
         self.environmentName = environmentName
         self.executionContext = executionContext
         self.offlinePolicy = offlinePolicy
-        self.baselineScenario = baselineScenario
     }
 
     /// 服务器身份：环境标识与规范化地址共同决定，同名不同地址视为不同服务。
@@ -72,6 +67,9 @@ struct AppConfiguration: Equatable {
     // MARK: - 键
 
     enum Key {
+        /// 仅 Release 读取的发布标识，不提供运行时覆盖入口。
+        static let distributionBundle = "WalkDistribution"
+
         static let dataModeArgument = "-WalkDataMode"
         static let dataModeEnvironment = "WALK_DATA_MODE"
         static let dataModeBundle = "WalkDataMode"
@@ -87,14 +85,11 @@ struct AppConfiguration: Equatable {
         static let offlinePolicyArgument = "-WalkOfflinePolicy"
         static let offlinePolicyEnvironment = "WALK_OFFLINE_POLICY"
 
-        static let baselineArgument = "-WalkBaselineScenario"
-        static let baselineEnvironment = "WALK_BASELINE_SCENARIO"
-
         /// 系统在单元测试宿主进程中注入的测试配置路径。
         static let unitTestHostEnvironment = "XCTestConfigurationFilePath"
 
-        static let retiredArguments = ["-DataSourceMode"]
-        static let retiredEnvironment = ["WALK_DATA_SOURCE_MODE"]
+        static let retiredArguments = ["-DataSourceMode", "-WalkBaselineScenario"]
+        static let retiredEnvironment = ["WALK_DATA_SOURCE_MODE", "WALK_BASELINE_SCENARIO"]
         static let retiredBundle = ["WalkDataSourceMode"]
     }
 
@@ -122,14 +117,8 @@ struct AppConfiguration: Equatable {
         let launch = LaunchSource(arguments: arguments, environment: environment)
         try launch.rejectRetiredKeys()
 
-        let baselineRaw = try launch.value(
-            argument: Key.baselineArgument,
-            environment: Key.baselineEnvironment
-        )
         let context: ExecutionContext
-        if baselineRaw != nil {
-            context = .baseline
-        } else if environment[Key.unitTestHostEnvironment] != nil {
+        if environment[Key.unitTestHostEnvironment] != nil {
             context = .unitTest
         } else {
             context = .app
@@ -158,28 +147,40 @@ struct AppConfiguration: Equatable {
             environment: Key.offlinePolicyEnvironment
         ) ?? settings?.offlinePolicy?.rawValue
 
-        let baselineScenario: CurrentBaselineScenario?
-        if let baselineRaw {
-            guard let parsed = CurrentBaselineScenario(rawValue: baselineRaw) else {
-                throw AppConfigurationError.invalidBaselineScenario(baselineRaw)
-            }
-            baselineScenario = parsed
-        } else {
-            baselineScenario = nil
-        }
-
         self.init(
             dataMode: try Self.parseMode(rawMode),
             baseURL: try Self.parseURL(rawURL),
             environmentName: environmentName,
             executionContext: context,
-            offlinePolicy: try rawPolicy.map(Self.parseOfflinePolicy) ?? .default,
-            baselineScenario: baselineScenario
+            offlinePolicy: try rawPolicy.map(Self.parseOfflinePolicy) ?? .default
         )
         try validate()
     }
 
     private static func releaseConfiguration(bundle: BundleSource) throws -> AppConfiguration {
+        let distribution = bundle.value(Key.distributionBundle)
+        if distribution == "offline-demo" {
+            // 离线演示必须由完整构建配置显式声明，地址精确匹配以排除外网、凭据和端口变体。
+            guard bundle.value(Key.dataModeBundle) == WalkDataMode.mock.rawValue,
+                  bundle.value(Key.environmentBundle) == "offline-demo",
+                  let rawURL = bundle.value(Key.baseURLBundle),
+                  rawURL == "https://offline.walk.invalid/api/v1",
+                  let baseURL = URL(string: rawURL) else {
+                throw AppConfigurationError.invalidOfflineDemoConfiguration
+            }
+            let configuration = AppConfiguration(
+                dataMode: .mock,
+                baseURL: baseURL,
+                environmentName: "offline-demo",
+                offlinePolicy: .fail
+            )
+            try configuration.validate()
+            return configuration
+        }
+        if let distribution, distribution != "production" {
+            throw AppConfigurationError.invalidDistribution(distribution)
+        }
+
         let mode = try parseMode(bundle.value(Key.dataModeBundle) ?? WalkDataMode.real.rawValue)
         guard mode == .real else {
             throw AppConfigurationError.releaseRequiresReal
@@ -227,14 +228,6 @@ struct AppConfiguration: Equatable {
 
     func validate() throws {
         let isProduction = environmentName.caseInsensitiveCompare("production") == .orderedSame
-        if baselineScenario != nil {
-            guard !isProduction else {
-                throw AppConfigurationError.baselineUnavailableInProduction
-            }
-            guard dataMode == .mock else {
-                throw AppConfigurationError.baselineRequiresMock
-            }
-        }
         if isProduction, !dataMode.usesRealNetwork {
             throw AppConfigurationError.productionRequiresRealNetwork
         }

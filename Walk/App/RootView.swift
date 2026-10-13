@@ -5,22 +5,24 @@ import WalkDesignSystem
 struct RootView: View {
     @ObservedObject private var appEnvironment: AppEnvironment
     @State private var shell = AppShellState()
-    /// 认证编排：待处理意图、来源 tab 与焦点行程确认结果（account-access / app-flow）。
+    /// 认证编排：待处理意图与来源 tab（account-access / app-flow）。
     @State private var authFlow = AuthenticationFlow()
     @State private var authenticationGeneration = 0
+    @State private var authenticationIdentity: String?
+    @State private var tripEquipmentSession = TripEquipmentSession()
     /// S5：搜索会话状态提升到 App 层，返回后再进 PAGE-SEARCH 恢复 query 与结果。
-    @StateObject private var routeSearchModel: RouteDiscoveryViewModel
+    @State private var routeSearchModel: RouteDiscoveryViewModel
     @State private var routeSearchQuery = ""
     /// 我的区域与账户菜单共享同一账号/退出状态，提升到 App 层。
-    @StateObject private var profileModel: ProfileViewModel
+    @State private var profileModel: ProfileViewModel
 
     init(appEnvironment: AppEnvironment) {
         _appEnvironment = ObservedObject(wrappedValue: appEnvironment)
-        _routeSearchModel = StateObject(wrappedValue: RouteDiscoveryViewModel(service: appEnvironment.routeService))
-        _profileModel = StateObject(wrappedValue: ProfileViewModel(
+        _authenticationIdentity = State(initialValue: appEnvironment.authManager.isLoggedIn ? appEnvironment.authManager.cacheIdentity : nil)
+        _routeSearchModel = State(initialValue: RouteDiscoveryViewModel(service: appEnvironment.routeService))
+        _profileModel = State(initialValue: ProfileViewModel(
             accountService: appEnvironment.accountService,
             tripService: appEnvironment.personalTripService,
-            equipmentService: appEnvironment.equipmentService,
             authSession: appEnvironment.authManager,
             clearCachedResponses: {
                 await appEnvironment.apiStorageGeneration.invalidate()
@@ -31,13 +33,17 @@ struct RootView: View {
 
     var body: some View {
         TabView(selection: selectedTabBinding) {
-            tabStack(for: .home) { homeRoot }
-                .tabItem { Label(AppTab.home.title, systemImage: AppTab.home.systemImage) }
-                .tag(AppTab.home)
+            tabStack(for: .trips) { tripsRoot }
+                .tabItem { Label(AppTab.trips.title, systemImage: AppTab.trips.systemImage) }
+                .tag(AppTab.trips)
 
             tabStack(for: .routes) { routesRoot }
                 .tabItem { Label(AppTab.routes.title, systemImage: AppTab.routes.systemImage) }
                 .tag(AppTab.routes)
+
+            tabStack(for: .equipment) { equipmentRoot }
+                .tabItem { Label(AppTab.equipment.title, systemImage: AppTab.equipment.systemImage) }
+                .tag(AppTab.equipment)
 
             tabStack(for: .profile) { profileRoot }
                 .tabItem { Label(AppTab.profile.title, systemImage: AppTab.profile.systemImage) }
@@ -57,11 +63,11 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: shell.isAccountMenuPresented)
-        .onReceive(NotificationCenter.default.publisher(for: .walkAuthenticationRequired)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .walkAuthenticationRequired, object: appEnvironment.authManager)) { _ in
             requestAuthentication(.reauthenticate, in: shell.selectedTab, force: true)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .walkAuthenticationDidChange)) { _ in
-            authenticationGeneration += 1
+        .onReceive(NotificationCenter.default.publisher(for: .walkAuthenticationDidChange, object: appEnvironment.authManager)) { _ in
+            synchronizeAuthentication()
         }
         .onChange(of: shell.selectedTab) { tab in
             guard tab == .routes, shell.path(for: .routes).isEmpty else { return }
@@ -85,14 +91,11 @@ struct RootView: View {
         LoginView(
             accountService: appEnvironment.accountService,
             intent: authFlow.pending?.intent,
-            onConfirmFocusTrip: authFlow.pending?.intent == .homeStart
-                ? { [appEnvironment] in
-                    try await appEnvironment.personalTripService.focus().trip != nil
-                }
-                : nil,
-            onConfirmedFocusTrip: { authFlow.recordFocusConfirmation($0) },
             onAuthenticated: completeAuthentication,
-            onCancel: { authFlow.cancel() }
+            onCancel: {
+                authFlow.cancel()
+                shell.discardSuspendedTask()
+            }
         )
     }
 
@@ -123,14 +126,48 @@ struct RootView: View {
         }
     }
 
-    private var homeRoot: some View {
+    @ViewBuilder
+    private var tripsRoot: some View {
         HomeView(
-            onAuthenticate: { requestAuthentication($0, in: .home) },
-            onNavigate: { navigate($0, in: .home) },
+            onAuthenticate: { requestAuthentication($0, in: .trips) },
+            onNavigate: { navigate($0, in: .trips) },
             service: appEnvironment.personalTripService,
             authSession: appEnvironment.authManager
         )
         .id(authenticationGeneration)
+    }
+
+    @ViewBuilder
+    private var equipmentRoot: some View {
+        Group {
+            if appEnvironment.authManager.isLoggedIn {
+                EquipmentListView(
+                    service: appEnvironment.equipmentService,
+                    presentation: .root,
+                    onEditEquipment: { navigate(.equipmentEdit(equipmentID: $0), in: .equipment) }
+                )
+            } else {
+                guestRoot(title: "装备", description: "管理个人装备与常用清单", message: "登录后管理个人装备与清单", icon: "backpack", intent: .equipment, tab: .equipment)
+            }
+        }
+        .id(authenticationGeneration)
+    }
+
+    private func guestRoot(title: String, description: String, message: String, icon: String, intent: PendingAuthIntent, tab: AppTab) -> some View {
+        PageShell(title: title, description: description, background: { AppColors.pageBase }) {
+            ScrollView(showsIndicators: false) {
+                EmptyStateView(
+                    title: message,
+                    message: "登录后即可继续。",
+                    icon: icon,
+                    actionTitle: "登录",
+                    action: { requestAuthentication(intent, in: tab) }
+                )
+                .frame(maxWidth: .infinity, minHeight: 440)
+                .padding(.horizontal, Spacing.pageHorizontal)
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private var routesRoot: some View {
@@ -155,9 +192,25 @@ struct RootView: View {
     }
 
     private func handleLoggedOut() {
-        shell.dismissAccountMenu()
-        shell.showRouteDiscovery()
-        authenticationGeneration += 1
+        authFlow.cancel()
+        shell.resetAfterLogout()
+        synchronizeAuthentication()
+    }
+
+    private func synchronizeAuthentication() {
+        let identity = appEnvironment.authManager.isLoggedIn ? appEnvironment.authManager.cacheIdentity : nil
+        if identity != authenticationIdentity {
+            if authenticationIdentity != nil, identity == nil, !profileModel.isLoggingOut {
+                shell.suspendSelectedTask()
+            } else if authenticationIdentity != nil {
+                shell.discardSuspendedTask()
+            }
+            shell.clearPersonalNavigation()
+            tripEquipmentSession.clear()
+            authenticationIdentity = identity
+            authenticationGeneration += 1
+        }
+        profileModel.synchronizeAuthentication()
     }
 
     private func requestAuthentication(
@@ -175,7 +228,7 @@ struct RootView: View {
 
     private func completeAuthentication() {
         shell.dismissLogin()
-        authenticationGeneration += 1
+        synchronizeAuthentication()
         apply(authFlow.complete(currentTab: shell.selectedTab))
     }
 
@@ -192,28 +245,24 @@ struct RootView: View {
 
     private func execute(_ intent: PendingAuthIntent, in tab: AppTab) {
         switch intent {
-        case .homeStart:
-            // account-access：焦点行程结果由认证链路确认（confirmingFocus/focusError），
-            // 无法确认时不会走到这里；此处只消费已确认结果，不再自行 catch 落回首页。
-            // 无焦点行程同样回到首页空态，不自动进入全部路线（app-flow）。
-            guard authFlow.consumeFocusConfirmation() else { return }
-            shell.setPath([], for: .home)
-            shell.selectTab(.home)
+        case .trips:
+            shell.selectTab(.trips)
+        case .equipment:
+            shell.selectTab(.equipment)
         case .profile:
             shell.selectTab(.profile)
-            authenticationGeneration += 1
         case .createTrip(let routeID):
+            shell.selectTab(tab)
             navigate(.createTrip(routeID: routeID), in: tab)
         case .reauthenticate:
-            break
+            shell.resumeSuspendedTask()
         }
     }
 
     private func navigate(_ destination: AppDestination, in tab: AppTab) {
         var path = shell.path(for: tab)
         guard path.last != destination else { return }
-        // PAGE-ROUTE-LIST 经任意页推入均为普通任务：显示返回入口；
-        // 任务栈根页到达（行程清单找路线）走 showRouteList，不经过此处。
+        // PAGE-ROUTE-LIST 从来源页推入，返回恢复来源任务。
         if destination == .routeList { shell.routeListShowsBackEntry = true }
         path.append(destination)
         shell.setPath(path, for: tab)
@@ -249,15 +298,14 @@ struct RootView: View {
                 TripListView(
                     service: appEnvironment.personalTripService,
                     onNavigate: { navigate($0, in: shell.selectedTab) },
-                    onFindRoute: {
-                        shell.showRouteList()
-                    }
+                    onFindRoute: { navigate(.routeList, in: shell.selectedTab) }
                 )
             case let .tripDetail(tripID):
                 TripDetailView(
                     tripID: tripID,
                     service: appEnvironment.personalTripService,
                     reloadRevision: shell.reloadRevision(for: tripID),
+                    demoScenesEnabled: appEnvironment.configuration.dataMode == .mock,
                     onOpenRoute: { navigate(.routeDetail($0), in: shell.selectedTab) },
                     onOpenEquipment: { navigate(.tripEquipment(tripID), in: shell.selectedTab) },
                     onOpenWeather: {
@@ -275,12 +323,15 @@ struct RootView: View {
                 )
             case let .tripEquipment(tripID):
                 TripEquipmentView(
-                    tripID: tripID,
-                    service: appEnvironment.tripEquipmentService,
+                    viewModel: tripEquipmentSession.model(
+                        tripID: tripID,
+                        service: appEnvironment.tripEquipmentService,
+                        equipmentService: appEnvironment.equipmentService,
+                        onRevisionChange: { shell.recordTripRevision($0, tripID: tripID) }
+                    ),
                     onManagePersonalEquipment: {
                         navigate(.personalEquipment, in: shell.selectedTab)
-                    },
-                    onRevisionChange: { shell.recordTripRevision($0, tripID: tripID) }
+                    }
                 )
             case .personalEquipment:
                 EquipmentListView(

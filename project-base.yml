@@ -46,7 +46,10 @@ targets:
     info:
       path: Walk/Resources/Info.plist
       properties:
-        CFBundleDisplayName: Walk
+        CFBundleDisplayName: "$(WALK_DISPLAY_NAME)"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        WalkDistribution: "$(WALK_DISTRIBUTION)"
         UILaunchScreen:
           UIColorName: LaunchBackground
           UIImageName: LaunchImage
@@ -61,7 +64,12 @@ targets:
         NSLocationAlwaysAndWhenInUseUsageDescription: 需要在后台持续获取位置以记录轨迹
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.walk.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.sunyongji.walk
+        TARGETED_DEVICE_FAMILY: "1"
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "28"
+        WALK_DISPLAY_NAME: Walk
+        WALK_DISTRIBUTION: production
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: YES
@@ -82,38 +90,6 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.walk.app.tests
-        TEST_TARGET_NAME: Walk
-        GENERATE_INFOPLIST_FILE: YES
-
-  WalkBaselineUITests:
-    type: bundle.ui-testing
-    platform: iOS
-    deploymentTarget: "18.0"
-    sources:
-      - path: Tests/BaselineUITests
-    dependencies:
-      - target: Walk
-      - package: WalkData
-      - package: WalkDesignSystem
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.walk.app.baseline-ui-tests
-        TEST_TARGET_NAME: Walk
-        GENERATE_INFOPLIST_FILE: YES
-
-  WalkBaselineTests:
-    type: bundle.unit-test
-    platform: iOS
-    deploymentTarget: "18.0"
-    sources:
-      - path: Tests/BaselineTests
-    dependencies:
-      - target: Walk
-      - package: WalkData
-      - package: WalkDesignSystem
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.walk.app.baseline-tests
         TEST_TARGET_NAME: Walk
         GENERATE_INFOPLIST_FILE: YES
 

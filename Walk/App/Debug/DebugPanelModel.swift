@@ -7,7 +7,8 @@ import WalkDebugTools
 ///
 /// 依据 specs/README.md R-DEBUG：App 向 DebugTools 注入只读配置快照与动作回调，
 /// 配置写入仍经 `DebugSettingsStore`，清缓存由数据层执行；本类型不持有第二份有效配置。
-/// 依据 R-SWITCH：动作只写保存值，影响下一次启动，不改变本次的有效配置。
+/// 依据 R-SWITCH：配置动作只写保存值，影响下一次启动，不改变本次的有效配置。
+/// 组件预览动作只通知宿主呈现目录，不接触配置、会话或缓存。
 @MainActor
 final class DebugPanelModel {
     let effective: AppConfiguration
@@ -80,8 +81,11 @@ final class DebugPanelModel {
 
     // MARK: - 动作
 
-    func actionSections() -> [DebugActionSection] {
+    func actionSections(openComponentCatalog: @escaping () -> Void = {}) -> [DebugActionSection] {
         [
+            DebugActionSection(title: "组件预览", actions: [
+                .init(title: "打开组件目录", perform: openComponentCatalog),
+            ]),
             DebugActionSection(title: "数据模式", actions: WalkDataMode.allCases.map { mode in
                 .init(title: mode.rawValue) { [store] in
                     Self.update(store) { .init(dataMode: mode, server: $0?.server, offlinePolicy: $0?.offlinePolicy) }

@@ -75,9 +75,14 @@ final class AppEnvironment: ObservableObject {
                 }
             )
         case .mock:
-            apiClient = MockAPIClient(
-                fixtures: mockFixtures ?? DefaultMockFixtures.all(bundle: resourceBundle)
-            )
+            if let mockFixtures {
+                apiClient = MockAPIClient(fixtures: mockFixtures)
+            } else {
+                apiClient = DefaultMockEquipmentScenario(
+                    fixtures: DefaultMockFixtures.all(bundle: resourceBundle),
+                    identityProvider: { [authManager] in authManager.cacheIdentity }
+                )
+            }
         }
         routeService = RouteService(apiClient: apiClient)
         equipmentService = EquipmentService(apiClient: apiClient)

@@ -7,12 +7,14 @@ import Foundation
     public let time: String?
     public let title: String
     public let details: [String]
+    public let subtitle: String?
 
-    public init(id: String, time: String?, title: String, details: [String]) {
+    public init(id: String, time: String?, title: String, details: [String], subtitle: String? = nil) {
         self.id = id
         self.time = time
         self.title = title
         self.details = details
+        self.subtitle = subtitle
     }
 }
 
@@ -53,8 +55,8 @@ import Foundation
     ]
 
     public static let timelineItems: [TimelinePreviewItem] = [
-        TimelinePreviewItem(id: "start", time: "08:30", title: "从集合点出发", details: ["核对随身装备和饮用水。"]),
-        TimelinePreviewItem(id: "ridge", time: nil, title: "通过连续山脊路段", details: [longSupportingText]),
+        TimelinePreviewItem(id: "start", time: "08:30", title: "从集合点出发", details: ["核对随身装备和饮用水。"], subtitle: "沿步道上行"),
+        TimelinePreviewItem(id: "ridge", time: nil, title: "通过连续山脊路段", details: [longSupportingText], subtitle: "地形信息待核验"),
         TimelinePreviewItem(id: "finish", time: "15:40", title: "返回终点", details: []),
     ]
 }

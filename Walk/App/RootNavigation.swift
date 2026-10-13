@@ -2,33 +2,36 @@ import SwiftUI
 import WalkData
 import WalkDesignSystem
 
-/// 一级导航的三个一级根 Page；系统 tab bar 的 tab 项由该枚举提供标题与图标。
+/// 一级导航的四个一级根 Page；系统 tab bar 的 tab 项由该枚举提供标题与图标。
 enum AppTab: String, CaseIterable, Identifiable, Hashable {
-    case home
+    case trips
     case routes
+    case equipment
     case profile
 
     var id: Self { self }
 
     var title: String {
         switch self {
-        case .home: "首页"
         case .routes: "路线"
+        case .trips: "行程"
+        case .equipment: "装备"
         case .profile: "我的"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .home: "house"
         case .routes: "map"
+        case .trips: "calendar"
+        case .equipment: "backpack"
         case .profile: "person"
         }
     }
 }
 
 struct AppShellState: Equatable {
-    var selectedTab: AppTab = .home
+    var selectedTab: AppTab = .trips
     /// PAGE-ROUTE-LIST 的返回入口可见性：由到达方式决定（发现页推入显示，行程清单找路线等任务栈根页到达不显示）。
     var routeListShowsBackEntry = false
     /// PAGE-LOGIN 为 Modal 任务，全屏覆盖呈现，不进入任务栈。
@@ -36,10 +39,17 @@ struct AppShellState: Equatable {
     /// PAGE-ACCOUNT-MENU 为 Modal 任务，以模态 Sheet 呈现，不进入任务栈；设置项由 Modal 内部导航承载。
     var isAccountMenuPresented = false
 
-    private var homePath: [AppDestination] = []
+    private var tripsPath: [AppDestination] = []
+    private var equipmentPath: [AppDestination] = []
     private var routesPath: [AppDestination] = []
     private var profilePath: [AppDestination] = []
     private var reloadRevisions: [String: String] = [:]
+    private var suspendedTask: SuspendedTask?
+
+    private struct SuspendedTask: Equatable {
+        let tab: AppTab
+        let path: [AppDestination]
+    }
 
     mutating func showRouteDiscovery() {
         routesPath = []
@@ -59,7 +69,8 @@ struct AppShellState: Equatable {
 
     func path(for tab: AppTab) -> [AppDestination] {
         switch tab {
-        case .home: homePath
+        case .trips: tripsPath
+        case .equipment: equipmentPath
         case .routes: routesPath
         case .profile: profilePath
         }
@@ -71,10 +82,44 @@ struct AppShellState: Equatable {
 
     mutating func setPath(_ path: [AppDestination], for tab: AppTab) {
         switch tab {
-        case .home: homePath = path
+        case .trips: tripsPath = path
+        case .equipment: equipmentPath = path
         case .routes: routesPath = path
         case .profile: profilePath = path
         }
+    }
+
+    /// 身份变化后丢弃个人任务，只保留公共浏览上下文。
+    mutating func clearPersonalNavigation() {
+        for tab in AppTab.allCases {
+            setPath(Array(path(for: tab).prefix { !$0.requiresAuthentication }), for: tab)
+        }
+        reloadRevisions.removeAll()
+        isAccountMenuPresented = false
+    }
+
+    /// 只保存任务目标，不保存旧会话结果，也不重放写入。
+    mutating func suspendSelectedTask() {
+        suspendedTask = SuspendedTask(tab: selectedTab, path: path(for: selectedTab))
+    }
+
+    mutating func resumeSuspendedTask() {
+        guard let task = suspendedTask else { return }
+        suspendedTask = nil
+        selectedTab = task.tab
+        setPath(task.path, for: task.tab)
+    }
+
+    mutating func discardSuspendedTask() { suspendedTask = nil }
+
+    mutating func resetAfterLogout() {
+        suspendedTask = nil
+        for tab in AppTab.allCases { setPath([], for: tab) }
+        reloadRevisions.removeAll()
+        isAccountMenuPresented = false
+        isLoginPresented = false
+        routeListShowsBackEntry = false
+        selectedTab = .trips
     }
 
     mutating func presentLogin() {

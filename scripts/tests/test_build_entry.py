@@ -44,6 +44,7 @@ class BuildEntryTests(unittest.TestCase):
             ["--mode", "staging", "--action", "build"],
             ["--mode", "release", "--action", "build", "CODE_SIGNING_ALLOWED=YES"],
             ["--mode", "debug", "--action", "test", "--destination", "x", "--scheme", "WalkRelease"],
+            ["--mode", "debug", "--action", "test", "--destination", "x", "--scheme", "WalkBaseline"],
         ]
         for arguments in invalid_requests:
             with self.subTest(arguments=arguments):
@@ -82,7 +83,7 @@ class BuildEntryTests(unittest.TestCase):
         self.assertEqual(plan.scheme, "Walk")
 
     def test_debug_scheme_allow_list(self) -> None:
-        for scheme in ("Walk", "WalkBaseline", "WalkComponents", "WalkDebugTools", "WalkDataModeE2E", "WalkKeyFlows"):
+        for scheme in ("Walk", "WalkComponents", "WalkDebugTools", "WalkDataModeE2E", "WalkKeyFlows"):
             with self.subTest(scheme=scheme):
                 plan = entry.plan([
                     "--mode", "debug", "--action", "test", "--scheme", scheme,

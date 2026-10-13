@@ -133,14 +133,23 @@ enum ComponentCatalog {
         entry("ModalBottomSheet", .common) {
             ModalBottomSheet(onDismiss: {}) {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
-                    Text(ComponentPreviewFixtures.sheetTitle).font(.sectionTitle)
+                    Text("底部模态任务").font(.sectionTitle)
                     Text(WalkDesignSystem.ComponentPreviewFixtures.longSupportingText).font(.appBody)
-                    PrimaryAction(title: ComponentPreviewFixtures.sheetAction, fillsWidth: true, action: {})
+                    PrimaryAction(title: "完成", fillsWidth: true, action: {})
                 }
             }
         },
-        entry("Notice", .common) {
-            NoticeView(message: WalkDesignSystem.ComponentPreviewFixtures.supportingText, title: "补充信息", tone: .info)
+        ComponentCatalogEntry(id: "Notice", category: .common, stateIDs: ["default", "inline"]) { state in
+            guard ["default", "inline"].contains(state) else { return nil }
+            return AnyView(NoticeView(
+                message: state == "inline"
+                    ? WalkDesignSystem.ComponentPreviewFixtures.longSupportingText
+                    : WalkDesignSystem.ComponentPreviewFixtures.supportingText,
+                title: state == "inline" ? "出发前核验" : "补充信息",
+                icon: state == "inline" ? "exclamationmark.triangle" : "info.circle",
+                tone: state == "inline" ? .warning : .info,
+                presentation: state == "inline" ? .inline : .standard
+            ))
         },
         entry("PageTitleBlock", .common) {
             PageTitleBlock(
@@ -177,13 +186,20 @@ enum ComponentCatalog {
         entry("SegmentedControl", .common) {
             SegmentedControl(options: WalkDesignSystem.ComponentPreviewFixtures.segmentOptions, selection: .constant("overview"))
         },
-        entry("SelectInput", .common) {
-            SelectInput(
-                selection: .constant("moderate"),
+        ComponentCatalogEntry(
+            id: "SelectInput", category: .common,
+            stateIDs: ["default", "empty", "selected", "disabled", "error"]
+        ) { stateID in
+            guard ["default", "empty", "selected", "disabled", "error"].contains(stateID) else { return nil }
+            let selection: String? = stateID == "empty" || stateID == "error" ? nil : "moderate"
+            return AnyView(SelectInput(
+                selection: .constant(selection),
                 label: "难度",
                 placeholder: "请选择难度",
-                options: WalkDesignSystem.ComponentPreviewFixtures.selectOptions
-            )
+                options: WalkDesignSystem.ComponentPreviewFixtures.selectOptions,
+                error: stateID == "error" ? "请选择一个选项" : nil,
+                isDisabled: stateID == "disabled"
+            ))
         },
         entry("SelectableOptionCard", .common) {
             SelectableOptionCard(isSelected: false, action: {}) {
@@ -202,20 +218,46 @@ enum ComponentCatalog {
         entry("TextInput", .common) {
             TextInput(text: .constant("云岭环线"), label: "路线名称", placeholder: "输入路线名称")
         },
-        entry("Timeline", .common) {
-            Timeline(WalkDesignSystem.ComponentPreviewFixtures.timelineItems, optionalTime: { $0.time }) { item in
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text(item.title).font(.listTitle)
-                    ForEach(item.details, id: \.self) { Text($0) }
+        ComponentCatalogEntry(
+            id: "Timeline", category: .common,
+            stateIDs: ["default", "compact", "compactCrossMonth", "compactTime", "compactTitleOnly", "compactWithoutTime", "compactLongTitle", "compactQualified", "compactAccessible"]
+        ) { state in
+            guard ["default", "compact", "compactCrossMonth", "compactTime", "compactTitleOnly", "compactWithoutTime", "compactLongTitle", "compactQualified", "compactAccessible"].contains(state) else { return nil }
+            let isDate = state == "compact" || state == "compactCrossMonth"
+            let items: [TimelinePreviewItem]
+            switch state {
+            case "compact": items = Array(TimelinePreviewItem.compactDays.prefix(2))
+            case "compactCrossMonth": items = TimelinePreviewItem.compactDays
+            case "compactTitleOnly": items = TimelinePreviewItem.titleOnly
+            case "compactWithoutTime": items = TimelinePreviewItem.withoutTime
+            case "compactLongTitle": items = TimelinePreviewItem.longTitle
+            case "compactQualified", "compactAccessible": items = TimelinePreviewItem.qualified
+            default: items = WalkDesignSystem.ComponentPreviewFixtures.timelineItems
+            }
+            return AnyView(Timeline(
+                items,
+                optionalTime: { $0.time },
+                presentation: state == "default" ? .standard : .compact,
+                timeColumnWidth: isDate ? 28 : (items.contains { $0.time != nil } ? 52 : 0),
+                sectionLabel: { isDate ? TimelinePreviewItem.compactSectionLabel(for: $0) : nil }
+            ) { item in
+                if state == "default" {
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        Text(item.title).font(.listTitle)
+                        ForEach(item.details, id: \.self) { Text($0) }
+                    }
+                } else {
+                    TimelineSummaryContent(title: item.title, subtitle: item.subtitle)
                 }
             }
+            .environment(\.dynamicTypeSize, state == "compactAccessible" ? .accessibility2 : .large))
         },
         entry("UnavailableState", .common) {
             UnavailableStateView(title: "天气暂不可用", message: WalkDesignSystem.ComponentPreviewFixtures.longSupportingText)
         },
         entry("UtilityNavigationHeader", .common) {
             UtilityNavigationHeader(
-                title: ComponentPreviewFixtures.navigationTitle,
+                title: "全部路线",
                 leading: IconButtonConfiguration(systemName: "chevron.left", accessibilityLabel: "返回", action: {}),
                 trailing: IconButtonConfiguration(systemName: "magnifyingglass", accessibilityLabel: "搜索路线", action: {})
             )
@@ -228,28 +270,27 @@ enum ComponentCatalog {
     private static let businessEntries: [ComponentCatalogEntry] = [
         entry("AuthPanel", .business) {
             AuthPanel(
-                projection: BusinessComponentPreviewFixtures.authPhone,
+                projection: AuthPanelProjection.phone,
                 onClose: {},
                 onChangePhone: { _ in },
                 onSendCode: {},
                 onChangeCode: { _ in },
                 onVerifyCode: {},
-                onResendCode: {},
-                onRetryFocusTrip: {}
+                onResendCode: {}
             )
         },
         entry("ChecklistItemRow", .business) {
             ChecklistItemRow(
-                projection: BusinessComponentPreviewFixtures.checklistMemberKnown,
+                projection: ChecklistItemRowProjection.knownWeight,
                 onChangeQuantity: { _, _ in },
                 onRemoveMember: { _ in }
             )
         },
         entry("ChecklistPanel", .business) {
             ChecklistPanel(
-                summary: BusinessComponentPreviewFixtures.checklistSummary,
+                summary: EquipmentListSummaryProjection.default,
                 isExpanded: false,
-                members: BusinessComponentPreviewFixtures.checklistMembers,
+                members: ChecklistItemRowProjection.samples,
                 onToggle: { _ in },
                 onRename: { _ in },
                 onRequestDelete: { _ in },
@@ -260,27 +301,39 @@ enum ComponentCatalog {
             }
         },
         entry("DailyWeatherCard", .business) {
-            TripBusinessComponents.DailyWeatherCard(day: BusinessComponentPreviewFixtures.weatherDayDefault)
+            TripBusinessComponents.DailyWeatherCard(day: TripWeatherDayProjection.default)
         },
-        entry("DailyWeatherSummaryRow", .business) {
-            TripBusinessComponents.DailyWeatherSummaryRow(day: BusinessComponentPreviewFixtures.weatherDayRowKnown)
+        ComponentCatalogEntry(
+            id: "DailyWeatherSummaryRow", category: .business,
+            stateIDs: ["default", "compact", "compactUnavailable", "inline", "inlineUnavailable"]
+        ) { state in
+            guard ["default", "compact", "compactUnavailable", "inline", "inlineUnavailable"].contains(state) else { return nil }
+            let isInline = state == "inline" || state == "inlineUnavailable"
+            let isUnavailable = state == "compactUnavailable" || state == "inlineUnavailable"
+            return AnyView(
+                TripBusinessComponents.DailyWeatherSummaryRow(
+                    day: isUnavailable ? .unavailable : .knownWithPlace,
+                    presentation: isInline ? .inline : .standard
+                )
+                .frame(width: state == "default" ? nil : (isInline ? 98 : 178))
+            )
         },
         entry("ElevationProfile", .business) {
-            RouteBusinessComponents.ElevationProfile(projection: BusinessComponentPreviewFixtures.elevationProfile)
+            RouteBusinessComponents.ElevationProfile(projection: ElevationProfileProjection.default)
         },
         entry("EquipmentDeletionImpact", .business) {
-            EquipmentDeletionImpact(impact: BusinessComponentPreviewFixtures.deletionImpact)
+            EquipmentDeletionImpact(impact: PersonalEquipmentDeletionImpact.referenced)
         },
         entry("EquipmentListRow", .business) {
             EquipmentListRow(
-                projection: BusinessComponentPreviewFixtures.personalEquipmentRow,
+                projection: EquipmentListRowProjection.sample,
                 onActivate: { _ in },
                 onEdit: { _ in },
                 onDelete: { _ in }
             )
         },
         entry("FocusTripSummary", .business) {
-            FocusTripSummary(model: HomePreviewFixtures.focusComplete, onOpen: {})
+            FocusTripSummary(model: FocusTripSummaryModel.complete, onOpen: {})
                 .frame(height: 700)
         },
         entry("GearRing", .business) {
@@ -290,22 +343,22 @@ enum ComponentCatalog {
         },
         entry("GenerationRouteSummaryCard", .business) {
             SharedBusinessComponents.GenerationRouteSummaryCard(
-                projection: BusinessComponentPreviewFixtures.generationRouteDefault
+                projection: GenerationRouteSummaryProjection.default
             )
         },
         entry("GenerationWaitingView", .business) {
             SharedBusinessComponents.GenerationWaitingView(
-                projection: BusinessComponentPreviewFixtures.generationWaiting,
+                projection: GenerationWaitingProjection.default,
                 reduceMotionOverride: true
             )
             .frame(minHeight: 560)
         },
         entry("HeatmapCalendar", .business) {
-            SharedBusinessComponents.HeatmapCalendar(days: BusinessComponentPreviewFixtures.heatmapDefault)
+            SharedBusinessComponents.HeatmapCalendar(days: TripHeatmapDayProjection.sampleYear)
         },
         entry("InlineEquipmentEditor", .business) {
             SharedBusinessComponents.InlineEquipmentEditor(
-                projection: BusinessComponentPreviewFixtures.inlineEquipmentDefault,
+                projection: InlineEquipmentEditorProjection.default,
                 onChangeField: { _, _ in },
                 onChangeQuantity: { _ in },
                 onCancel: {}
@@ -313,45 +366,46 @@ enum ComponentCatalog {
         },
         entry("InlineListNameEditor", .business) {
             InlineListNameEditor(
-                projection: BusinessComponentPreviewFixtures.inlineListDefault,
+                projection: InlineListNameEditorProjection.default,
                 onChangeName: { _ in },
                 onCancel: {}
             )
         },
-        entry("PersonalEquipmentForm", .business) {
-            PersonalEquipmentForm(
-                projection: BusinessComponentPreviewFixtures.personalEquipmentFormDefault,
-                onChangeField: { _, _ in }
-            )
+        ComponentCatalogEntry(
+            id: "PersonalEquipmentForm", category: .business,
+            stateIDs: PersonalEquipmentFormProjection.previewStates.map { $0.0 }
+        ) { stateID in
+            guard let projection = PersonalEquipmentFormProjection.previewStates.first(where: { $0.0 == stateID })?.1 else { return nil }
+            return AnyView(PersonalEquipmentForm(projection: projection, onChangeField: { _, _ in }))
         },
         entry("PersonalEquipmentSummaryCard", .business) {
             PersonalEquipmentSummaryCard(
-                summary: BusinessComponentPreviewFixtures.personalEquipmentSummary,
+                summary: PersonalEquipmentSummary.default,
                 onActivate: {}
             )
         },
         entry("ProfileIdentityHeader", .business) {
             AccountEquipmentBusinessComponents.ProfileIdentityHeader(
-                profile: BusinessComponentPreviewFixtures.profileDefault,
+                profile: ProfileProjection.default,
                 onSelectAvatar: {}
             )
         },
         entry("RouteFactSection", .business) {
-            RouteBusinessComponents.RouteFactSection(projection: BusinessComponentPreviewFixtures.routeSafetyFacts)
+            RouteBusinessComponents.RouteFactSection(projection: RouteFactSectionProjection.safety)
         },
         entry("RouteImageGallery", .business) {
             RouteBusinessComponents.RouteImageGallery(
-                images: BusinessComponentPreviewFixtures.routeImages
+                images: RouteImageProjection.samples
             ) { image in
-                RouteDeterministicImageSurface(style: BusinessComponentPreviewFixtures.imageStyle(for: image.id))
+                RouteDeterministicImageSurface(style: RouteImageProjection.sampleStyle(for: image.id))
             }
         },
         entry("RouteIntroduction", .business) {
-            RouteBusinessComponents.RouteIntroduction(projection: BusinessComponentPreviewFixtures.routeIntroduction)
+            RouteBusinessComponents.RouteIntroduction(projection: RouteIntroductionProjection.default)
         },
         entry("RouteListRow", .business) {
             RouteBusinessComponents.RouteListRow(
-                projection: BusinessComponentPreviewFixtures.routeRowDefault,
+                projection: RouteListRowProjection.default,
                 onSelect: { _ in }
             ) {
                 RouteDeterministicImageSurface(style: .ridge)
@@ -359,29 +413,29 @@ enum ComponentCatalog {
         },
         entry("RouteMap", .business) {
             RouteBusinessComponents.RouteMap(
-                projection: BusinessComponentPreviewFixtures.routeMap,
+                projection: RouteMapProjection.default,
                 onSelectPoint: { _ in }
             )
             .frame(height: 700)
         },
         entry("RoutePointDetail", .business) {
             RouteBusinessComponents.RoutePointDetail(
-                projection: BusinessComponentPreviewFixtures.routePointDetail,
+                projection: RoutePointDetailProjection.default,
                 onDismiss: {}
             )
         },
         entry("RoutePointSection", .business) {
             RouteBusinessComponents.RoutePointSection(
-                projection: BusinessComponentPreviewFixtures.routePointSection,
+                projection: RoutePointSectionProjection.keyPoints,
                 onFocusPoint: { _ in }
             )
         },
         entry("RouteReferenceDayList", .business) {
-            RouteBusinessComponents.RouteReferenceDayList(days: BusinessComponentPreviewFixtures.referenceDays)
+            RouteBusinessComponents.RouteReferenceDayList(days: RouteReferenceDayProjection.samples)
         },
         entry("RouteScene", .business) {
             RouteBusinessComponents.RouteScene(
-                projection: BusinessComponentPreviewFixtures.routeScene,
+                projection: RouteSceneProjection.default,
                 onSelect: { _ in }
             ) {
                 RouteDeterministicImageSurface(style: .ridge)
@@ -390,12 +444,12 @@ enum ComponentCatalog {
         },
         entry("RouteSegmentList", .business) {
             RouteBusinessComponents.RouteSegmentList(
-                projection: BusinessComponentPreviewFixtures.routeSegments,
+                projection: RouteSegmentListProjection.default,
                 onSelectSegment: { _ in }
             )
         },
         entry("RouteSummary", .business) {
-            RouteBusinessComponents.RouteSummary(projection: BusinessComponentPreviewFixtures.routeSummary)
+            RouteBusinessComponents.RouteSummary(projection: RouteSummaryProjection.default)
         },
         entry("TrekDayBadge", .business) {
             TripBusinessComponents.TrekDayBadge(
@@ -404,49 +458,144 @@ enum ComponentCatalog {
         },
         entry("TripCalendarCard", .business) {
             SharedBusinessComponents.TripCalendarCard(
-                projection: BusinessComponentPreviewFixtures.tripCalendarDefault,
+                projection: TripCalendarCardProjection.default,
                 onActivate: {}
             )
         },
-        entry("TripCoverHeader", .business) {
-            TripBusinessComponents.TripCoverHeader(
-                projection: BusinessComponentPreviewFixtures.tripCoverDefault
-            ) {
-                TripDeterministicCoverSurface()
+        ComponentCatalogEntry(
+            id: "TripExpeditionScene", category: .business,
+            stateIDs: ["default", "overview", "hikingDay", "arrival", "unavailable", "noticesLong", "accessible"]
+        ) { state in
+            let projection: TripExpeditionSceneProjection
+            switch state {
+            case "default", "overview": projection = .overview
+            case "hikingDay": projection = .hikingDay
+            case "arrival": projection = .arrival
+            case "unavailable": projection = .unavailable
+            case "noticesLong": projection = .noticesLong
+            case "accessible": projection = .accessible
+            default: return nil
             }
-        },
-        entry("TripDayArrangement", .business) {
-            TripBusinessComponents.TripDayArrangement(
-                projection: BusinessComponentPreviewFixtures.tripArrangementDefault
+            return AnyView(
+                TripBusinessComponents.TripExpeditionScene(projection: projection)
+                    .frame(maxWidth: 430)
+                    .frame(height: state == "accessible" ? 440 : 395)
+                    .background { TripBusinessComponents.TripExpeditionScene.Artwork(projection: projection) }
+                    .environment(\.dynamicTypeSize, state == "accessible" ? .accessibility2 : .large)
             )
-            .frame(height: 700)
+        },
+        ComponentCatalogEntry(
+            id: "TripCoverHeader", category: .business,
+            stateIDs: ["default", "longName", "largeText", "identity", "identityWithoutSubtitle", "identityOverviewDate", "identityDayEndpoints"]
+        ) { state in
+            guard ["default", "longName", "largeText", "identity", "identityWithoutSubtitle", "identityOverviewDate", "identityDayEndpoints"].contains(state) else { return nil }
+            let isIdentity = state.hasPrefix("identity")
+            let headerPresentation: TripBusinessComponents.TripCoverHeader<TripExpeditionCoverSurface>.Presentation
+            switch state {
+            case "identity":
+                headerPresentation = .identity(headline: "贡嘎环线", eyebrow: "全程总览", subtitle: "9月7日 — 9月10日")
+            case "identityWithoutSubtitle":
+                headerPresentation = .identity(headline: "山脊穿行", eyebrow: "DAY 02")
+            case "identityOverviewDate":
+                headerPresentation = .identity(headline: "贡嘎环线", eyebrow: "8月25–8月27日")
+            case "identityDayEndpoints":
+                headerPresentation = .identity(headline: "河谷入山", eyebrow: "老榆林 → 下日乌且营地")
+            default:
+                headerPresentation = .cover
+            }
+            return AnyView(
+                TripBusinessComponents.TripCoverHeader(
+                    projection: state == "default" || isIdentity ? .default : .longName,
+                    presentation: headerPresentation
+                ) { TripExpeditionCoverSurface() }
+                .environment(\.dynamicTypeSize, state == "largeText" ? .accessibility2 : .large)
+            )
+        },
+        ComponentCatalogEntry(
+            id: "TripDayArrangement", category: .business,
+            stateIDs: ["default", "referenceGuide", "referenceGuideLong", "hikeSectionUnavailable"]
+        ) { state in
+            if state == "default" {
+                return AnyView(TripBusinessComponents.TripDayArrangement(projection: .default).frame(height: 700))
+            }
+            let projection: TripDayArrangementProjection
+            switch state {
+            case "referenceGuide": projection = .referenceGuide
+            case "referenceGuideLong": projection = .referenceGuideLong
+            case "hikeSectionUnavailable": projection = .hikeSectionUnavailable
+            default: return nil
+            }
+            return AnyView(ScrollView {
+                TripBusinessComponents.TripDayArrangement(projection: projection)
+                    .padding(.horizontal, Spacing.pageHorizontal)
+                    .padding(.vertical, Spacing.md)
+            }
+            .frame(height: 760)
+            .environment(\.dynamicTypeSize, state == "referenceGuideLong" ? .accessibility2 : .large))
         },
         entry("TripDayOverviewEntry", .business) {
             TripBusinessComponents.TripDayOverviewEntry(
-                projection: BusinessComponentPreviewFixtures.tripDayOverviewEntryDefault,
+                projection: TripDayOverviewEntryProjection.default,
                 onActivate: {}
             )
         },
-        entry("TripEquipmentSummaryCard", .business) {
-            TripBusinessComponents.TripEquipmentSummaryCard(
-                projection: BusinessComponentPreviewFixtures.tripEquipmentDefault,
-                onActivate: {}
+        entry("TripEquipmentSourcePicker", .business) {
+            TripBusinessComponents.TripEquipmentSourcePicker.preview(.equipment)
+        },
+        ComponentCatalogEntry(
+            id: "TripEquipmentSummaryCard", category: .business,
+            stateIDs: [
+                "default", "compact", "compactPartialWeight", "compactReadonly",
+                "dashboard", "dashboardPartialWeight", "dashboardReadonly",
+                "icon", "iconPartialWeight", "iconReadonly",
+            ]
+        ) { state in
+            let projection: TripEquipmentSummaryProjection
+            let presentation: TripBusinessComponents.TripEquipmentSummaryCard.Presentation
+            let width: CGFloat?
+            switch state {
+            case "default":
+                projection = .default
+                presentation = .standard
+                width = nil
+            case "compact", "compactPartialWeight", "compactReadonly":
+                projection = state == "compactPartialWeight" ? .partialWeight : (state == "compactReadonly" ? .readonly : .default)
+                presentation = .compact
+                width = 140
+            case "dashboard", "dashboardPartialWeight", "dashboardReadonly":
+                projection = state == "dashboardPartialWeight" ? .partialWeight : (state == "dashboardReadonly" ? .readonly : .default)
+                presentation = .dashboard
+                width = 108
+            case "icon", "iconPartialWeight", "iconReadonly":
+                projection = state == "iconPartialWeight" ? .partialWeight : (state == "iconReadonly" ? .readonly : .default)
+                presentation = .icon
+                width = Spacing.navBarHeight
+            default:
+                return nil
+            }
+            return AnyView(
+                TripBusinessComponents.TripEquipmentSummaryCard(
+                    projection: projection,
+                    presentation: presentation,
+                    onActivate: {}
+                )
+                .frame(width: width)
             )
         },
         entry("TripEquipmentGearRings", .business) {
             TripBusinessComponents.TripEquipmentGearRings(
-                projection: BusinessComponentPreviewFixtures.tripEquipmentDefault.gearRings
+                projection: TripEquipmentSummaryProjection.default.gearRings
             )
         },
         entry("TripListRow", .business) {
             TripBusinessComponents.TripListRow(
-                projection: BusinessComponentPreviewFixtures.tripRowDefault,
+                projection: TripListRowProjection.default,
                 onActivate: { _ in }
             )
         },
         entry("TripRouteSummaryCard", .business) {
             TripBusinessComponents.TripRouteSummaryCard(
-                projection: BusinessComponentPreviewFixtures.tripRouteEntryDefault,
+                projection: TripRouteSummaryProjection.default,
                 onActivate: {}
             )
         },
@@ -455,22 +604,22 @@ enum ComponentCatalog {
         },
         entry("TripWeatherSummaryCard", .business) {
             TripBusinessComponents.TripWeatherSummaryCard(
-                projection: BusinessComponentPreviewFixtures.tripWeatherDefault,
+                projection: TripWeatherSummaryProjection.default,
                 onActivate: {}
             )
         },
         entry("TripWeatherTrendChart", .business) {
             TripBusinessComponents.TripWeatherTrendChart(
-                samples: BusinessComponentPreviewFixtures.tripWeatherDefault.samples
+                samples: TripWeatherSummaryProjection.default.samples
             )
         },
         entry("WeatherOverview", .business) {
             TripBusinessComponents.WeatherOverview(
-                projection: BusinessComponentPreviewFixtures.weatherOverviewDefault
+                projection: WeatherOverviewProjection.default
             )
         },
         entry("WeatherSummary", .business) {
-            WeatherSummary(model: HomePreviewFixtures.weatherAvailable)
+            WeatherSummary(model: WeatherSummaryModel.available)
         },
     ]
 

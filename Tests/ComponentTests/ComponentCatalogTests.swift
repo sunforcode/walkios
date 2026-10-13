@@ -7,10 +7,10 @@ final class ComponentCatalogTests: XCTestCase {
     func testCatalogMatchesAuthoritativeComponentInventory() {
         let entries = ComponentCatalog.entries
 
-        XCTAssertEqual(entries.count, 79)
-        XCTAssertEqual(Set(entries.map(\.id)).count, 79)
+        XCTAssertEqual(entries.count, 81)
+        XCTAssertEqual(Set(entries.map(\.id)).count, 81)
         XCTAssertEqual(entries.filter { $0.category == .common }.count, 37)
-        XCTAssertEqual(entries.filter { $0.category == .business }.count, 42)
+        XCTAssertEqual(entries.filter { $0.category == .business }.count, 44)
         XCTAssertEqual(Set(entries.map(\.id)), Set(Self.expectedComponentIDs))
     }
 
@@ -42,6 +42,24 @@ final class ComponentCatalogTests: XCTestCase {
         XCTAssertNil(ComponentPreviewRequest(arguments: ["Walk"]))
     }
 
+    func testSelectInputExposesApprovedCalibrationStates() throws {
+        let entry = try XCTUnwrap(ComponentCatalog.entry(id: "SelectInput"))
+        let states = ["default", "empty", "selected", "disabled", "error"]
+        XCTAssertEqual(entry.category, .common)
+        XCTAssertEqual(Set(entry.stateIDs), Set(states))
+        for state in states { XCTAssertNotNil(entry.makeView(state), state) }
+        XCTAssertNil(entry.makeView("unknown"))
+    }
+
+    func testEquipmentFormExposesApprovedSelectionStates() throws {
+        let entry = try XCTUnwrap(ComponentCatalog.entry(id: "PersonalEquipmentForm"))
+        let states = ["default", "create", "categorySelected", "typeSelected", "edit",
+                      "referenceWeightConfirmation", "validationError", "saveFailed"]
+        XCTAssertEqual(Set(entry.stateIDs), Set(states))
+        for state in states { XCTAssertNotNil(entry.makeView(state), state) }
+        XCTAssertNil(entry.makeView("unknown"))
+    }
+
     private static let commonComponentIDs = [
         "AvatarButton", "Card", "ConfirmationDialog", "ContentSection", "DangerAction", "DateInput",
         "EmptyState", "ErrorView", "FixedActionArea", "FormField", "IconButton", "InfoTag", "ListRow",
@@ -53,7 +71,7 @@ final class ComponentCatalogTests: XCTestCase {
     ]
 
     private static let businessComponentIDs = [
-        "AuthPanel", "ChecklistItemRow", "ChecklistPanel", "DailyWeatherCard",
+        "AuthPanel", "ChecklistItemRow", "ChecklistPanel", "DailyWeatherCard", "DailyWeatherSummaryRow",
         "ElevationProfile", "EquipmentDeletionImpact", "EquipmentListRow", "FocusTripSummary",
         "GearRing", "GenerationRouteSummaryCard", "GenerationWaitingView", "HeatmapCalendar",
         "InlineEquipmentEditor", "InlineListNameEditor", "PersonalEquipmentForm", "PersonalEquipmentSummaryCard", "ProfileIdentityHeader",
@@ -61,7 +79,7 @@ final class ComponentCatalogTests: XCTestCase {
         "RouteMap", "RoutePointDetail", "RoutePointSection", "RouteReferenceDayList", "RouteScene",
         "RouteSegmentList", "RouteSummary", "TrekDayBadge", "TripCalendarCard", "TripCoverHeader", "TripDayArrangement",
         "TripDayOverviewEntry", "TripEquipmentGearRings",
-        "TripEquipmentSummaryCard", "TripListRow", "TripRouteSummaryCard",
+        "TripEquipmentSourcePicker", "TripEquipmentSummaryCard", "TripListRow", "TripRouteSummaryCard",
         "TripStatusBadge", "TripWeatherSummaryCard", "TripWeatherTrendChart", "WeatherOverview", "WeatherSummary",
     ]
 

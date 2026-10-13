@@ -86,10 +86,26 @@ struct PersonalEquipmentSummaryCard: View {
 }
 
 #if DEBUG
+extension PersonalEquipmentSummary {
+    static let `default` = PersonalEquipmentSummary(
+        equipmentItemCount: 12,
+        equipmentListCount: 3,
+        knownTotalWeight: EquipmentWeight(grams: 8_420),
+        missingWeightItemCount: 2
+    )
+
+    static let empty = PersonalEquipmentSummary(
+        equipmentItemCount: 0,
+        equipmentListCount: 0,
+        knownTotalWeight: EquipmentWeight(grams: 0),
+        missingWeightItemCount: 0
+    )
+}
+
 #Preview("PersonalEquipmentSummaryCard.default") {
     BusinessComponentPreviewHost {
         PersonalEquipmentSummaryCard(
-            summary: BusinessComponentPreviewFixtures.personalEquipmentSummary,
+            summary: PersonalEquipmentSummary.default,
             onActivate: {}
         )
     }
@@ -98,7 +114,7 @@ struct PersonalEquipmentSummaryCard: View {
 #Preview("PersonalEquipmentSummaryCard.empty") {
     BusinessComponentPreviewHost {
         PersonalEquipmentSummaryCard(
-            summary: BusinessComponentPreviewFixtures.personalEquipmentSummaryEmpty,
+            summary: PersonalEquipmentSummary.empty,
             onActivate: {}
         )
     }

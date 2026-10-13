@@ -12,6 +12,10 @@
 
 本目录不是独立产品事实来源。总规范与本目录冲突时，总规范优先。
 
+## 平台编写标准
+
+[SwiftUI 编写标准](./swiftui-coding.md)定义 View／State 职责拆分、状态所有权与修改入口、文件共置及公共基础层复用方式，细化本文件的 R-DEP。该标准已批准；存量代码迁移需另行批准和验证，不代表现有实现已全部符合。本文件继续作为唯一平台规范入口。
+
 ## 可以定义
 
 - Data 到 Swift Model、API 到客户端请求/响应/错误模型的映射规则；
@@ -55,6 +59,103 @@
 
 2026-09-28 验证：先确认小数重量解码、准备字段丢失、身份重复编码及响应版本校验的失败测试，再完成修复。隔离本任务提交树后，WalkData 独立测试 58 项全部通过；`Walk` scheme 在 `iPhone 17 Pro / iOS 26.5` 上的装备 Service、ViewModel、Profile、APIClient 与 TripDataAccess 相关回归执行 88 项，87 项通过、1 项因未启用 `-walkLiveBackendTest` 跳过。该证据覆盖客户端单测与编译，不作为真实后端联调或新增页面验收证据。
 
+## 四个一级区域承接
+
+本批承接根仓 Change `promote-equipment-and-trips-tabs`，并按纠正 Change `restore-trip-tab-home` 恢复行程根的原首页承载。页面范围与行为引用 [app-flow](../../openspec/specs/app-flow/spec.md)、[account-access](../../openspec/specs/account-access/spec.md) 和 [App Structure](../../docs/ui/app-structure.md)。
+
+- `AppTab` 映射四个区域；`AppShellState` 持有独立 NavigationStack 路径。`RootView` 装配个人区域的游客/会话分支；身份变化时销毁旧个人模型并清除个人导航与版本缓存；被动重认证只暂存当前目标路径，重新授权读取，取消或退出则丢弃。
+- `HomeView` 承载 `PAGE-HOME`，由 `AppTab.trips` 作为根页装配；`Home` 是 Feature 代码域，不增加第五个一级区域。`TripListView` 以 UtilityPage 承载二级 `PAGE-TRIPS`，日历由 App 层在来源任务栈推入；列表查找路线继续在当前栈推入。
+- 行程根的焦点读取由注入 `PersonalTripServicing` 的 `HomeViewModel` 承载；会话变化交由 App 装配重建或重置。普通认证完成先恢复来源页，焦点加载与重试留在 Home，不进入登录完成流程。
+- `EquipmentListView` 的 `.root` 使用 PageShell、根页滚动与 FixedActionArea；`.stack` 使用 UtilityPage 同一生产内容。行程生成与行程装备中的管理往返留在各自来源栈，不切换 Tab。
+- 装备概况生产组件 `PersonalEquipmentSummaryCard` 位于 Shared；`ProfileViewModel` 只加载本页账户与日历。登录普通承接不依赖焦点查询。
+- `TripEquipmentSession` 在本次认证会话中按 trip ID 复用行程装备模型，页面返回后未确认的选入命令仍可用同一标识重试；普通再进入重新读取，身份变化清空缓存。
+- 行程装备写入的版本通知由该会话转发，即使已返回详情仍刷新摘要；会话清空后丢弃旧响应通知。页面少量分区使用普通 VStack，避免延迟分区在滚动与自适应操作区交界反复估算高度。
+- `PageShell` 顶部仍固定窗口安全区以抑制转场尖峰；底部由外层 GeometryReader 读取实际系统安全区，固定操作避让 Tab，不写死系统栏高度。
+- `TripEquipmentSourcePicker` 通过不可变 Projection 和事件承载个人装备/清单选择；VM 通过 `TripEquipmentPreparing` 使用请求版本与固定幂等键消费完整服务端快照。重量输入保留 Double；只改名称不覆盖参考重量。
+- `FocusTripSummary` 与 `WeatherSummary` 恢复在 Home 域的生产组件承载；Page、共置 Preview 与 Debug 组件目录使用同一实现。共享焦点 DTO、API 与业务算法保持原合同。
+
+2026-09-28 `promote-equipment-and-trips-tabs` 验证：`Walk` scheme 在 `iPhone 17 Pro / iOS 26.5` 上执行 571 项，570 通过、1 项因未启用真实后端测试跳过；包含导航、认证、装备基础管理、26 项行程选入测试及 3 项会话延迟完成测试。WalkData 独立测试 70 项通过，平台映射结构测试 8 项通过。`WalkKeyFlows/FourTabEquipmentUITests` 的游客导航与取消登录、装备新增/选入/追加/管理往返、生产来源选择组件独立展示共 3 项通过；截图经人工检查，UI 使用默认 Mock 场景和同一生产页面，不作为真实后端联调证据。
+
+2026-09-28 `restore-trip-tab-home` 验证：`Walk` scheme 在上述模拟器执行 594 项，593 通过、1 项真实后端用例按配置跳过；包含 Home 的 19 项状态、取消与身份隔离测试。平台映射结构检查 8 项通过。四 Tab UI 的装备准备往返、游客导航、来源选择组件、两个首页组件独立展示通过；首页登录/焦点详情/我的日历二级列表往返首轮暴露整页手势合并游客按钮点击区域的问题，限定手势仅在焦点态启用后，该用例重跑通过且全量单测再次通过。原首页游客/焦点、二级列表、独立组件截图已检查。UI 使用默认 Mock 和生产实现，不作为真实后端联调证据；日志为 `/tmp/walk-restore-home-unit-final.log`、`/tmp/walk-restore-home-ui.log` 与 `/tmp/walk-restore-home-navigation-green.log`。
+
+同批 `WalkComponents/WalkComponentTests` 4 项通过，校验当前 81 项组件目录、分类、default 构造和预览参数；日志 `/tmp/walk-restore-home-components.log`。
+
+2026-09-28 装备新增入口修复：承接 `PAGE-MY-EQUIPMENT` 的固定新增操作与 `personal-equipment` 的个人装备管理合同，修复初次列表读取中或失败时错误隐藏新增入口的映射。可见性由 `EquipmentListState` 统一计算，装备分段不依赖集合读取；清单分段与游客承载保持既有规则。最小回归先复现两个失败，修复后装备状态、编辑与页面结构相关单测 41 项通过，平台映射 8 项通过；模拟器生产页面的新增保存/行程选入/追加清单/管理往返及游客登录取消共 2 项 UI 测试通过。加载和失败状态的入口条件由单测验证，UI 新增链路使用默认 Mock；未作真实后端写入。日志 `/tmp/walk-equipment-add-entry-red.log`、`/tmp/walk-equipment-add-entry-green.log`、`/tmp/walk-equipment-add-entry-ui.log`。不改 Data/API 或共享页面壳。
+
+同日补测 `FourTabEquipmentUITests/testEquipmentListCanRenameAndEditMembers` 通过：生产装备页的清单重命名、添加成员、修改数量、移除成员，以及折叠后重新展开读取结果；默认 Mock 数据、上述模拟器，日志 `/tmp/walk-equipment-list-edit-ui.log`。此次只补 UI 回归证据，清单仍按既有合同页内编辑。
+
+本批承接根仓 Change `add-equipment-classification-selectors`，按 [PersonalEquipmentForm](../../docs/ui/components/business/components/personal-equipment-form/spec.md) 与 [PAGE-EQUIPMENT-EDIT](../../docs/ui/pages/PAGE-EQUIPMENT-EDIT/spec.md) 接入分类/类型选择。`EquipmentClassificationOptions` 将 [EquipmentCategory / CatalogEquipmentType](../../docs/data/equipment-schema.md) 登记映射为已有 WalkData 枚举的中文显示与候选；Page 向表单 Projection 传入选择和候选，生产 `SelectInput` 承载菜单单选。`EquipmentEditDraft` 保存选择，ViewModel 处理联动、dirty、请求映射和参考重量确认；现有 Service/DTO 承接字段，不新增数据访问分支。组件共置样例与 Debug 目录登记选择及参考重量提示状态，页面与独立展示复用生产实现。
+
+2026-09-28 本批先确认缺少分类选择框的 UI 失败，再完成实现。既定 iPhone 17 Pro / iOS 26.5 上 `Walk` 单测 615 项（614 通过、1 在线 opt-in 跳过），`WalkComponents` 6 项、定向 `WalkKeyFlows` 3 项全部通过；`WalkData` 装备 API 合同 29 项、平台登记检查 8 项通过。UI 覆盖背包/睡袋新增保存与编辑回显、表单独立状态、重量小数输入及行程选入回归，截图已查看。证据为 `/tmp/walk-equipment-selectors-{unit,api,ui-green,component}.log` 与 `/tmp/walk-equipment-selectors-attachments/`；红测试为 `/tmp/walk-equipment-selectors-ui-red.log`。未验证真实后端写入或其他设备。
+
+## 行程详情 AIGC 视觉承接
+
+### 紧凑 Timeline 与场景叠层精简
+
+2026-10-08 承接根仓 `define-compact-timeline-hierarchy` 与 `simplify-trip-detail-overlays`。权威为 [Timeline](../../docs/ui/components/common/timeline/spec.md)、[PAGE-TRIP-DETAIL](../../docs/ui/pages/PAGE-TRIP-DETAIL/spec.md)、[TripExpeditionScene](../../docs/ui/components/business/components/trip-expedition-scene/spec.md) 与 [app-flow](../../openspec/specs/app-flow/spec.md) 对应 Requirement。`TimelineSummaryContent` 是通用Timeline内部两层内容承载，不新增Component ID；Page只传标题与可选副标题并拥有区域尺寸。摘要投影与完整每日投影分离，不改原DTO或来源。场景不绘制角标/提醒，但保留可访问艺术语义和已有非空提醒样例作为反证。图片、安全区与日期导航沿用单图批次。
+
+本轮先记录界面精简结构测试失败，再实施；独立复核发现端点同名和交通地点的限定遗漏，补2项失败回归并修正。最终在iPhone17Pro/iOS26.5模拟器上66项定向单测、4项UITest通过，涵盖正式全程/五日、切日与每日详情返回、Timeline七态和场景六态。证据位于 `output/compact-trip-timeline/UnitFinal.xcresult`、`Component.xcresult`、`UIFinal.xcresult`、`final-shots/` 与 `component-shots/`，截图已查看。66%宽按正式页实际frame验证，约200pt含标题按结构与实际截图核验，不以AX联合内容范围代替可见裁切范围。保留输入真实长名称，不截取攻略造短名；来源数据不变。该证据不代表真实服务、真机、全仓回归或发布通过。
+
+### 单张满屏场景承接
+
+2026-10-07 承接根仓 Change `use-single-fullscreen-trip-artwork`，UI 权威引用 [PAGE-TRIP-DETAIL](../../docs/ui/pages/PAGE-TRIP-DETAIL/spec.md) 与 [TripExpeditionScene](../../docs/ui/components/business/components/trip-expedition-scene/spec.md)。平台将同一生产 Scene 的艺术子层用于全屏背景，前景继续承载海拔、提醒和既有手势；`TripDetailView` 不自行复制图片加载与坐标映射。仅艺术背景忽略系统安全区，安全内容沿用现有 SwiftUI 承载并按实际内容画布裁切；Debug 目录与共置 Preview 不再额外绘制森林图。图片资源与数据投影不变，本地/远程图片共用 aspect-fill 几何，人工标注限于场景与正文可视范围交集。
+
+本轮 iPhone 17 Pro / iOS 26.5 定向回归58项通过；正式行程六态UITest与独立组件六态UITest各1项通过，截图已检查。证据位于 `output/single-fullscreen-trip-artwork/UnitFinal.xcresult`、`UIVerified.xcresult`、`Component.xcresult` 与 `verified-shots/`。底部截图与源图差分核实所采样区域没有前景字形残留，AX滚动容器的逻辑范围不作为裁切后的可见范围。该证据限定本机模拟器和Mock样例，不代表真实服务、其他机型、全仓回归或发布验证；下方历史记录不充当本次验收。
+
+### 亚丁五日 Mock 素材与样例
+
+2026-09-29 按用户要求增加本地亚丁五日样例，承接下述既有行程/路线合同与场景组件，不改变共享 DTO 或真实服务。`route-yading-5d` / `route-yading-5d-v1` 与 `trip-yading-5d` 使用独立样例身份；既有贡嘎与长海子样例保留。样例来源为已核对的亚丁 KMZ、主轨迹与五日分段，出行日期为演示条件，天气缺失不补造预报。
+
+`YadingMockScene` 在显式 Mock 上下文、路线版本、行程和五个自然日身份均匹配时选择 `YadingSceneOverview` 与 `YadingSceneDay1…5`。每天的徒步路径必须是冻结主路径的完整连续子序列，海拔样本与主路径逐点对应后才切片归零；首日曲线从圣水门后的徒步段开始，不把前段电瓶车接驳算作徒步。艺术图没有地理标定。按根仓 `annotate-yading-offline-mock` 与 `TripExpeditionScene` 合同，亚丁新增独立人工画面节点，沿用贡嘎同一生产叠加渲染器，节点文字源于该样例已有起讫与关键点；不复用贡嘎节点或宣称地理精度。完整冻结轨迹指纹、分日路径和所展示关键点匹配后才启用，失配时不套用。Mock跳过独立远程场景读取，本地底图和矢量叠加可离线显示；不改变真实服务数据模式。无可信对应时保持原缺失表达。
+
+路线图片由 `RouteArtworkView` 解析六个明确的 `asset://` 本地素材引用；发现、全部、搜索与图库复用同一加载节点，远程图片继续使用 HTTP(S)。本地素材是场景插画，真实路线仍通过主轨迹和参考分日地图显示。验证入口为 `YadingMockPresentationTests`、`RouteArtworkSourceTests`、WalkData 的 `YadingMockFixtureTests` 与 `YadingMockUITests`。
+
+本批验证：WalkData 82 项通过；iOS 定向单测 190 项，189 通过、1 项真实后端 opt-in 跳过；平台登记检查 8 项通过。iPhone 17 Pro / iOS 26.5 的亚丁 UI 全链路通过，覆盖路线入口、地图、五日场景、重复选日、滑动、日详情返回、天气及装备；最终截图已检查。证据见 `output/verification/yading-mock/README.md`。未执行真实后端写入。
+
+2026-09-30 `annotate-yading-offline-mock` 验证：先复现旧亚丁缺少标注及来源失配仍复用的问题；新增映射后，亚丁、贡嘎投影及remote隔离定向50项单测通过。上述模拟器的 `YadingMockUITests/testYadingOverviewAndFiveDaysLocalOverlayVisualReview` 经正式我的/日历入口及无效API域名Mock配置完成六态，1项UITest通过，六张截图已查看。现有六张底图hash未变，使用同一生产节点导出六张1448×1086合成PNG及ZIP，见 `output/yading-offline-scenes/verification.json`。该证据仅覆盖本地Mock场景与标注，无真实服务缓存、整App离线或新TestFlight发布声明。
+
+### 独立远程场景承接
+
+本批承接根仓 Change `serve-route-artwork`，共享形状与匹配不变量引用 [scene-artwork-schema](../../docs/data/scene-artwork-schema.md)，请求与鉴权引用 [scene-artwork-api](../../docs/api/scene-artwork-api.md)；页面与组件继续使用本入口既有 `PAGE-TRIP-DETAIL`、`PAGE-ROUTE-DETAIL`、`TripExpeditionScene` 和 `RouteImageGallery` 映射。
+
+- `WalkData/SceneArtworkModels.swift` 承载独立场景 DTO 与上下文验证，`SceneArtworkAPI.swift` 经现有 APIClient 发起独立读取；`RouteService`、`PersonalTripService` 不把艺术字段混入原有路线/个人行程事实 DTO。场景请求本轮无业务离线返回资格。
+- Route / Trip 的主投影先完成发布，场景由页面独立 `.task(id:)` 读取。ViewModel 以主投影读取批次和请求生命周期拒绝取消、重试、变更或离页后的迟到结果；个人页面继续由既有会话装配在身份变化时销毁。场景失败和旧服务 404 只使艺术区域降级，不替换主页面 loading/error。
+- `TripExpeditionPresentation` 以明确实际日身份选图，保留显式 Mock 资源映射；真实模式缺图使用中性渐变占位。`TripExpeditionScene` 通过 `AsyncImage` 装载远程图，URL 变化重建图片节点；当前图片裁切承载以 `use-single-fullscreen-trip-artwork` 为准，日期/滑动/深入交互保留。图片关联不授予海拔、地标或示意线映射。此实现不承诺预加载或离线图片缓存。
+- `RouteDetailPresentation.sceneImages` 与原事实 `images` 分离，`RouteDetailViewSupport` 复用正式 `RouteImageGallery` 承载独立“场景示意”组；组名和参考日关联标签来自投影上下文，不作为图片自带 caption。场景图片在原图库空间内等比完整显示。
+
+2026-09-30 验证：先建立独立 API/DTO 与 iOS 投影失败测试，WalkData 89 项通过；上述模拟器的 iOS 定向 192 项执行，191 项通过、1 项既有真实后端 opt-in 跳过。`RemoteSceneArtworkUITests` 使用 `remoteOnly` 连接本机真实 Spring Boot 服务，从公开亚丁路线进入独立图库，六张 HTTP 图片均已截图检查，1 项 UI 用例通过。该结果不代表线上部署或个人行程 UI 的真实服务验收；个人场景关联由请求合同与生命周期单测覆盖。可复核证据见 [remote-scenes/README.md](../output/verification/remote-scenes/README.md)。
+
+### 已采纳参考日攻略承接
+
+本批承接根仓 Change `preserve-reference-itinerary-content`；日级值与未知徒步区段引用 [trip-schema](../../docs/data/trip-schema.md)，明确采纳关系引用 [trip-composition-relations](../../docs/data/trip-composition-relations.md)，交换形状引用 [personal-trip-api](../../docs/api/personal-trip-api.md)。页面继续由既有 `PAGE-TRIP-BROWSE` 与 `TripDayArrangement` 承载，不增加组件或生成入口。
+
+- `PersonalTripRouteGuideModels.swift` 承载独立冻结参考资料，`PersonalTripDay` 与 `PersonalTripAction` 增量解码上游可选值。旧响应没有攻略时保持缺失；iOS 不生成参考日关系、不重写日序/日期/行动、不在读取时查询当前公共路线补资料。
+- `TripRouteGuideProjection` 只格式化同一天已有的文字、置信、来源和参考统计；`TripBrowsePagePlan` 在行动与点位之后、天气之前加入日级 `.routeGuide` 内容块。实际徒步摘要仍只读取实际行动，参考数值与路径不参与实际指标或海拔计算。
+- `TripDayArrangement` 复用既有 Panel、正文和 warning 颜色承载“路线参考”，状态没有已知值时仍可见；参考指标附活动口径说明，未知徒步段通过原徒步块局部表达。长正文完整换行，不设 lineLimit 或固定内容高度。`DayPageCell` 继续由内层 UICollectionView 的自适应 UIHostingConfiguration 承接超屏内容，一个自然日仍为一页。
+- 校准样例与组件共置，Debug 目录登记 `referenceGuide`、`referenceGuideLong`、`hikeSectionUnavailable`；长文校准同时验证可访问字号。新增攻略块在可访问字号下使用 iOS 语义字体放大，普通字号继续消费既有字体 Token，不修改全局字号系统或主图布局。
+
+2026-09-30 验证：最小 DTO 与投影 RED 后完成实现，WalkData 94 项通过，包含显式输入本次真实 HTTP 五日生成响应的解码回归；iOS 定向 144 项执行，143 项通过、1 项既有 live opt-in 跳过。长日内容通过真实 SwiftUI 测高验证超屏可增长；同一生产组件的普通/长文可访问字号/未知徒步区段三状态通过 2 项 UI 用例，最终截图已检查，参考口径提示与长文末尾来源完整可达。平台登记结构 8 项通过。证据见 [reference-guide/README.md](../output/verification/reference-guide/README.md)；组件校准截图不作为真实个人账号行程 UI 或线上部署证据。
+
+### 既有场景承接
+
+本批承接根仓 Change `polish-trip-detail-aigc`；上游引用 [app-flow](../../openspec/specs/app-flow/spec.md) 的「App 提供四个公开一级区域」「个人行程根页面承接从属任务」「自然日详情按自然日逐页阅读」、[PAGE-TRIP-DETAIL](../../docs/ui/pages/PAGE-TRIP-DETAIL/spec.md)、[PAGE-TRIP-BROWSE](../../docs/ui/pages/PAGE-TRIP-BROWSE/spec.md)、[TripExpeditionScene](../../docs/ui/components/business/components/trip-expedition-scene/spec.md)、[TripCoverHeader](../../docs/ui/components/business/components/trip-cover-header/spec.md)、[DailyWeatherSummaryRow](../../docs/ui/components/business/components/daily-weather-summary-row/spec.md)、[TripEquipmentSummaryCard](../../docs/ui/components/business/components/trip-equipment-summary-card/spec.md) 与 [Token](../../docs/ui/tokens.md)。
+
+- `AppTab`、`AppShellState` 与 `RootView` 继续使用系统 `TabView` 和来源 `NavigationStack`；Home 保持原生产焦点与数据路径。
+- `TripDetailView` 使用自定义固定构图与悬浮导航；本页选择状态由纯展示逻辑承载，原 `TripDetailViewModel` 请求编排与真实 DTO 保留。通常宽度的纵向内容滚动归底部 Timeline 区；日期横向滚动和场景横划分别拥有自己的手势范围。可访问字号的适配不得裁掉操作。
+- `TripCoverHeader.identity` 承载顶部身份；`TripExpeditionScene` 使用 Asset Catalog 的无字图片、独立矢量路径/地标示意与海拔数据层。`coverAvailable` 仍表达真实路线媒体是否可用，艺术资源不会将其置为 true。字体由 `AppTypography.editorialTitle` / `Font.editorialTitle` 映射既有 Token。
+- `DailyWeatherSummaryRow.inline` 与装备入口是显式外观；日天气与装备分别转发既有导航回调，装备读取仍来自本次详情快照，不新增按日装备请求。
+- 演示场景配置由明确的 mock 上下文注入，业务 DTO、网络 Service 与后端事实不变；展示投影负责验证适用条件并切分演示剖面。真实数据没有可信日界时不沿用该分段。样例资源配置不承担普通行程路线推导。
+- 新组件在 `Walk/Features/Trips/Components/TripExpeditionScene.swift` 共置生产实现、Projection 与 DEBUG 校准样例；`ComponentCatalog` 登记 default、overview、hikingDay、arrival、unavailable；default 映射 overview，独立 Preview 使用其余四个同名状态。Page、SwiftUI Preview 与目录都使用这一生产实现。
+- 日期选择、边界与演示数据隔离由单元测试，页面两次场景激活、幂等日期、返回恢复、固定滚动与独立入口由适用 UI 测试承接；登记检查仍使用本入口下方命令。此处是映射决策，不是本轮验证完成证明。
+
+同日承接 `refine-trip-detail-timeline-hierarchy`，按上述 Page 和 [Timeline](../../docs/ui/components/common/timeline/spec.md)、[Notice](../../docs/ui/components/common/notice/spec.md) 合同，`TripDetailView` 消费 `Timeline.compact`、`Notice.inline`、`TripEquipmentSummaryCard.icon`；默认外观继续服务其他消费者。日号、月份边界、完整可访问日期与关键时间由 `TripExpeditionPresentation` 投影，关键时间独立于可截短的普通说明。页面负责窄栏宽度与大字号适配，公共路线回调移入系统 `Menu`。现有图片、轨迹和海拔组件保持原生产实现。组件校准状态通过共置 Preview 与同一 `ComponentCatalog` 承载。
+
+同日后续承接 `reorganize-trip-detail-scene-information`，以同一 Page / Scene / Cover 合同为权威：`TripExpeditionPresentation` 提供上下文眉题与指标投影，Page 将 `MetricGroup.inline` 组合在 `TripCoverHeader.identity` 下。Scene 的独立叠层承载海拔与提醒滚动窗口，和场景激活 Button 分开接收手势；提醒不再由 Page 底部重复组合。常规布局将 Timeline 标题置于滚动容器外，紧凑及可访问字号使用 `LazyVStack` 的 pinned Section header。Scene 与 Cover 的新增校准样例仍共置于原生产组件文件并登记到 `ComponentCatalog`。
+
+随后承接 `blend-trip-detail-artwork`：Page 用独立 `GeometryReader` 将 `TripAtmosphere` 装饰背景铺到系统安全区边缘，正文仍遵守安全区。Scene 消费同一 Asset Catalog 中的新版场景，图片与矢量层通过统一等比坐标转换适配可用区域；投影与业务数据保持原来源。`expand-timeline-offline-demo` 按后续用户确认移除图片外围代码蒙版，不修改原素材。提醒正文消费既有 warning Token，Page 扩大 Timeline 的 SwiftUI 内容约束；可用高度不足时切换正文滚动，保留常驻/吸顶安排标题。生成资源及提示词验证入口为本轮 `output/imagegen/blend-trip-detail-artwork/`，生产图片保存于 Asset Catalog。
+
+2026-09-30 `expand-timeline-offline-demo`：Timeline布局收紧顶部间隔并减少场景占用，保留比首轮230pt更大的底图，页面标题/正文提高既有字体Token档位，取消正文232pt上限。27项配置与55项场景/几何回归共82项通过；实际release优化的OfflineDemo六态UITest通过并逐图检查，证据 `output/timeline-offline-demo/ui-final`。宽度按截图核验，AX短标题字形不作为容器尺寸证据。独立device DerivedData最终归档的13项DebugSwift隔离通过，生产Release参数仍real/production，与Mock演示分发配置分开。TestFlight结果以同目录发布回执为准，不以归档代替可安装。
+
 ## App 架构基准
 
 确认日期：2026-09-24。本节保存本轮讨论确定的 iOS **目标逻辑架构**。W0–W6 完成后的实际落地见下文「当前架构」。
@@ -65,7 +166,7 @@
 flowchart TB
     Debug["DebugTools · 仅 Debug<br/>DebugSwift + 自定义调试能力<br/>Mock / 真实＋缓存 / 仅远端"]
     App["App 层<br/>系统入口 · 生命周期 · 全局导航 · 依赖组装"]
-    Features["Feature 层<br/>首页 · 路线 · 行程 · 装备 · 账户<br/>展示 · 交互 · 页面状态"]
+    Features["Feature 层<br/>行程首页 · 路线 · 行程任务 · 装备 · 账户<br/>展示 · 交互 · 页面状态"]
     Service["Service<br/>业务数据操作"]
 
     subgraph Data["数据访问能力"]
@@ -194,13 +295,12 @@ W0–W6 完成后的实际结构，是上文架构图与「职责与依赖」的
 | 单元与结构 | `python3 scripts/build.py --mode debug --action test --scheme Walk --destination '<destination>'` |
 | 三种数据模式 E2E | `WALK_E2E_DESTINATION='<destination>' scripts/run_data_mode_e2e.sh [局域网 IP]` |
 | 关键流程回归 | `WALK_E2E_DESTINATION='<destination>' scripts/run_key_flow_regression.sh`（会重置该模拟器 Keychain） |
-| 视觉基线 / 组件目录 / 调试面板 | scheme `WalkBaseline` / `WalkComponents` / `WalkDebugTools` |
+| 组件 UITest / 调试面板 | scheme `WalkComponents` / `WalkDebugTools`；手动组件预览仅从 DebugPanel 进入 |
 | Release 产物隔离 | `python3 scripts/build.py --mode release --action archive` |
 
 已知问题（截至 W6 收尾）：
 
-- `DailyWeatherSummaryRow` 已在平台组件目录登记，但总 UI 索引缺少该对象，WalkComponents 的 2 项目录断言因此失败；需根仓 Change 补登记。
-- 仓库缺少已批准视觉基线目录 `WalkBaselineGoldens/approved/`，视觉验证目前只能做改动前后自对比。
+- 独立 iOS Baseline 链路已批准退役；组件验证保留 UITest 的断言与截图证据，不宣称具备已批准 Golden 的像素对比验收。
 - `color.map.overnight` 为暂定取值（冻结原型未定义），待设计确认后只改取值。
 - `TripWeatherTrendChart` 借用 `color.map.waypoint` 表示降水，属于语义借用。
 
@@ -240,11 +340,11 @@ W0–W6 完成后的实际结构，是上文架构图与「职责与依赖」的
 
 - 数据模式：`mock / real / remoteOnly`。
 - 服务器身份：稳定环境标识与规范化 baseURL；标识相同但地址不同也视为不同服务。
-- 执行上下文：正常运行、测试、Preview、Baseline，以及 Debug / Release 构建类型。不能仅凭服务器名为 `test` 判断当前一定处于自动化测试。
+- 执行上下文：正常运行、测试、组件预览，以及 Debug / Release 构建类型。不能仅凭服务器名为 `test` 判断当前一定处于自动化测试。
 
-模式只选择数据能力；切换服务器不隐式改变模式。`mock` 不请求业务服务器。真实模式必须有有效服务地址；不得因地址配置错误自动改用 Mock 或其他服务器。Debug 构建默认沿用 Mock，Release 固定使用构建配置的生产服务与 `real`，采用默认断网失败策略；显式开发配置可覆盖 Debug 默认值。
+模式只选择数据能力；切换服务器不隐式改变模式。`mock` 不请求业务服务器。真实模式必须有有效服务地址；不得因地址配置错误自动改用 Mock 或其他服务器。Debug 构建默认沿用 Mock，普通Release固定使用构建配置的生产服务与 `real`，采用默认断网失败策略；显式开发配置可覆盖 Debug 默认值。经 `expand-timeline-offline-demo` 批准的 `OfflineDemo` 是独立release优化构建，包内 `WalkDistribution=offline-demo`、`WalkDataMode=mock`、`WalkEnvironment=offline-demo` 和 `https://offline.walk.invalid/api/v1` 必须精确一致，显示名为“Walk演示”；不匹配拒绝启动，不自动转为真实服务。生产Release保持原值和原拒绝规则。两种分发模式都不读取运行时参数、进程环境或历史Debug设置；Mock认证/缓存沿现有服务身份命名空间隔离。
 
-Debug 配置的优先级统一为：**显式启动参数 > 进程环境变量 > 已保存的 Debug 设置 > 构建配置 > 代码默认值**。来源以可注入输入传入解析器；测试、Preview、Baseline 忽略个人 Debug 设置并显式注入场景配置。未知、空白或同一来源内相互冲突的显式配置报错，不静默降级。Release 不读取 Debug 偏好，也不接受开发模式切换入口。
+Debug 配置的优先级统一为：**显式启动参数 > 进程环境变量 > 已保存的 Debug 设置 > 构建配置 > 代码默认值**。来源以可注入输入传入解析器；测试与组件定向预览忽略个人 Debug 设置并显式注入场景配置；从 DebugPanel 打开组件预览不改变宿主的有效配置、会话或缓存。未知、空白或同一来源内相互冲突的显式配置报错，不静默降级。Release 不读取 Debug 偏好，也不接受开发模式切换入口。
 
 **R-SWITCH**：首版保留重启生效。DebugTools 展示当前有效值与待生效值；保存配置只影响下一次启动，不热替换某个 Service、缓存或认证实例，也不立即删除当前会话。启动时统一创建依赖，避免一个 App 同时使用新旧服务。待生效提示根据两份配置是否不同计算。
 
@@ -293,7 +393,7 @@ Debug 配置的优先级统一为：**显式启动参数 > 进程环境变量 > 
 
 **R-AUTH**：客户端、Service 与页面使用 App 注入的同一认证实例；认证管理器不重新读取启动参数、Info.plist 或 Debug 偏好选择模式。认证命名空间以最终服务身份为基础，再区分 Mock 与真实：Mock 独立；同一服务下 `real / remoteOnly` 共用真实会话；不同环境标识或不同 baseURL 隔离。服务地址的身份包括协议、主机、有效端口和 API 基路径，不能仅比较显示名称。
 
-**R-MIGRATION**：内部统一新模型，迁移覆盖脚本、scheme、UI 测试与基线入口。用户已确认现有登录态、Debug 设置与启动键均为临时状态，因此 W2 不保留兼容别名，也不迁移旧数据。旧键显式报错，防止被静默忽略。
+**R-MIGRATION**：内部统一新模型，迁移覆盖脚本、scheme、UI 测试与调试入口。用户已确认现有登录态、Debug 设置与启动键均为临时状态，因此 W2 不保留兼容别名，也不迁移旧数据。旧键显式报错，防止被静默忽略。
 
 | 旧入口 | 首版迁移规则 |
 |---|---|
@@ -333,12 +433,22 @@ Release 的编译/链接输入与最终产物不得包含 DebugSwift 及其资�
 
 单元测试使用注入的网络、存储、时钟与身份，不依赖真实账号或个人 Debug 设置；E2E 显式选择服务器与模式。W6 汇总各批的新鲜证据并更新架构记录。已认可的目标是上述规则的验收依据，本节本身不是实现完成证明。
 
+## 组件测试与手动预览
+
+本轮用户批准的平台调整是移除独立 iOS Baseline，组件自动化验证由 `WalkComponents` 中的 UITest 承担，手动预览统一从现有 DebugPanel 的「组件预览」进入。它是开发工具，不建立产品 Page，不改变上游 UI 对象、状态、Data 或 API 合同，也不删除根仓冻结原型。
+
+DebugPanel 提供现有组件目录与已登记状态的选择、预览、返回和关闭；目录与 UITest 定向启动共用 `Walk/App/Debug/ComponentCatalog.swift` 及 `ComponentPreviewRootView.swift`，组件与样例仍使用对象共置的生产实现。UITest 的 `--component-preview` 只用于定向自动化，不作为另一套手动预览入口。未知组件或状态明确显示 unsupported，不回退 default；手动预览不覆盖宿主数据模式、服务器、会话或缓存，关闭后返回原调试面板。旧 `-WalkBaselineScenario` 与 `WALK_BASELINE_SCENARIO` 在 Debug 中显式报 `retiredKey`，不再解析场景或提供兼容宿主。
+
+实施顺序为：先增加面板入口与退役构建入口的失败测试；迁出组件目录和普通业务测试所需数据；删除 Baseline 配置、场景宿主、专用 target/scheme、截图对比脚本及生产页面中的专用注入；接入面板入口；由 XcodeGen 更新工程；验证组件定向 UITest、面板预览往返、普通业务测试与平台结构。业务 fixture 只编入测试 target，不能通过删除业务断言代替解除依赖。保留当前未提交的组件样例共置改动。
+
+本节是已批准的承载方案，不是验证通过证明；结果由本轮实际测试记录确认。
+
 ## Page 映射
 
 | 总 UI Page ID | SwiftUI 承载 | 源码 |
 |---|---|---|
-| `PAGE-LOGIN` | `LoginView` | `Walk/Features/Profile/LoginView.swift` |
 | `PAGE-HOME` | `HomeView` | `Walk/Features/Home/HomeView.swift` |
+| `PAGE-LOGIN` | `LoginView` | `Walk/Features/Profile/LoginView.swift` |
 | `PAGE-ROUTES` | `RouteDiscoveryView` | `Walk/Features/Routes/RouteDiscoveryView.swift` |
 | `PAGE-ROUTE-LIST` | `RouteCollectionView` | `Walk/Features/Routes/RouteDiscoveryView.swift` |
 | `PAGE-SEARCH` | `RouteSearchView` | `Walk/Features/Routes/RouteDiscoveryView.swift` |
@@ -353,6 +463,8 @@ Release 的编译/链接输入与最终产物不得包含 DebugSwift 及其资�
 | `PAGE-ACCOUNT-MENU` | `AccountMenuView` | `Walk/Features/Profile/AccountMenuView.swift` |
 | `PAGE-MY-EQUIPMENT` | `EquipmentListView` | `Walk/Features/Equipment/EquipmentListView.swift` |
 | `PAGE-EQUIPMENT-EDIT` | `EquipmentEditView` | `Walk/Features/Equipment/AddEquipmentView.swift` |
+
+`PAGE-ROUTES` 与 `PAGE-ROUTE-LIST` 的空态路线图标在 iOS 映射为 SF Symbol `map`；平台无关语义名 `route` 不直接传入 `Image(systemName:)`。
 
 `PAGE-ROUTES` 沉浸式分页承接根仓 Change `route-discovery-immersive-paging`：`RouteDiscoveryView` 以 SwiftUI 纵向 `ScrollView` 的原生 paging 承载整屏 RouteScene，页头作为固定覆盖层；分页内容延伸到系统 tab bar 之后。系统区域读取集中在 WalkDesignSystem 的 `immersiveSystemAreaContext`，RouteScene 只通过 `immersiveBottomContentPadding` 声明底部内容避让，不读取或接收物理 inset。结构验证入口为 `RouteDiscoveryPagerStructureTests` 与 `DesignSystemTests.testSafeAreaInsetHandlingLivesInSharedPageContainers`。
 
@@ -434,7 +546,7 @@ Release 的编译/链接输入与最终产物不得包含 DebugSwift 及其资�
 | `inline-equipment-editor` | L2b 业务独立 | `InlineEquipmentEditor` | `Walk/Features/Shared/Components/InlineEquipmentEditor.swift` |
 | `inline-list-name-editor` | L2b 业务独立 | `InlineListNameEditor` | `Walk/Features/Equipment/Components/InlineListNameEditor.swift` |
 | `personal-equipment-form` | L2b 业务独立 | `PersonalEquipmentForm` | `Walk/Features/Equipment/Components/PersonalEquipmentForm.swift` |
-| `personal-equipment-summary-card` | L2b 业务独立 | `PersonalEquipmentSummaryCard` | `Walk/Features/Profile/Components/PersonalEquipmentSummaryCard.swift` |
+| `personal-equipment-summary-card` | L2b 业务独立 | `PersonalEquipmentSummaryCard` | `Walk/Features/Shared/Components/PersonalEquipmentSummaryCard.swift` |
 | `profile-identity-header` | L2b 业务独立 | `ProfileIdentityHeader` | `Walk/Features/Profile/Components/ProfileIdentityHeader.swift` |
 | `route-fact-section` | L2b 业务独立 | `RouteFactSection` | `Walk/Features/Routes/Components/RouteFactSection.swift` |
 | `route-image-gallery` | L2b 业务独立 | `RouteImageGallery` | `Walk/Features/Routes/Components/RouteImageGallery.swift` |
@@ -454,11 +566,13 @@ Release 的编译/链接输入与最终产物不得包含 DebugSwift 及其资�
 | `trek-day-badge` | L2a 业务原子 | `TrekDayBadge` | `Walk/Features/Trips/Components/TrekDayBadge.swift` |
 | `trip-calendar-card` | L2b 业务独立 | `TripCalendarCard` | `Walk/Features/Shared/Components/TripCalendarCard.swift` |
 | `trip-cover-header` | L2b 业务独立 | `TripCoverHeader` | `Walk/Features/Trips/Components/TripCoverHeader.swift` |
+| `trip-expedition-scene` | L2b 业务独立 | `TripExpeditionScene` | `Walk/Features/Trips/Components/TripExpeditionScene.swift` |
 | `trip-day-arrangement` | L2c 业务组合 | `TripDayArrangement` | `Walk/Features/Trips/Components/TripDayArrangement.swift` |
 | `trip-day-overview-entry` | L2b 业务独立 | `TripDayOverviewEntry` | `Walk/Features/Trips/Components/TripDayOverviewEntry.swift` |
 | `trip-equipment-gear-rings` | L2c 业务组合 | `TripEquipmentGearRings` | `Walk/Features/Trips/Components/TripEquipmentGearRings.swift` |
 | `trip-equipment-item-row` | L2b 业务独立 | `TripEquipmentItemRow` | `Walk/Features/Trips/Components/TripEquipmentItemRow.swift` |
 | `trip-equipment-overview` | L2b 业务独立 | `TripEquipmentOverview` | `Walk/Features/Trips/Components/TripEquipmentOverview.swift` |
+| `trip-equipment-source-picker` | L2b 业务独立 | `TripEquipmentSourcePicker` | `Walk/Features/Trips/Components/TripEquipmentSourcePicker.swift` |
 | `trip-equipment-summary-card` | L2c 业务组合 | `TripEquipmentSummaryCard` | `Walk/Features/Trips/Components/TripEquipmentSummaryCard.swift` |
 | `trip-list-row` | L2b 业务独立 | `TripListRow` | `Walk/Features/Trips/Components/TripListRow.swift` |
 | `trip-route-metrics-summary` | L2b 业务独立 | `TripRouteMetricsSummary` | `Walk/Features/Trips/Components/TripRouteMetricsSummary.swift` |

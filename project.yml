@@ -94,26 +94,6 @@ schemes:
       # 开发图没有 Release 配置；出包只走 scripts/build.py --mode release。
       config: Debug
 
-  WalkBaseline:
-    build:
-      targets:
-        Walk: all
-        WalkBaselineTests: [test]
-        WalkBaselineUITests: [test]
-    run:
-      config: Debug
-    test:
-      config: Debug
-      targets:
-        - WalkBaselineTests
-        - WalkBaselineUITests
-    profile:
-      config: Debug
-    analyze:
-      config: Debug
-    archive:
-      config: Debug
-
   WalkComponents:
     build:
       targets:
