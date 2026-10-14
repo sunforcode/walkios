@@ -26,3 +26,6 @@ WalkRelease.xcodeproj/
 
 # 过程记录与一次性产物不入库；结论写入规范正文，过程从 git 历史追溯
 /output/
+
+# Local SDK access; never commit credentials.
+/Config/MapAccess.local.xcconfig

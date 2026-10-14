@@ -59,6 +59,24 @@
 
 2026-09-28 验证：先确认小数重量解码、准备字段丢失、身份重复编码及响应版本校验的失败测试，再完成修复。隔离本任务提交树后，WalkData 独立测试 58 项全部通过；`Walk` scheme 在 `iPhone 17 Pro / iOS 26.5` 上的装备 Service、ViewModel、Profile、APIClient 与 TripDataAccess 相关回归执行 88 项，87 项通过、1 项因未启用 `-walkLiveBackendTest` 跳过。该证据覆盖客户端单测与编译，不作为真实后端联调或新增页面验收证据。
 
+## 公共路线详情地图接入
+
+本批承接总仓 Change `replace-route-detail-map-with-mapbox`。行为引用 [route-detail-map-mode](../../openspec/specs/route-detail-map-mode/spec.md)，UI 引用 [RouteMap](../../docs/ui/components/business/components/route-map/spec.md) 与 [PAGE-ROUTE-DETAIL](../../docs/ui/pages/PAGE-ROUTE-DETAIL/spec.md)，坐标引用 [GeoPosition](../../docs/data/domain-value-schema.md)。消费者仅公共路线详情，不修改个人行程图片场景。
+
+- `Packages/MapComponentCore` 承载无 SDK 的地理显示输入；`Packages/OutdoorMap` 承载真实 Mapbox 地图，官方依赖固定 Maps 11.16.0。包不依赖 WalkData、业务 Feature 或 output/Vendor。
+- `RouteMapView` 是生产业务地图适配，复用共享 renderer；`RouteMapSceneAdapter` 保留轨迹区间、点位类别和对象身份；`RouteMapCoordinateAdapter` 在 DTO 仍保留参考系时验证，不认识的主路径整体不绘制，不改变服务器资格。海拔 cursor 不是用户 GPS。
+- `RouteDetailView` 持有显示选项，继续编排信息面、纯地图、点位详情与曲线。组件目录与共置 Preview 使用同一 `RouteMapView`，合成样例明确标识；原归一化示意 renderer 退役。
+- `MapAccessConfiguration` 由 App 一次解析 Bundle 的 `MBXAccessToken` 并调用组件 SDK 配置，Feature 只消费 `routeMapAccessAvailable`。构建设置 `MAPBOX_ACCESS_TOKEN` 由部署方/本地配置提供；源代码与工程只保存占位符，未配置时不创建 SDK 地图。地图瓦片网络独立于 Walk 业务数据模式。
+- 验证沿用本文件的构建入口与已批准 iPhone 17 Pro / iOS 26.5 模拟器。Debug 工程使用公开 `Config/MapAccess.xcconfig` 的空值占位与可选、被忽略的 `MapAccess.local.xcconfig`；本机在该 ignored 文件独立保存既有 Mapbox 开发访问配置，不依赖实验目录。Release 由部署方提供同名构建设置，不消费本地 Debug 文件；生产依赖图同样声明共享包，签名、分发和生产配置不属于本批。
+
+2026-10-14 验证：先建立坐标、业务适配及真实 SDK 失败测试，迁入共享实现后，MapComponentCore 35 项通过；独立宿主首次完整回归 22 项通过，离屏点位可访问性修复后的最终 SDK / 定位控制器回归 17 项通过。正式 `Walk` 工程在上述模拟器编译成功；最终单测执行 712 项，711 通过、1 项真实后端用例按配置跳过、0 失败，明确排除以下两个未改动代码中的既有失败：`AppEnvironmentTests/testMockEnvironmentLoadsDefaultPublicRouteFixtures` 的行程 fixture 数量预期，以及 `SecondaryPageShellStructureTests/testEveryPageNamedFileIsRegistered` 的 RouteArtworkView 登记。首轮未排除的完整结果与上述失败均保留在 `build/route-mapbox/Runs/debug-test-20261014T082522.064416Z/Tests.xcresult`；最终结果为 `build/route-mapbox/Unit-final.xcresult`。
+
+正式页面定向 UI 测试 `YadingMockUITests/testRouteDetailTerrainModesKeepMapAndInformationLinks` 通过，覆盖二维、普通/增强三维、卫星往返、纯地图、曲线临时定位、可见点位详情及返回信息面。报告为 `build/route-mapbox/RouteDetailUI-final.xcresult`，已检查的截图位于 `output/verification/route-map-mapbox/`。平台登记 8 项、构建入口 5 项检查通过。业务资料使用 Mock，底图、DEM 与等高线使用在线真实 Mapbox 资源；不作为真实后端、真机 GPS、离线、性能或 Release 分发验证证据。
+
+随后按用户要求退役独立地图 Demo App：删除根仓 `output/NavigationCompare/` 的比较宿主、MapComponentLab、工程及缓存，并卸载已批准模拟器上的对应 App 与测试 runner。共享包源码及测试继续由本仓管理，独立组件体验仍从 DebugPanel 的组件目录进入。实验最终结果、日志与截图迁至 `output/verification/route-map-mapbox/demo-retirement/`，不作为当前可运行宿主。
+
+清理后的正式 Debug 工程增量构建通过（`build/route-mapbox/demo-retirement-build.log`），已确认产物读取独立的本地 Mapbox 配置；平台登记与构建入口共 13 项检查再次通过。
+
 ## 四个一级区域承接
 
 本批承接根仓 Change `promote-equipment-and-trips-tabs`，并按纠正 Change `restore-trip-tab-home` 恢复行程根的原首页承载。页面范围与行为引用 [app-flow](../../openspec/specs/app-flow/spec.md)、[account-access](../../openspec/specs/account-access/spec.md) 和 [App Structure](../../docs/ui/app-structure.md)。
@@ -552,7 +570,7 @@ DebugPanel 提供现有组件目录与已登记状态的选择、预览、返回
 | `route-image-gallery` | L2b 业务独立 | `RouteImageGallery` | `Walk/Features/Routes/Components/RouteImageGallery.swift` |
 | `route-introduction` | L2b 业务独立 | `RouteIntroduction` | `Walk/Features/Routes/Components/RouteIntroduction.swift` |
 | `route-list-row` | L2b 业务独立 | `RouteListRow` | `Walk/Features/Routes/Components/RouteListRow.swift` |
-| `route-map` | L2b 业务独立 | `RouteMap` | `Walk/Features/Routes/Components/RouteMap.swift` |
+| `route-map` | L2b 业务独立 | `RouteMapView` | `Walk/Features/Routes/RouteMapView.swift` |
 | `route-map-dock` | L2b 业务独立 | `RouteMapDock` | `Walk/Features/Routes/Components/RouteMapDock.swift` |
 | `route-point-detail` | L2b 业务独立 | `RoutePointDetail` | `Walk/Features/Routes/Components/RoutePointDetail.swift` |
 | `route-point-section` | L2b 业务独立 | `RoutePointSection` | `Walk/Features/Routes/Components/RoutePointSection.swift` |

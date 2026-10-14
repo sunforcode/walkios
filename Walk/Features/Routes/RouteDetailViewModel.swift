@@ -904,10 +904,24 @@ final class RouteDetailViewModel {
         return route.currentVersion.mainTrackAvailability != .valid
     }
     var mapStartCoordinate: CLLocationCoordinate2D? {
-        validCoordinate(route?.currentVersion.summary.start?.position?.coordinate)
+        RouteMapCoordinateAdapter.coordinate(route?.currentVersion.summary.start?.position)
     }
     var mapEndCoordinate: CLLocationCoordinate2D? {
-        validCoordinate(route?.currentVersion.summary.end?.position?.coordinate)
+        RouteMapCoordinateAdapter.coordinate(route?.currentVersion.summary.end?.position)
+    }
+    var mapCoordinateNotice: String? {
+        guard let version = route?.currentVersion else { return nil }
+        let rejectedTrack = version.mainTrackAvailability == .valid
+            && version.mainTrack.map { $0.path.count != mapCoordinates.count } == true
+        var independentPositions = [version.summary.start?.position, version.summary.end?.position].compactMap { $0 }
+        independentPositions.append(contentsOf: (version.keyPoints ?? []).flatMap(\.positions))
+        independentPositions.append(contentsOf: (version.interestPoints ?? []).flatMap(\.positions))
+        independentPositions.append(contentsOf: (version.campsites ?? []).flatMap(\.positions))
+        independentPositions.append(contentsOf: (version.overnightPlaces ?? []).flatMap(\.positions))
+        independentPositions.append(contentsOf: (version.waterSources ?? []).flatMap(\.positions))
+        independentPositions.append(contentsOf: (version.supplyPoints ?? []).flatMap(\.positions))
+        let rejectedPoint = independentPositions.contains { RouteMapCoordinateAdapter.coordinate($0) == nil }
+        return rejectedTrack || rejectedPoint ? "部分路线坐标暂无法显示" : nil
     }
     var hasMissingTrack: Bool { hasUnavailableTrack }
     var selectableSegments: [RouteSelectableSegment] {
@@ -1007,11 +1021,6 @@ final class RouteDetailViewModel {
         state.highlightedPointIdentity = selection.identity
     }
 
-    private func validCoordinate(_ coordinate: CLLocationCoordinate2D?) -> CLLocationCoordinate2D? {
-        guard let coordinate, CLLocationCoordinate2DIsValid(coordinate) else { return nil }
-        return coordinate
-    }
-
     // body 只读快照；选中/高亮变化不重新构造轨迹、标注或海拔数组。
     var mapCoordinates: [CLLocationCoordinate2D] { state.snapshot?.mapCoordinates ?? [] }
     var elevationSamples: [RouteElevationSample] { state.snapshot?.elevationSamples ?? [] }
@@ -1027,18 +1036,15 @@ final class RouteDetailViewModel {
         try Task.checkCancellation()
         let version = detail.currentVersion
         let mainTrack = version.mainTrackAvailability == .valid ? version.mainTrack : nil
-        let mapCoordinates = try (mainTrack?.path ?? []).compactMap { position -> CLLocationCoordinate2D? in
-            try Task.checkCancellation()
-            return CLLocationCoordinate2DIsValid(position.coordinate) ? position.coordinate : nil
-        }
+        let mapCoordinates = try RouteMapCoordinateAdapter.coordinates(mainTrack?.path ?? []) ?? []
         var mapSegments: [RouteMapSegment] = []
         var coloredMapSegments: [RouteMapSegment] = []
         var dayMapSegments: [RouteMapSegment] = []
-        if let mainTrack {
+        if mainTrack != nil, !mapCoordinates.isEmpty {
             for segment in version.segments ?? [] {
                 try Task.checkCancellation()
                 guard let range = segment.mainTrackRange,
-                      let coordinates = Self.coordinates(in: range, path: mainTrack.path) else { continue }
+                      let coordinates = Self.coordinates(in: range, path: mapCoordinates) else { continue }
                 mapSegments.append(RouteMapSegment(
                     id: segment.identity, name: segment.name, colorHex: nil, coordinates: coordinates
                 ))
@@ -1050,7 +1056,7 @@ final class RouteDetailViewModel {
             for day in version.referenceDays ?? [] {
                 try Task.checkCancellation()
                 guard let range = day.mainTrackRange,
-                      let coordinates = Self.coordinates(in: range, path: mainTrack.path) else { continue }
+                      let coordinates = Self.coordinates(in: range, path: mapCoordinates) else { continue }
                 dayMapSegments.append(RouteMapSegment(
                     id: day.identity, name: day.title ?? "第 \(day.dayNumber) 天",
                     colorHex: RouteDivisionPalette.hex(for: max(day.dayNumber - 1, 0)), coordinates: coordinates
@@ -1079,7 +1085,7 @@ final class RouteDetailViewModel {
     nonisolated private static func annotatedPoints(_ points: [PublicRouteNamedPoint], fallbackCategory: String) -> [RoutePOIAnnotation] {
         points.flatMap { point in
             point.positions.compactMap { position in
-                guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
+                guard let coordinate = RouteMapCoordinateAdapter.coordinate(position) else { return nil }
                 return .init(
                     id: "\(point.identity)-\(position.latitude)-\(position.longitude)",
                     objectIdentity: point.identity,
@@ -1089,8 +1095,8 @@ final class RouteDetailViewModel {
                     detail: point.description ?? "",
                     elevation: point.elevation.map { Self.formatElevation($0.meters) } ?? "",
                     imageURL: point.media?.first.flatMap(URL.init(string:)),
-                    latitude: position.latitude,
-                    longitude: position.longitude
+                    latitude: coordinate.latitude,
+                    longitude: coordinate.longitude
                 )
             }
         }
@@ -1099,7 +1105,7 @@ final class RouteDetailViewModel {
     nonisolated private static func annotatedWaypoints(_ points: [PublicRouteNamedPoint]) -> [RouteWaypointAnnotation] {
         points.flatMap { point in
             point.positions.compactMap { position in
-                guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
+                guard let coordinate = RouteMapCoordinateAdapter.coordinate(position) else { return nil }
                 return .init(
                     id: "\(point.identity)-\(position.latitude)-\(position.longitude)",
                     objectIdentity: point.identity,
@@ -1108,8 +1114,8 @@ final class RouteDetailViewModel {
                     elevation: point.elevation.map { Self.formatElevation($0.meters) } ?? "",
                     type: point.category ?? "关键点",
                     imageURL: point.media?.first.flatMap(URL.init(string:)),
-                    latitude: position.latitude,
-                    longitude: position.longitude
+                    latitude: coordinate.latitude,
+                    longitude: coordinate.longitude
                 )
             }
         }
@@ -1118,7 +1124,7 @@ final class RouteDetailViewModel {
     nonisolated private static func annotatedCampsites(_ campsites: [PublicRouteCampsite]) -> [RoutePOIAnnotation] {
         campsites.flatMap { campsite in
             campsite.positions.compactMap { position in
-                guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
+                guard let coordinate = RouteMapCoordinateAdapter.coordinate(position) else { return nil }
                 return .init(
                     id: "\(campsite.identity)-\(position.latitude)-\(position.longitude)",
                     objectIdentity: campsite.identity,
@@ -1128,8 +1134,8 @@ final class RouteDetailViewModel {
                     detail: campsite.details ?? "",
                     elevation: campsite.elevation.map { Self.formatElevation($0.meters) } ?? "",
                     imageURL: nil,
-                    latitude: position.latitude,
-                    longitude: position.longitude
+                    latitude: coordinate.latitude,
+                    longitude: coordinate.longitude
                 )
             }
         }
@@ -1138,7 +1144,7 @@ final class RouteDetailViewModel {
     nonisolated private static func annotatedOvernightPlaces(_ places: [PublicRouteOvernightPlace]) -> [RoutePOIAnnotation] {
         places.flatMap { place in
             place.positions.compactMap { position in
-                guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
+                guard let coordinate = RouteMapCoordinateAdapter.coordinate(position) else { return nil }
                 return .init(
                     id: "\(place.identity)-\(position.latitude)-\(position.longitude)",
                     objectIdentity: place.identity,
@@ -1154,8 +1160,8 @@ final class RouteDetailViewModel {
                         .joined(separator: " · "),
                     elevation: place.elevation.map { Self.formatElevation($0.meters) } ?? "",
                     imageURL: nil,
-                    latitude: position.latitude,
-                    longitude: position.longitude
+                    latitude: coordinate.latitude,
+                    longitude: coordinate.longitude
                 )
             }
         }
@@ -1164,7 +1170,7 @@ final class RouteDetailViewModel {
     nonisolated private static func annotatedWaterSources(_ sources: [PublicRouteWaterSource]) -> [RoutePOIAnnotation] {
         sources.flatMap { source in
             source.positions.compactMap { position in
-                guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
+                guard let coordinate = RouteMapCoordinateAdapter.coordinate(position) else { return nil }
                 return .init(
                     id: "\(source.identity)-\(position.latitude)-\(position.longitude)",
                     objectIdentity: source.identity,
@@ -1174,8 +1180,8 @@ final class RouteDetailViewModel {
                     detail: source.description ?? "",
                     elevation: source.elevation.map { Self.formatElevation($0.meters) } ?? "",
                     imageURL: nil,
-                    latitude: position.latitude,
-                    longitude: position.longitude
+                    latitude: coordinate.latitude,
+                    longitude: coordinate.longitude
                 )
             }
         }
@@ -1184,7 +1190,7 @@ final class RouteDetailViewModel {
     nonisolated private static func annotatedSupplyPoints(_ points: [PublicRouteSupplyPoint]) -> [RoutePOIAnnotation] {
         points.flatMap { point in
             point.positions.compactMap { position in
-                guard CLLocationCoordinate2DIsValid(position.coordinate) else { return nil }
+                guard let coordinate = RouteMapCoordinateAdapter.coordinate(position) else { return nil }
                 return .init(
                     id: "\(point.identity)-\(position.latitude)-\(position.longitude)",
                     objectIdentity: point.identity,
@@ -1194,8 +1200,8 @@ final class RouteDetailViewModel {
                     detail: point.description ?? "",
                     elevation: "",
                     imageURL: nil,
-                    latitude: position.latitude,
-                    longitude: position.longitude
+                    latitude: coordinate.latitude,
+                    longitude: coordinate.longitude
                 )
             }
         }
@@ -1203,7 +1209,7 @@ final class RouteDetailViewModel {
 
     nonisolated private static func coordinates(
         in range: PublicRouteMainTrackRange,
-        path: [PublicRouteGeoPosition]
+        path: [CLLocationCoordinate2D]
     ) -> [CLLocationCoordinate2D]? {
         guard let start = coordinate(at: range.startPathPosition, path: path),
               let end = coordinate(at: range.endPathPosition, path: path) else {
@@ -1221,7 +1227,7 @@ final class RouteDetailViewModel {
         let firstWholeIndex = startProgress == 0 ? startIndex + 1 : startIndex + 1
         if firstWholeIndex <= endIndex {
             for index in firstWholeIndex...endIndex where index < path.count {
-                let point = path[index].coordinate
+                let point = path[index]
                 if CLLocationCoordinate2DIsValid(point), !sameCoordinate(result.last, point) {
                     result.append(point)
                 }
@@ -1233,14 +1239,14 @@ final class RouteDetailViewModel {
 
     nonisolated private static func coordinate(
         at position: PublicRoutePathPosition,
-        path: [PublicRouteGeoPosition]
+        path: [CLLocationCoordinate2D]
     ) -> CLLocationCoordinate2D? {
         let index = position.precedingPositionIndex
         guard path.indices.contains(index) else { return nil }
         let progress = position.progressToNextPosition
         if index == path.count - 1 {
             guard progress == nil else { return nil }
-            return path[index].coordinate
+            return path[index]
         }
         guard let progress, progress >= 0, progress < 1 else { return nil }
         let start = path[index]
@@ -1353,11 +1359,11 @@ extension RouteDetailViewModel {
 
     /// 划分徽标：位于对应范围起点，供地图层发出 selectSpan。
     func divisionBadges(for division: RouteDivisionKind) -> [RouteDivisionBadgeProjection] {
-        guard let mainTrack = validMainTrack else { return [] }
+        guard validMainTrack != nil, !mapCoordinates.isEmpty else { return [] }
 
         func badge(spanID: String, label: String, colorHex: String, range: PublicRouteMainTrackRange?) -> RouteDivisionBadgeProjection? {
             guard let range,
-                  let coordinate = Self.coordinate(at: range.startPathPosition, path: mainTrack.path) else { return nil }
+                  let coordinate = Self.coordinate(at: range.startPathPosition, path: mapCoordinates) else { return nil }
             return RouteDivisionBadgeProjection(spanID: spanID, label: label, colorHex: colorHex, coordinate: coordinate)
         }
 
@@ -1385,8 +1391,8 @@ extension RouteDetailViewModel {
 
     /// 曲线滑动定位 → 主轨迹沿线坐标。
     func pathCoordinate(at position: PublicRoutePathPosition) -> CLLocationCoordinate2D? {
-        guard let mainTrack = validMainTrack else { return nil }
-        return Self.coordinate(at: position, path: mainTrack.path)
+        guard validMainTrack != nil else { return nil }
+        return Self.coordinate(at: position, path: mapCoordinates)
     }
 
     func spanCardProjection(spanID: String, division: RouteDivisionKind) -> RouteSpanCardProjection? {
@@ -1484,11 +1490,5 @@ extension RouteDetailViewModel {
             trait: trait.isEmpty ? nil : trait,
             caution: segment.notes.flatMap(RouteDetailPresentation.nonEmpty)
         )
-    }
-}
-
-private extension PublicRouteGeoPosition {
-    var coordinate: CLLocationCoordinate2D {
-        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 }

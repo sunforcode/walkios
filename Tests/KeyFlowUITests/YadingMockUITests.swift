@@ -17,6 +17,63 @@ final class YadingMockUITests: XCTestCase {
     }
 
     @MainActor
+    func testRouteDetailTerrainModesKeepMapAndInformationLinks() {
+        XCTAssertTrue(app.tabBars.buttons["路线"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["路线"].tap()
+        let route = button(containing: "长海子")
+        XCTAssertTrue(route.waitForExistence(timeout: 10))
+        route.tap()
+        let settings = app.buttons["route-map-settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        let map = app.descendants(matching: .any)["outdoor-map"].firstMatch
+        XCTAssertTrue(map.waitForExistence(timeout: 20), "正式详情消费共享真实地图组件")
+        let loaded = NSPredicate(format: "value CONTAINS %@", "地图已加载")
+        expectation(for: loaded, evaluatedWith: settings)
+        waitForExpectations(timeout: 30)
+        capture("route-mapbox-01-detail-2d")
+
+        settings.tap()
+        app.buttons["普通3D"].tap()
+        XCTAssertTrue((settings.value as? String)?.contains("普通3D") == true)
+        capture("route-mapbox-02-normal")
+        settings.tap()
+        app.buttons["增强3D"].tap()
+        XCTAssertTrue((settings.value as? String)?.contains("增强3D") == true)
+        XCTAssertTrue(app.staticTexts["增强会夸大地形起伏"].exists)
+        capture("route-mapbox-03-enhanced")
+
+        app.buttons["进入全屏地图"].tap()
+        let elevation = element(label: "海拔走势，可滑动定位轨迹位置")
+        XCTAssertTrue(elevation.waitForExistence(timeout: 5))
+        XCTAssertTrue((settings.value as? String)?.contains("增强3D") == true)
+        elevation.coordinate(withNormalizedOffset: .init(dx: 0.2, dy: 0.5))
+            .press(forDuration: 0.2, thenDragTo: elevation.coordinate(withNormalizedOffset: .init(dx: 0.7, dy: 0.5)))
+        settings.tap()
+        app.buttons["卫星地图"].tap()
+        expectation(for: loaded, evaluatedWith: settings)
+        waitForExpectations(timeout: 30)
+        XCTAssertTrue((settings.value as? String)?.contains("增强3D") == true)
+        settings.tap()
+        app.buttons["地形地图"].tap()
+        settings.tap()
+        app.buttons["二维"].tap()
+        expectation(for: loaded, evaluatedWith: settings)
+        waitForExpectations(timeout: 30)
+        XCTAssertTrue(elevation.exists)
+        capture("route-mapbox-04-pure-map")
+        let point = app.buttons["查看高山杜鹃坡"]
+        XCTAssertTrue(point.waitForExistence(timeout: 5), "可见地图点位保留可访问的业务入口")
+        XCTAssertTrue(point.isHittable)
+        point.tap()
+        let closePoint = app.buttons["关闭点位详情"]
+        XCTAssertTrue(closePoint.waitForExistence(timeout: 5))
+        capture("route-mapbox-05-point-detail")
+        closePoint.tap()
+        app.staticTexts["上划唤回信息面"].tap()
+        XCTAssertTrue(app.buttons["进入全屏地图"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
     func testYadingRouteAndFiveDayTripUseProductionPages() {
         XCTAssertTrue(app.tabBars.buttons["路线"].waitForExistence(timeout: 10))
         app.tabBars.buttons["路线"].tap()
@@ -36,7 +93,8 @@ final class YadingMockUITests: XCTestCase {
         XCTAssertTrue(fullscreen.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["立即出发"].firstMatch.exists)
         fullscreen.tap()
-        XCTAssertTrue(app.maps.firstMatch.waitForExistence(timeout: 10), "真实轨迹地图应可访问")
+        XCTAssertTrue(app.descendants(matching: .any)["outdoor-map"].firstMatch.waitForExistence(timeout: 10),
+                      "真实轨迹地图应可访问")
         let elevation = element(label: "海拔走势，可滑动定位轨迹位置")
         XCTAssertTrue(elevation.waitForExistence(timeout: 5))
         for number in 1...5 {

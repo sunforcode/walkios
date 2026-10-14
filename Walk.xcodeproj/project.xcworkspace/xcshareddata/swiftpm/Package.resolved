@@ -1,33 +1,68 @@
 {
-  "originHash": "ddcc8d5a333c1fc019ac34dc0f3b9d0bf54fe38a98832b0f4d362f62a7ce8f0e",
-  "pins": [
+  "pins" : [
     {
-      "identity": "alamofire",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/Alamofire/Alamofire.git",
-      "state": {
-        "revision": "f455c2975872ccd2d9c81594c658af65716e9b9a",
-        "version": "5.9.1"
+      "identity" : "alamofire",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Alamofire/Alamofire.git",
+      "state" : {
+        "revision" : "f455c2975872ccd2d9c81594c658af65716e9b9a",
+        "version" : "5.9.1"
       }
     },
     {
-      "identity": "debugswift",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/DebugSwift/DebugSwift.git",
-      "state": {
-        "revision": "b85fd86581bc1b67710be82249d8aac2ef61b2f5",
-        "version": "1.19.0"
+      "identity" : "debugswift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/DebugSwift/DebugSwift.git",
+      "state" : {
+        "revision" : "b85fd86581bc1b67710be82249d8aac2ef61b2f5",
+        "version" : "1.19.0"
       }
     },
     {
-      "identity": "lottie-ios",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/airbnb/lottie-ios.git",
-      "state": {
-        "revision": "769b88d83a42ca8d5572b020c96f47e3690b3796",
-        "version": "4.4.3"
+      "identity" : "lottie-ios",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/airbnb/lottie-ios.git",
+      "state" : {
+        "revision" : "769b88d83a42ca8d5572b020c96f47e3690b3796",
+        "version" : "4.4.3"
+      }
+    },
+    {
+      "identity" : "mapbox-common-ios",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mapbox/mapbox-common-ios.git",
+      "state" : {
+        "revision" : "a46ad68c7f6151216abfabd0e71bb08e53e95443",
+        "version" : "24.16.0"
+      }
+    },
+    {
+      "identity" : "mapbox-core-maps-ios",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mapbox/mapbox-core-maps-ios.git",
+      "state" : {
+        "revision" : "1871be4b3d590c3bff2618f42ac2d7068da0e979",
+        "version" : "11.16.0"
+      }
+    },
+    {
+      "identity" : "mapbox-maps-ios",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mapbox/mapbox-maps-ios.git",
+      "state" : {
+        "revision" : "486c66ef8f50945963820c9b490fd36c19e3ef04",
+        "version" : "11.16.0"
+      }
+    },
+    {
+      "identity" : "turf-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mapbox/turf-swift.git",
+      "state" : {
+        "revision" : "bf840e6b9529d105687840fe2c9dcd74197d46d1",
+        "version" : "4.0.0"
       }
     }
   ],
-  "version": 3
+  "version" : 2
 }

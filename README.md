@@ -23,6 +23,8 @@ project-release.yml          # 生产依赖图：仅 Release，无调试依赖�
 Packages/                    # 本地 Swift Package（独立编译，只暴露 public API）
   WalkData/                  # 数据层：Network / API / Persistence / Repositories / Sources(Mock)；不依赖 Features 与 WalkDesignSystem
   WalkDesignSystem/          # 设计系统：Theme(Token) / Components / 通用 fixture；不引用业务模型
+  MapComponentCore/          # 地图数据、KML 与沿轨迹计算；不依赖 SDK 或 Walk 业务
+  OutdoorMap/                # 共用 Mapbox renderer、图层、镜头与显示选项
   WalkDebugTools/            # 调试适配层（DebugSwift 1.19.0）；仅开发依赖图声明
 Walk/                        # 主 target 源码
   App/                       # App 入口、根导航、环境配置
@@ -60,6 +62,8 @@ xcodebuild -resolvePackageDependencies -project Walk.xcodeproj -scheme Walk
 python3 scripts/tests/test_platform_spec_registry.py
 xcodebuild test -project Walk.xcodeproj -scheme Walk -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-
 ```
+
+公共路线详情地图使用 Mapbox Maps 11.16.0。Debug 工程读取 `Config/MapAccess.xcconfig`，它可选包含被 Git 忽略的 `Config/MapAccess.local.xcconfig`；本地文件设置 `MAPBOX_ACCESS_TOKEN` 或引用现有的私有 xcconfig。不要将访问凭据写入受版本管理的文件。未配置时页面保留路线资料并提示地图暂不可用；地图瓦片联网独立于业务数据模式。正式构建由部署方提供同名构建设置，本地 Debug 配置不进入 Release 依赖图。
 
 ## 调试工具
 

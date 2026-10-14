@@ -1,0 +1,4 @@
+// Development-only map access. Put the value or an include in the ignored local file.
+// Production builds receive MAPBOX_ACCESS_TOKEN from their own build configuration.
+MAPBOX_ACCESS_TOKEN =
+#include? "MapAccess.local.xcconfig"

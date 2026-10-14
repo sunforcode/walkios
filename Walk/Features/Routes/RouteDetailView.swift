@@ -2,6 +2,7 @@ import SwiftUI
 import MapKit
 import WalkData
 import WalkDesignSystem
+import OutdoorMap
 
 enum RouteDetailLayout {
     static let toolbarTop: CGFloat = 54
@@ -23,6 +24,7 @@ struct RouteDetailView: View {
     let routeId: String
     @State private var viewModel: RouteDetailViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.routeMapAccessAvailable) private var mapAccessAvailable
     @State private var selectedMapDetail: RouteMapDetailPresentation?
     private let onGenerateTrip: (String) -> Void
 
@@ -33,11 +35,14 @@ struct RouteDetailView: View {
     @State private var scrubPosition: PublicRoutePathPosition?
     @State private var showsGenerationNotice = false
     @State private var recenterRequest = 0
+    @State private var mapDisplayOptions = MapDisplayOptions()
+    @State private var mapResourceNotice: String?
+    @State private var mapHasLoaded = false
     /// 信息面是否滚动在顶部：控制全屏按钮显隐。
     @State private var isPanelScrolledToTop = true
     /// 信息面顶部下拽的跟手偏移：收起时保持不归零，随收起动画一起滑出。
     @State private var panelDragOffset: CGFloat = 0
-    /// 地图层是否已激活：push 首帧只渲染占位底色，MapKit 引擎启动不与转场动画抢主线程。
+    /// push 首帧只渲染占位底色，地图引擎启动不与转场动画抢主线程。
     @State private var isMapLayerActive = false
 
     init(
@@ -73,7 +78,7 @@ struct RouteDetailView: View {
             let firstSectionHeight = RouteDetailLayout.summarySectionHeight
 
             ZStack(alignment: .bottom) {
-                // 占位常驻底层：与地图瓦片加载前的底色一致，MKMapView 就绪后淡入其上。
+                // 占位常驻底层，地图就绪后淡入其上。
                 mapPlaceholder
                     .onAppear { scheduleMapLayerActivation() }
 
@@ -120,6 +125,14 @@ struct RouteDetailView: View {
                     NoticeView(message: trackUnavailableText)
                         .frame(maxWidth: 320)
                         .position(x: geometry.size.width / 2, y: 124)
+                        .zIndex(9)
+                }
+
+                if let message = mapNotice {
+                    NoticeView(message: message)
+                        .frame(maxWidth: 320)
+                        .position(x: geometry.size.width / 2, y: 180)
+                        .allowsHitTesting(false)
                         .zIndex(9)
                 }
 
@@ -328,6 +341,7 @@ struct RouteDetailView: View {
                 : viewModel.mapSegments,
             baseCoordinates: isPureMapActive ? viewModel.mapCoordinates : [],
             selectedSegmentID: isPureMapActive ? activeSpanID : viewModel.selectedSegmentID,
+            divisionBadges: isPureMapActive ? viewModel.divisionBadges(for: activeDivision) : [],
             scrubCoordinate: isPureMapActive
                 ? scrubPosition.flatMap { viewModel.pathCoordinate(at: $0) }
                 : nil,
@@ -338,19 +352,24 @@ struct RouteDetailView: View {
             highlightedAnnotationIDs: viewModel.highlightedAnnotationIDs,
             startCoordinate: viewModel.mapStartCoordinate,
             endCoordinate: viewModel.mapEndCoordinate,
-            cameraPitch: 45,
+            showsUserLocation: false,
             edgeInsets: isPureMapActive
                 ? RouteMapCamera.pureMapEdgeInsets(bottomDockHeight: RouteDetailLayout.pureMapDockHeight)
                 : RouteMapCamera.detailEdgeInsets(
                     viewportHeight: viewportHeight,
                     mapRevealHeight: mapRevealHeight
                 ),
-            onSelectSegment: { viewModel.selectSegment($0) },
+            displayOptions: mapDisplayOptions,
+            isMapAvailable: mapAccessAvailable,
+            onSelectSegment: { id in
+                if isPureMapActive { toggleSpan(id) } else { viewModel.selectSegment(id) }
+            },
             onSelectMarker: { selection in
                 viewModel.highlightPoint(selection)
                 selectedMapDetail = RouteMapDetailPresentation(selection: selection)
             },
-            onSelectSpan: { toggleSpan($0) }
+            onSelectSpan: { toggleSpan($0) },
+            onMapEvent: handleMapEvent
         )
         .ignoresSafeArea()
     }
@@ -380,7 +399,73 @@ struct RouteDetailView: View {
             .padding(.horizontal, Spacing.pageHorizontal)
             .padding(.top, RouteDetailLayout.toolbarTop)
 
+            HStack {
+                Spacer()
+                VStack(alignment: .trailing, spacing: Spacing.xs) {
+                    mapDisplayControls
+                    if mapDisplayOptions.showsTerrain && mapDisplayOptions.terrainLevel == .enhanced {
+                        Text("增强会夸大地形起伏")
+                            .font(.micro).foregroundStyle(AppColors.textPrimary)
+                            .padding(Spacing.xs)
+                            .background(AppColors.surfaceControlOverlay, in: Capsule())
+                    }
+                }
+            }
+            .padding(.horizontal, Spacing.pageHorizontal)
+            .padding(.top, Spacing.sm)
+
             Spacer()
+        }
+    }
+
+    private var mapDisplayControls: some View {
+        Menu {
+            Picker("底图", selection: $mapDisplayOptions.baseMap) {
+                Text("地形地图").tag(MapDisplayOptions.BaseMap.topographic)
+                Text("卫星地图").tag(MapDisplayOptions.BaseMap.satellite)
+            }.pickerStyle(.inline)
+            Picker("地形显示", selection: terrainModeBinding) {
+                Text("二维").tag(RouteTerrainMode.flat)
+                Text("普通3D").tag(RouteTerrainMode.normal)
+                Text("增强3D").tag(RouteTerrainMode.enhanced)
+            }.pickerStyle(.inline)
+            Toggle("等高线", isOn: $mapDisplayOptions.showsContours)
+        } label: {
+            Label("地图显示", systemImage: "square.3.layers.3d")
+                .font(.appCaption).foregroundStyle(AppColors.textPrimary)
+                .padding(.horizontal, Spacing.md).padding(.vertical, Spacing.sm)
+                .background(AppColors.surfaceControlOverlay, in: Capsule())
+                .overlay(Capsule().stroke(AppColors.borderOverlay, lineWidth: 1))
+        }
+        .accessibilityIdentifier("route-map-settings")
+        .accessibilityValue("\(mapDisplayOptions.baseMap == .satellite ? "卫星地图" : "地形地图")，\(terrainModeBinding.wrappedValue.title)，\(mapHasLoaded ? "地图已加载" : "地图加载中")")
+        .onChange(of: mapDisplayOptions.baseMap) { _, _ in mapHasLoaded = false }
+    }
+
+    private var terrainModeBinding: Binding<RouteTerrainMode> {
+        Binding(get: {
+            guard mapDisplayOptions.showsTerrain else { return .flat }
+            return mapDisplayOptions.terrainLevel == .enhanced ? .enhanced : .normal
+        }, set: { mode in
+            mapDisplayOptions.showsTerrain = mode != .flat
+            if mode != .flat { mapDisplayOptions.terrainLevel = mode == .enhanced ? .enhanced : .normal }
+        })
+    }
+
+    private var mapNotice: String? {
+        if !mapAccessAvailable { return "地图暂不可用，路线资料仍可查看。" }
+        return viewModel.mapCoordinateNotice ?? mapResourceNotice
+    }
+
+    private func handleMapEvent(_ event: OutdoorMapEvent) {
+        switch event {
+        case .mapLoaded:
+            mapHasLoaded = true
+            mapResourceNotice = nil
+        case .failed:
+            mapHasLoaded = false
+            mapResourceNotice = "地图资源暂不可用，请检查网络后重试。"
+        case .styleReady, .selected, .longPressed, .userInteractionBegan: break
         }
     }
 
@@ -391,6 +476,18 @@ struct RouteDetailView: View {
         case .invalidated: "主轨迹已失效，暂不可生成个人行程。"
         case .missing: "当前没有可用主轨迹，暂不可生成个人行程。"
         case .valid, .none: "当前没有可用主轨迹。"
+        }
+    }
+}
+
+private enum RouteTerrainMode: Hashable {
+    case flat, normal, enhanced
+
+    var title: String {
+        switch self {
+        case .flat: "二维"
+        case .normal: "普通3D"
+        case .enhanced: "增强3D"
         }
     }
 }

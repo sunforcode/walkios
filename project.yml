@@ -11,6 +11,8 @@ packages:
 
 targets:
   Walk:
+    configFiles:
+      Debug: Config/MapAccess.xcconfig
     dependencies:
       - package: WalkDebugTools
     settings:

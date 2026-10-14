@@ -28,6 +28,10 @@ packages:
     path: Packages/WalkData
   WalkDesignSystem:
     path: Packages/WalkDesignSystem
+  MapComponentCore:
+    path: Packages/MapComponentCore
+  OutdoorMap:
+    path: Packages/OutdoorMap
 
 targets:
   Walk:
@@ -43,6 +47,8 @@ targets:
       - package: Lottie
       - package: WalkData
       - package: WalkDesignSystem
+      - package: MapComponentCore
+      - package: OutdoorMap
     info:
       path: Walk/Resources/Info.plist
       properties:
@@ -60,6 +66,7 @@ targets:
         WalkAPIBaseURL: "$(WALK_API_BASE_URL)"
         WalkDataMode: "$(WALK_DATA_MODE)"
         WalkEnvironment: "$(WALK_ENVIRONMENT)"
+        MBXAccessToken: "$(MAPBOX_ACCESS_TOKEN)"
         NSLocationWhenInUseUsageDescription: 需要使用您的位置来记录轨迹和显示当前位置
         NSLocationAlwaysAndWhenInUseUsageDescription: 需要在后台持续获取位置以记录轨迹
     settings:
@@ -87,6 +94,8 @@ targets:
       - target: Walk
       - package: WalkData
       - package: WalkDesignSystem
+      - package: MapComponentCore
+      - package: OutdoorMap
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.walk.app.tests

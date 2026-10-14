@@ -5,11 +5,13 @@ import WalkDesignSystem
 @main
 struct WalkApp: App {
     @StateObject private var appEnvironment: AppEnvironment
+    private let mapAccessAvailable: Bool
 #if DEBUG
     private let componentPreviewRequest: ComponentPreviewRequest?
 #endif
 
     init() {
+        mapAccessAvailable = MapAccessConfiguration.isAvailable
         do {
 #if DEBUG
             let componentPreviewRequest = ComponentPreviewRequest(arguments: ProcessInfo.processInfo.arguments)
@@ -47,6 +49,7 @@ struct WalkApp: App {
         WindowGroup {
             appRoot
                 .environmentObject(appEnvironment)
+                .environment(\.routeMapAccessAvailable, mapAccessAvailable)
                 .preferredColorScheme(.dark)
                 .statusBarHidden(usesFixedPreviewEnvironment)
         }

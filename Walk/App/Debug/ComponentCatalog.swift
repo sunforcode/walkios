@@ -412,10 +412,7 @@ enum ComponentCatalog {
             }
         },
         entry("RouteMap", .business) {
-            RouteBusinessComponents.RouteMap(
-                projection: RouteMapProjection.default,
-                onSelectPoint: { _ in }
-            )
+            RouteMapComponentExperience()
             .frame(height: 700)
         },
         entry("RoutePointDetail", .business) {
